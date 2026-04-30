@@ -1,0 +1,3 @@
+../greggle node_lifted_path.dot "(exists-path x y (all-of a @TARGET))"
+
+../greggle node_lifted_path.dot "(exists-path x y (all-of a MID@))"

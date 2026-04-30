@@ -1,0 +1,23 @@
+digraph greggle_regex_nfa {
+  rankdir=LR;
+  node [shape=circle, fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+  start [shape=diamond, label="start"];
+
+  q0 [shape=circle, label="q0"];
+  q1 [shape=circle, label="q1"];
+  q2 [shape=doublecircle, label="q2"];
+  q3 [shape=doublecircle, label="q3"];
+  q4 [shape=doublecircle, label="q4"];
+
+  start -> q0;
+
+  q0 -> q1 [label="(all-of (negate a) (negate b))"];
+  q0 -> q2 [label="(all-of a (negate b))"];
+  q0 -> q3 [label="(all-of a b)"];
+  q0 -> q4 [label="(all-of (negate a) b)"];
+  q1 -> q1 [label="dot"];
+  q2 -> q1 [label="dot"];
+  q3 -> q1 [label="dot"];
+  q4 -> q1 [label="dot"];
+}

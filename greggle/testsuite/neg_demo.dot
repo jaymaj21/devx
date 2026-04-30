@@ -1,0 +1,9 @@
+digraph neg_demo {
+  0;
+  1;
+  2;
+  0 -> 1 [label="a"];
+  0 -> 2 [label="b"];
+  1 -> 2 [label="b"];
+}
+

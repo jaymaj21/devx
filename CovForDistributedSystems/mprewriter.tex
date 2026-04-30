@@ -1,0 +1,84 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\title{mprewriter: Asynchronous Tracing and Coverage for Distributed Systems}
+\author{}
+\date{\today}
+\begin{document}
+\maketitle
+\begin{abstract}
+\texttt{mprewriter} is a language-agnostic toolset for inserting ultra-low-overhead probes into distributed systems. Probes batch hits and logs over UDP or TCP to collectors that persist a binary trace and build context-aware coverage reports. The goal is to keep per-probe cost in the tens of nanoseconds while capturing enough metadata to support observability, regression safety, and code analytics across Java, C++, and Rust services.
+\end{abstract}
+
+\section{Motivation and Goals}
+Modern back-end services need pervasive coverage and traceability without perturbing latency-sensitive paths. \texttt{mprewriter} targets:
+
+\textbf{Name and heritage:} \texttt{mprewriter} stands for multipurpose rewriter, reflecting the original clang-based source rewriter that inserted probes into C++ codebases. While probe-based tracing became the primary application, the name persists to emphasize the instrumentation-first roots.
+\begin{itemize}[noitemsep]
+  \item Sub-microsecond, often \textasciitilde20--30 ns probe overhead via batching and lock-free queues.
+  \item Uniform message and trace formats across Java, C++, and Rust runtimes so heterogeneous systems can be inspected together.
+  \item Context-aware coverage: hits are tagged with dynamic context sets (``experiments'', ``customers'', etc.) to slice coverage by runtime conditions.
+  \item Post-hoc inspection: collectors stream binary traces to disk for offline replay, hit counting, and log correlation.
+\end{itemize}
+
+\section{System Architecture}
+\textbf{Instrumentation} inserts probe calls at method entries, branch edges, and handler blocks. Each probe emits compact hit records: message type (\texttt{u16}), application id (\texttt{u16}), instance id (\texttt{u32}), thread id (\texttt{u32}), stack depth (\texttt{u32}), and location id (\texttt{u32}). Logs reuse the same envelope with a length-prefixed UTF-8 payload; context attach/withdraw messages carry UTF-8 labels.
+
+\textbf{Probe runtimes} (per language) enqueue hits into in-process buffers and flush them asynchronously over UDP/TCP. UDP is favored for the common hot path; TCP is available when reliability is required.
+
+\textbf{Collectors} (Java in \texttt{code-analytics}, C++ in \texttt{code-analytics-cpp}, Rust in \texttt{code-analytics-rust}) run paired UDP/TCP listeners, fold hits into coverage counters keyed by \texttt{(appId, instanceId, ctxId, locId)}, manage a global context-set state machine, and persist a binary trace via \texttt{HitTraceWriter} with periodic timestamps for correlation.
+
+\textbf{Admin shells} mirror a common command set (\texttt{:hits}, \texttt{:apply-context}, \texttt{:withdraw-context}, \texttt{:coverage-report}, \texttt{:flush-trace}, \texttt{:trace-persist}, \texttt{:exit}) across Clojure (Java), Tcl (C++), and Molt (Rust) REPLs.
+
+\section{Trace Format and Coverage Files}
+Collectors write traces with magic \texttt{HITTRC01}, endian flag, and file-start epoch millis. Each frame stores \texttt{flag:u16} (hit, log, context attach/withdraw, periodic timestamp), \texttt{source:u8} (UDP, TCP, internal), \texttt{capturedNanoTime:u64}, \texttt{len:u32}, and the raw payload. Readers in Java (\texttt{HitTraceReader}), C++ (\texttt{trace-dump-cpp}), and Rust (\texttt{hit\_trace.rs}) can dump or replay frames.
+
+Coverage reports emitted by \texttt{:coverage-report} encode all known context sets followed by hit counts:\\
+\texttt{CONTEXTS N} with lines \texttt{<ctxId> <label>} (\texttt{1} reserved for \texttt{default});\\
+\texttt{HITS M} with lines \texttt{<ctxId> <locId> <count>} filtered by \texttt{appId} and \texttt{instanceId}.
+
+\section{Java Instrumentation and Runtime}
+\subsection{Bytecode rewriting}
+\texttt{branch-probe-instrumenter/src/main/java/demo/JarInstrumenter.java} uses ASM to rewrite compiled JARs. It injects probes for \texttt{METHOD\_ENTRY}, conditional branches (\texttt{IF\_TRUE}/\texttt{IF\_FALSE}), switch targets, and exception handlers (\texttt{CATCH\_ENTRY} and \texttt{FINALLY\_ENTRY}). For each class it records probe metadata into \texttt{META-INF/branch-probes.csv} (id, class, method, where, source file, line), or optionally a sidecar CSV.
+
+Exclusion and inclusion lists (system properties \texttt{bp.excludefile} and \texttt{bp.includefile}) allow focusing on specific files or line ranges. The injector respects a configurable \texttt{bp.inject} set of probe kinds.
+
+\subsection{Probe runtime}
+The Java runtime in \texttt{fastest-speed-java/mprewriter.java} keeps per-thread hit metadata in a lock-free MPSC ring buffer (configurable capacity via \texttt{-Dmprewriter.ringCap}). Producers pack thread id, stack depth, and location id into a 64-bit slot and avoid locks; consumers batch up to 72 hits (1440 bytes) into a UDP datagram every few milliseconds. Stack depth can be a cheap constant (\texttt{-Dmprewriter.depthConstant=true}) to minimize cost, or computed via \texttt{StackWalker} for richer data.
+
+Logs share the same pipeline with a marker and a separate queue. Shutdown drains the ring and closes the socket; the sender thread is daemonized so probes do not block JVM exit. This design keeps individual probe cost in the tens of nanoseconds while still emitting per-hit metadata.
+
+\section{C++ and Rust Runtimes}
+Outside this folder the C++ and Rust code bases provide equivalent probe libraries that emit the same on-the-wire format. The collectors here demonstrate the receiving side:
+\begin{itemize}[noitemsep]
+  \item \textbf{C++ collector} (\texttt{code-analytics-cpp}): UDP/TCP listeners feed a Tcl REPL and \texttt{HitTraceWriter} analog, supporting coverage reports and live context updates.
+  \item \textbf{Rust collector} (\texttt{code-analytics-rust/cov\_server}): Uses Molt for the admin shell, shares the same context/tagging logic, and writes traces via \texttt{hit\_trace.rs}. The \texttt{trace\_hook.rs} module labels frames with source (UDP/TCP/internal) and emits periodic timestamps.
+\end{itemize}
+Probe insertion for C++ and Rust applications lives in sibling projects (e.g., \texttt{CppAppWithUdpProbes}, \texttt{RustAppWithUdpProbes}); they batch hits through per-thread buffers and send to the same ports as Java, keeping overhead in the same tens-of-nanoseconds regime.
+
+\section{Collectors and Context Management}
+\subsection{Listeners and parsing}
+Java (\texttt{UdpListener}, \texttt{TcpListener}) and Rust/C++ counterparts validate message types, update coverage counters, and optionally echo logs. UDP parsers offload decoding to thread pools to avoid head-of-line blocking under burst load. TCP handlers slice each frame for accurate trace persistence.
+
+\subsection{Context sets}
+\texttt{ContextManager} tracks the active set of labels (e.g., feature flags). Each distinct set is assigned a stable id starting at \texttt{1} for the empty set. Incoming hits are counted against the current context id, enabling coverage slices per experiment or tenant without reinstrumenting.
+
+\subsection{Trace persistence}
+\texttt{HitTraceWriter} synchronizes writes to preserve arrival order. It supports append mode, explicit \texttt{flush} (buffered fsync) and \texttt{persist} (metadata + data). Collectors also emit periodic timestamp frames so traces can be aligned with external logs.
+
+\section{Performance Notes}
+Benchmarks (see \texttt{benchmark.md} and the language demo apps) show sub-microsecond hit costs: C++ probes can reach \textasciitilde70 ns/hit, Rust \textasciitilde120 ns, and Java \textasciitilde2--3 \textmu s when including stack-depth computation (or \textasciitilde18 ns with constant depth). The pipeline avoids allocation on the hot path, batches datagrams, and tolerates lossy UDP for extreme throughput while still allowing TCP for lossless collection.
+
+\section{Deployment Guidance}
+\begin{itemize}[noitemsep]
+  \item Run collectors near producers to minimize UDP loss; raise socket receive buffers (collectors already request large buffers).
+  \item Prefer constant-depth probes in ultra-hot Java paths; enable full depth only where necessary.
+  \item Use \texttt{bp.excludefile}/\texttt{bp.includefile} to cap probe density in large JARs and emit the CSV index to correlate location ids to source.
+  \item Rotate trace files using the REPL commands (or restart collectors) for long-running sessions.
+\end{itemize}
+
+\section{Conclusion}
+\texttt{mprewriter} delivers a unified tracing and coverage substrate for heterogeneous distributed systems. By keeping probes async and lock-free, harmonizing message formats, and providing consistent admin tooling, it enables observability and coverage accounting at production latencies. The same ideas extend to additional languages by reusing the on-the-wire format and binary trace contract while swapping in language-appropriate probe injectors.
+
+\end{document}

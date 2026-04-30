@@ -1,0 +1,5 @@
+ 4 HITS IN 3 CONTEXTS
+com.trading.service.MarketDataCalculatorImplTest.testMidPriceOnAbsentSymbol 1
+com.trading.messagehandler.MarketDataHandlerImplTest.handleSomeEventsAndAssertOnCalculatorResult 2
+com.trading.service.MarketDataCalculatorImplTest.testMidPrice 1
+

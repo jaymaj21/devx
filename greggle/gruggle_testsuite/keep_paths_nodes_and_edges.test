@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+set -euo pipefail
+node ../gruggle.js -i sample1.dot chain "keep-paths s.* t.*"

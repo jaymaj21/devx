@@ -1,0 +1,7 @@
+digraph node_label_regex {
+  A;
+  AB;
+  B1;
+  X;
+}
+

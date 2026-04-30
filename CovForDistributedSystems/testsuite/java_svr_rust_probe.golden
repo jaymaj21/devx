@@ -1,0 +1,103 @@
+DONT_FAIL_ON_DIFF
+DONT_FAIL_ON_ERROR
+Response from child : [TCP] Listening on port 8084...
+[UDP] Listening on port 8083...
+Welcome to Analytics Engine Shell. :help for commands.
+admin> [LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=1: Main module started.
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=2: Fractal demo: starting Mandelbrot render
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 0
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 50
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 100
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 150
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 200
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 250
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 300
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 350
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 400
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 450
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 500
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 550
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=2: fractal_demo: wrote fractal_rust.ppm
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=4: Factorial called with n=5
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=8: Factorial called with n=3
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=2: Factorial called with n=6
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=12: Factorial called with n=1
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=10: Factorial called with n=2
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=6: Factorial called with n=4
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=1: Main module finished.
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=1: Factorial of 6 is 720
+Hit Records Map:
+AppID      InstanceID   ThreadID     StackDepth   LocationID   Count     
+--------------------------------------------------------------------------------
+12345      2            20356        7            1003         1         
+12345      2            20356        4            2002         480000    
+12345      2            20356        12           1001         1         
+12345      2            20356        4            1001         1         
+12345      2            20356        1            1000         1         
+12345      2            20356        11           1003         1         
+12345      2            20356        14           1004         1         
+12345      2            20356        3            1003         1         
+12345      2            20356        8            1001         1         
+12345      2            20356        3            2001         600       
+12345      2            20356        6            1001         1         
+12345      2            20356        10           1001         1         
+12345      2            20356        5            1003         1         
+12345      2            20356        9            1003         1         
+12345      2            20356        13           1002         1         
+12345      2            20356        2            2000         1         
+12345      2            20356        5            2003         480000    
+12345      2            20356        2            1001         1         
+admin> 
+[TCP] Listening on port 8084...
+[UDP] Listening on port 8083...
+Welcome to Analytics Engine Shell. :help for commands.
+admin> [LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=1: Main module started.
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=2: Fractal demo: starting Mandelbrot render
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 0
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 50
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 100
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 150
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 200
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 250
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 300
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 350
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 400
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 450
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 500
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=3: fractal_demo: row 550
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=2: fractal_demo: wrote fractal_rust.ppm
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=4: Factorial called with n=5
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=8: Factorial called with n=3
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=2: Factorial called with n=6
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=12: Factorial called with n=1
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=10: Factorial called with n=2
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=6: Factorial called with n=4
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=1: Main module finished.
+[LOG] AppID=12345 InstanceID=2 ThreadID=20356 StackDepth=1: Factorial of 6 is 720
+Hit Records Map:
+AppID      InstanceID   ThreadID     StackDepth   LocationID   Count     
+--------------------------------------------------------------------------------
+12345      2            20356        7            1003         1         
+12345      2            20356        4            2002         480000    
+12345      2            20356        12           1001         1         
+12345      2            20356        4            1001         1         
+12345      2            20356        1            1000         1         
+12345      2            20356        11           1003         1         
+12345      2            20356        14           1004         1         
+12345      2            20356        3            1003         1         
+12345      2            20356        8            1001         1         
+12345      2            20356        3            2001         600       
+12345      2            20356        6            1001         1         
+12345      2            20356        10           1001         1         
+12345      2            20356        5            1003         1         
+12345      2            20356        9            1003         1         
+12345      2            20356        13           1002         1         
+12345      2            20356        2            2000         1         
+12345      2            20356        5            2003         480000    
+12345      2            20356        2            1001         1         
+admin> 
+Response from child : Bye!
+
+Bye!
+
+

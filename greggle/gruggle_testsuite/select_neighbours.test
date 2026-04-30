@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+node ../gruggle.js -i sample1.dot chain \
+  "select-nodes s1" \
+  "select-neighbours both 2" \
+  "add-labels-to-selected neigh"

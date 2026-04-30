@@ -1,0 +1,395 @@
+//#undefine CPLUSPLUS
+#include"Domain.cpp"
+#include"Variable.h"
+#include"Relation.h"
+
+
+Relation::Relation(const vector<Variable *> & variables ):
+_vars(variables)
+{
+        _lastBDD=bddfalse;
+	_theBDD=bddfalse;
+	int max;
+        vector<Variable*>::const_iterator iter;
+	for(iter=_vars.begin();iter!=_vars.end();++iter){
+		max=(*iter)->getMax();
+		int fddvar= fdd_extdomain(&max,1);
+		_fddvars.push_back(fddvar);
+		_varTable[fddvar]=*iter;
+                _fddVarLookup[*iter]=fddvar;
+
+	}
+
+}
+Relation::Relation(Variable * var0,...)
+{
+
+	va_list arg;
+	va_start(arg,var0);
+	Variable *v;
+	v=var0;
+	_vars.push_back(v);
+	while(1) {
+		v=va_arg(arg,Variable*);
+                if(v==NULL)break;
+		_vars.push_back(v);
+	}
+
+	_theBDD=bddfalse;
+	int max;
+        vector<Variable*>::const_iterator iter;
+	for(iter=_vars.begin();iter!=_vars.end();++iter){
+		max=(*iter)->getMax();
+		int fddvar= fdd_extdomain(&max,1);
+		_fddvars.push_back(fddvar);
+		_varTable[fddvar]=*iter;
+                _fddVarLookup[*iter]=fddvar;
+	}
+
+
+
+}
+
+bool Relation::hasTuple(const vector<int>& aMinTerm)
+{
+
+	vector<Variable*>::const_iterator variter;
+	vector<int>::const_iterator valiter;
+	vector<int>::const_iterator fiter;
+	bdd abdd=bddtrue;
+	for(fiter=_fddvars.begin(),variter=_vars.begin(),valiter=aMinTerm.begin();
+			variter!=_vars.end();++fiter,++variter,++valiter){
+	     assert((*variter)->getMax() >=(*valiter));
+	     int numbits=(*variter)->numBits();
+	     bvec c=bvec_con(numbits,*valiter);
+	     bvec v=bvec_varfdd(*fiter);
+	     abdd=abdd & (c==v);
+	}
+	bdd result=_theBDD & abdd;
+	return !(result==bddfalse);
+}
+
+
+bool Relation::transitiveClosure()
+{
+
+        while(1)
+        {
+                if(_theBDD==_lastBDD) break;
+                bool retval=selfJoin();
+                if(!retval) return false;
+
+        }
+        return true;
+
+
+}
+
+
+// The following should work in a very special case.
+// If the relation involves an even number of variables
+// and if Dom(var(i))=Dom(var(n/2 + i))
+bool Relation::selfJoin()
+{
+       /*
+        vector<Variable*> _vars;
+        vector<int>       _fddvars;
+        map<int,Variable*> _varTable;
+        map<Variable*,int> _fddVarLookup;
+
+         */
+         if(_vars.size()%2!=0)return false;
+         int nvar=_vars.size()/2;
+         for(int i=0;i<nvar;++i){
+                if(_vars[i]->getDomain()
+                    !=_vars[nvar+i]->getDomain()) return false;
+                }
+
+        // make new variables and a new bdd replacing the old variables.
+        bdd resultdd=_theBDD;
+
+
+        bddPair *pairXtoY=bdd_newpair();
+        bddPair *pairYtoZ=bdd_newpair();
+        bddPair *bksbst=bdd_newpair();
+        for(int i=0;i<nvar;++i){
+                //Create the exchange pair Y/X
+                int fddvarold=_fddVarLookup[_vars[i]];
+                int fddvarnew=_fddVarLookup[_vars[i+nvar]];
+
+                fdd_setpair(pairXtoY,fddvarold,fddvarnew);
+
+        }
+        //vector<int> column4;
+
+
+        static vector<bdd>  domainsToAbstract;
+        domainsToAbstract.clear();
+        for(int i=0;i<nvar;++i){
+                int fddvarold=_fddVarLookup[_vars[i+nvar]];
+                domainsToAbstract.push_back(
+                         fdd_ithset(_fddVarLookup[_vars[i+nvar]])
+                         );
+                //TODO : Scope for performance enhancement
+                //keep a vector of nvar new vars with the Relation
+                //in the transitiveClosureMethod
+                //same is true with the domains to abstract.
+                int max=_varTable[fddvarold]->getMax();
+                int fddvarnew=fdd_extdomain(&max,1);
+
+
+                fdd_setpair(pairYtoZ,fddvarold,fddvarnew);
+                fdd_setpair(bksbst,fddvarnew,fddvarold);
+        }
+        // resultdd=_theBDD[Z/Y] ,Z is a new vector
+        resultdd=bdd_replace(_theBDD,pairYtoZ);
+        //resultdd=resultdd[Y/X]
+        resultdd=bdd_replace(resultdd,pairXtoY);
+        //resultdd=_theBDD & result
+        resultdd=bdd_apply(_theBDD,resultdd,bddop_and);
+
+        //resultdd = exists Y s.t.  resultdd
+        vector<bdd>::const_iterator bdditer;
+        for(bdditer=domainsToAbstract.begin()
+            ;bdditer<domainsToAbstract.end();
+            ++bdditer){
+
+                resultdd=bdd_exist(resultdd,*bdditer);
+        }
+        //back substitute Y in place of Z
+#if 0
+        cout<<"\n...........2.....................\n";
+        cout<<fddset<<resultdd;
+        cout<<"\n=================================\n";
+#endif
+        resultdd=bdd_replace(resultdd,bksbst);
+
+        resultdd=bdd_apply(_theBDD,resultdd,bddop_or);
+
+
+        _lastBDD=_theBDD;
+        _theBDD=resultdd;
+        bdd_freepair(pairXtoY);
+        bdd_freepair(pairYtoZ);
+        bdd_freepair(bksbst);
+
+
+        return true;
+}
+
+
+// Specialized algorithm
+// Assume that this relation has arity 5
+// Convention : n1,e1,s1,n2,s2
+/*
+Relation * Relation::allWalksAux(vector<int> & accepting,int deadState
+      ,int deadNode)
+{
+
+
+        assert(_vars.size()!=5)
+        vector<Variable *> vars;
+        for(int i=0;i<5;++i){
+           if(i!=1) {
+                vars.push_back(_vars[i]);
+           }
+        }
+        bdd fOld;
+        Relation * f=new Relation("F",vars);
+        if(_vars[0]&&_vars[1])
+        while(1)
+        {
+
+                if(_theBDD==_lastBDD) break;
+                bool retval=selfJoin();
+                if(!retval) return false;
+
+        }
+
+
+
+
+
+
+
+}
+*/
+
+
+bool Relation::hasTuple(int entry0,...) // parse it according to the initialization
+{
+    static vector<int> entry;
+    entry.clear();
+    va_list arg;
+    va_start(arg,entry0);
+    int e;
+    e=entry0;
+    entry.push_back(e);
+    for (unsigned int i=0;i<_vars.size()-1;++i){
+	e=va_arg(arg,int);
+	entry.push_back(e);
+    }
+    va_end(arg);
+    return hasTuple(entry);
+}
+
+int Relation::addTuple(const vector<int>& aMinTerm)
+{
+	vector<Variable*>::const_iterator variter;
+	vector<int>::const_iterator valiter;
+	vector<int>::const_iterator fiter;
+	bdd abdd=bddtrue;
+	for(fiter=_fddvars.begin(),variter=_vars.begin(),valiter=aMinTerm.begin();
+			variter!=_vars.end();++fiter,++variter,++valiter){
+	     assert((*variter)->getMax() >=(*valiter));
+	     int numbits=(*variter)->numBits();
+	     bvec c=bvec_con(numbits,*valiter);
+	     bvec v=bvec_varfdd(*fiter);
+	     abdd=abdd & (c==v);
+	}
+	_theBDD=_theBDD | abdd;
+	return 1;
+
+}
+Relation const * currentRelation=NULL;
+void printhandler(FILE* fp,int var)
+{
+	if(currentRelation!=NULL){
+
+		map<int,Variable*>::const_iterator foundPair=
+
+			currentRelation->_varTable.find(var);
+
+		if(foundPair!=currentRelation->_varTable.end()){
+
+			fprintf(fp,"%s(%s)",
+					(foundPair->second->getDomain()->getName()).c_str(),
+					foundPair->second->getName().c_str());
+
+		}
+
+		else {
+
+
+			fprintf(fp,"%d",var);
+
+		}
+
+	}
+
+}
+void Relation::print(FILE *fp)const
+{
+   currentRelation=this;
+   fdd_file_hook(printhandler);
+   fdd_fprintset(fp,_theBDD);
+   fdd_file_hook(NULL);
+   currentRelation=NULL;
+}
+int Relation::removeTuple(const vector<int>& aMinTerm)
+{
+
+	vector<Variable*>::const_iterator variter;
+	vector<int>::const_iterator valiter;
+	vector<int>::const_iterator fiter;
+	bdd abdd=bddtrue;
+	for(fiter=_fddvars.begin(),variter=_vars.begin(),valiter=aMinTerm.begin();
+			variter!=_vars.end();++fiter,++variter,++valiter){
+	     assert((*variter)->getMax() >=(*valiter));
+	     int numbits=(*variter)->numBits();
+	     bvec c=bvec_con(numbits,*valiter);
+	     bvec v=bvec_varfdd(*fiter);
+	     abdd=abdd & (c==v);
+	}
+	_theBDD=_theBDD &  (!abdd);
+	return 1;
+
+}
+
+int Relation::addTuple(int entry0,...) // parse it according to the initialization
+{
+    static vector<int> entry;
+    entry.clear();
+    va_list arg;
+    va_start(arg,entry0);
+    int e;
+    e=entry0;
+    entry.push_back(e);
+    for (unsigned int i=0;i<_vars.size()-1;++i){
+	e=va_arg(arg,int);
+	entry.push_back(e);
+    }
+    addTuple(entry);
+    va_end(arg);
+    return 1;
+}
+
+int Relation::removeTuple(int entry0,...) // parse it according to the initialization
+{
+    static vector<int> entry;
+    entry.clear();
+    va_list arg;
+    va_start(arg,entry0);
+    int e;
+    e=entry0;
+    entry.push_back(e);
+    for (unsigned int i=0;i<_vars.size()-1;++i){
+	e=va_arg(arg,int);
+	entry.push_back(e);
+    }
+    removeTuple(entry);
+    va_end(arg);
+    return 1;
+}
+
+
+Relation *  Relation::evaluate(Variable * var,int value)
+{
+	//TODO
+	return NULL;
+
+}
+int Relation::evaluateSelf(Variable * var, int value)
+{
+
+	//TODO
+	return 0;
+}
+
+Relation *  Relation::restrictExistential(Variable * var)
+{
+	//TODO
+	return NULL;
+}
+int Relation::restrictExistentialSelf(Variable * var)
+{
+	//TODO
+	return 0;
+}
+
+Relation *  Relation::restrictUniversal(Variable * var)
+{
+	//TODO
+	return NULL;
+}
+int Relation::restrictUniversalSelf(Variable * var)
+{
+
+	//TODO
+	return 0;
+}
+int Relation::productSelf(Relation *rel, Variable *var,bool universal)
+{
+
+	//TODO
+	return 0;
+}
+
+Relation *  Relation::product(Relation * rel,Variable * var,bool universal)
+{
+	//TODO
+	return NULL;
+}
+
+
+

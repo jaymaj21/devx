@@ -1,0 +1,1 @@
+../greggle_regex_to_dot toDFA "(concat (alt a (negate a)) (some-of b c))"

@@ -1,0 +1,667 @@
+{
+  "name": "cas-2proc-race",
+  "variables": [
+    "p1pc",
+    "p2pc",
+    "mem"
+  ],
+  "domains": {
+    "p1pc": {
+      "set": [
+        {
+          "lit": "a0"
+        },
+        {
+          "lit": "try"
+        },
+        {
+          "lit": "won"
+        },
+        {
+          "lit": "lost"
+        }
+      ]
+    },
+    "p2pc": {
+      "set": [
+        {
+          "lit": "a0"
+        },
+        {
+          "lit": "try"
+        },
+        {
+          "lit": "won"
+        },
+        {
+          "lit": "lost"
+        }
+      ]
+    },
+    "mem": {
+      "set": [
+        {
+          "lit": 0
+        },
+        {
+          "lit": 1
+        },
+        {
+          "lit": 2
+        }
+      ]
+    }
+  },
+  "init": {
+    "and": [
+      {
+        "=": [
+          {
+            "var": "p1pc"
+          },
+          {
+            "lit": "a0"
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "p2pc"
+          },
+          {
+            "lit": "a0"
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "mem"
+          },
+          {
+            "lit": 0
+          }
+        ]
+      }
+    ]
+  },
+  "actions": [
+    {
+      "name": "p1-start",
+      "body": {
+        "and": [
+          {
+            "and": [
+              {
+                "=": [
+                  {
+                    "var": "p1pc"
+                  },
+                  {
+                    "lit": "a0"
+                  }
+                ]
+              },
+              {
+                "=": [
+                  {
+                    "next": "p1pc"
+                  },
+                  {
+                    "lit": "try"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "and": [
+              {
+                "=": [
+                  {
+                    "next": "p2pc"
+                  },
+                  {
+                    "var": "p2pc"
+                  }
+                ]
+              },
+              {
+                "=": [
+                  {
+                    "next": "mem"
+                  },
+                  {
+                    "var": "mem"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "p1-cas-success",
+      "body": {
+        "and": [
+          {
+            "=": [
+              {
+                "var": "p1pc"
+              },
+              {
+                "lit": "try"
+              }
+            ]
+          },
+          {
+            "=": [
+              {
+                "var": "mem"
+              },
+              {
+                "lit": 0
+              }
+            ]
+          },
+          {
+            "=": [
+              {
+                "next": "p1pc"
+              },
+              {
+                "lit": "won"
+              }
+            ]
+          },
+          {
+            "and": [
+              {
+                "=": [
+                  {
+                    "next": "p2pc"
+                  },
+                  {
+                    "var": "p2pc"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "=": [
+              {
+                "next": "mem"
+              },
+              {
+                "lit": 1
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "p1-cas-fail",
+      "body": {
+        "and": [
+          {
+            "=": [
+              {
+                "var": "p1pc"
+              },
+              {
+                "lit": "try"
+              }
+            ]
+          },
+          {
+            "!=": [
+              {
+                "var": "mem"
+              },
+              {
+                "lit": 0
+              }
+            ]
+          },
+          {
+            "=": [
+              {
+                "next": "p1pc"
+              },
+              {
+                "lit": "lost"
+              }
+            ]
+          },
+          {
+            "and": [
+              {
+                "=": [
+                  {
+                    "next": "p2pc"
+                  },
+                  {
+                    "var": "p2pc"
+                  }
+                ]
+              },
+              {
+                "=": [
+                  {
+                    "next": "mem"
+                  },
+                  {
+                    "var": "mem"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "p2-start",
+      "body": {
+        "and": [
+          {
+            "and": [
+              {
+                "=": [
+                  {
+                    "var": "p2pc"
+                  },
+                  {
+                    "lit": "a0"
+                  }
+                ]
+              },
+              {
+                "=": [
+                  {
+                    "next": "p2pc"
+                  },
+                  {
+                    "lit": "try"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "and": [
+              {
+                "=": [
+                  {
+                    "next": "p1pc"
+                  },
+                  {
+                    "var": "p1pc"
+                  }
+                ]
+              },
+              {
+                "=": [
+                  {
+                    "next": "mem"
+                  },
+                  {
+                    "var": "mem"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "p2-cas-success",
+      "body": {
+        "and": [
+          {
+            "=": [
+              {
+                "var": "p2pc"
+              },
+              {
+                "lit": "try"
+              }
+            ]
+          },
+          {
+            "=": [
+              {
+                "var": "mem"
+              },
+              {
+                "lit": 0
+              }
+            ]
+          },
+          {
+            "=": [
+              {
+                "next": "p2pc"
+              },
+              {
+                "lit": "won"
+              }
+            ]
+          },
+          {
+            "and": [
+              {
+                "=": [
+                  {
+                    "next": "p1pc"
+                  },
+                  {
+                    "var": "p1pc"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "=": [
+              {
+                "next": "mem"
+              },
+              {
+                "lit": 2
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "p2-cas-fail",
+      "body": {
+        "and": [
+          {
+            "=": [
+              {
+                "var": "p2pc"
+              },
+              {
+                "lit": "try"
+              }
+            ]
+          },
+          {
+            "!=": [
+              {
+                "var": "mem"
+              },
+              {
+                "lit": 0
+              }
+            ]
+          },
+          {
+            "=": [
+              {
+                "next": "p2pc"
+              },
+              {
+                "lit": "lost"
+              }
+            ]
+          },
+          {
+            "and": [
+              {
+                "=": [
+                  {
+                    "next": "p1pc"
+                  },
+                  {
+                    "var": "p1pc"
+                  }
+                ]
+              },
+              {
+                "=": [
+                  {
+                    "next": "mem"
+                  },
+                  {
+                    "var": "mem"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "next": {
+    "or": [
+      {
+        "actionRef": "p1-start"
+      },
+      {
+        "actionRef": "p1-cas-success"
+      },
+      {
+        "actionRef": "p1-cas-fail"
+      },
+      {
+        "actionRef": "p2-start"
+      },
+      {
+        "actionRef": "p2-cas-success"
+      },
+      {
+        "actionRef": "p2-cas-fail"
+      }
+    ]
+  },
+  "invariants": [
+    {
+      "name": "at-most-one-winner",
+      "body": {
+        "not": {
+          "and": [
+            {
+              "=": [
+                {
+                  "var": "p1pc"
+                },
+                {
+                  "lit": "won"
+                }
+              ]
+            },
+            {
+              "=": [
+                {
+                  "var": "p2pc"
+                },
+                {
+                  "lit": "won"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "winner-matches-memory",
+      "body": {
+        "and": [
+          {
+            "implies": [
+              {
+                "=": [
+                  {
+                    "var": "p1pc"
+                  },
+                  {
+                    "lit": "won"
+                  }
+                ]
+              },
+              {
+                "=": [
+                  {
+                    "var": "mem"
+                  },
+                  {
+                    "lit": 1
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "implies": [
+              {
+                "=": [
+                  {
+                    "var": "p2pc"
+                  },
+                  {
+                    "lit": "won"
+                  }
+                ]
+              },
+              {
+                "=": [
+                  {
+                    "var": "mem"
+                  },
+                  {
+                    "lit": 2
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "implies": [
+              {
+                "=": [
+                  {
+                    "var": "mem"
+                  },
+                  {
+                    "lit": 1
+                  }
+                ]
+              },
+              {
+                "not": {
+                  "=": [
+                    {
+                      "var": "p2pc"
+                    },
+                    {
+                      "lit": "won"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "implies": [
+              {
+                "=": [
+                  {
+                    "var": "mem"
+                  },
+                  {
+                    "lit": 2
+                  }
+                ]
+              },
+              {
+                "not": {
+                  "=": [
+                    {
+                      "var": "p1pc"
+                    },
+                    {
+                      "lit": "won"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "properties": [
+    {
+      "name": "p1-can-win",
+      "body": {
+        "eventually": {
+          "=": [
+            {
+              "var": "p1pc"
+            },
+            {
+              "lit": "won"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "p2-can-win",
+      "body": {
+        "eventually": {
+          "=": [
+            {
+              "var": "p2pc"
+            },
+            {
+              "lit": "won"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "p1-can-lose",
+      "body": {
+        "eventually": {
+          "=": [
+            {
+              "var": "p1pc"
+            },
+            {
+              "lit": "lost"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "p2-can-lose",
+      "body": {
+        "eventually": {
+          "=": [
+            {
+              "var": "p2pc"
+            },
+            {
+              "lit": "lost"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+node ../gruggle.js -i sample1.dot chain \
+  "add-labels-to-selected gamma" \
+  -f chain_file1.txt \
+  "remove-labels-from-selected alpha" \
+  -f chain_file2.txt

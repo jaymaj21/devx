@@ -1,0 +1,26 @@
+digraph merged {
+    graph [nodesep=0.35, ranksep=0.5, splines=spline];
+    node [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    edge [arrowsize=0.8, color="#4a6fa5", penwidth=1.2];
+    a [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    b [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    mid [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    s1 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    s2 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    s3 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    t1 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    t2 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    t3 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    s1 -> a [label=x];
+    a -> t1 [label=y];
+    s2 -> b [label=x];
+    b -> t2 [label=y];
+    a -> b [label=z];
+    b -> a [label=w];
+    s3 -> mid [label=p];
+    mid -> t3 [label=q];
+    mid -> a [label=r];
+    s3 -> t1 [arrowsize=0.8, color="#4a6fa5", label=extra, penwidth=1.2];
+    s3 -> t2 [arrowsize=0.8, color="#4a6fa5", label=extra, penwidth=1.2];
+    s3 -> t3 [arrowsize=0.8, color="#4a6fa5", label=extra, penwidth=1.2];
+}

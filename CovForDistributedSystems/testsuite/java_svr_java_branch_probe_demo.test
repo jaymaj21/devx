@@ -1,0 +1,28 @@
+echo DONT_FAIL_ON_DIFF
+echo DONT_FAIL_ON_ERROR
+
+# Start Java analytics server (ClojureShell)
+tclsh.exe ../../JMWrap/gateway.tcl 19898 java -cp ../code-analytics/target/clojure-shell-1.0-SNAPSHOT-jar-with-dependencies.jar com.codeanalytics.ClojureShell &
+sleep 2
+
+# Build instrumenter, demo app, and runtime (may take a while)
+(cd ../branch-probe-instrumenter; mvn -q -DskipTests clean package)
+(cd ../branch-probe-demoapp; mvn -q -DskipTests clean package)
+(cd ../branch-probe-suite/mprewriter-runtime; mvn -q -DskipTests clean package)
+
+# Instrument the demo app
+(cd ../branch-probe-demoapp; java -jar ../branch-probe-instrumenter/target/branch-probe-instrumenter-1.3.0-jar-with-dependencies.jar target/branch-probe-demoapp-1.0.0.jar target/branch-probe-demoapp-1.0.0-instrumented.jar)
+
+# Run the instrumented demo (ensure UDP server is listening on 8083)
+(cd ../branch-probe-demoapp; java -cp "target/branch-probe-demoapp-1.0.0-instrumented.jar;../branch-probe-suite/mprewriter-runtime/target/mprewriter-runtime-1.0.0.jar" com.example.demo.Main)
+
+# Generous sleep to allow build/run and UDP delivery
+sleep 10
+
+# Query hits
+tclsh ../../JMWrap/gateway_client.tcl 127.0.0.1 19898 :hits
+
+# Exit server
+tclsh ../../JMWrap/gateway_client.tcl 127.0.0.1 19898 :exit
+tclsh ../../JMWrap/gateway_client.tcl 127.0.0.1 19898 gateway-exit
+sleep 1

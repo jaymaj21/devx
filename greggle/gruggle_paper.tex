@@ -1,0 +1,363 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{fontspec}
+\setmainfont{Calibri}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{enumitem}
+\usepackage{url}
+\usepackage[strings]{underscore}
+\usepackage[hidelinks]{hyperref}
+
+\newcommand{\gmfig}[2]{%
+  \IfFileExists{gruggle_testsuite/#1.pdf}{\includegraphics[width=#2]{gruggle_testsuite/#1.pdf}}{%
+    \texttt{[Missing PDF figure gruggle\_testsuite/#1.pdf]}}}
+
+\title{Gruggle: Lightweight Graphviz DOT Manipulation}
+\author{Sambuddha Majumder, Partha P Chakrabarti}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Gruggle is a small Node.js tool for ingesting, merging, inspecting, and
+lightly manipulating Graphviz DOT graphs from the command line.
+It combines a permissive DOT parser (supporting comments, ports,
+attributes, subgraphs) with a composable subcommand pipeline that can
+add nodes, add edges (optionally random), prune isolated nodes, perform
+path-based keep/remove filtering, and export to SVG via Graphviz \texttt{dot}.
+\end{abstract}
+
+\section{Command Line and Entry Point}
+
+The main executable is \texttt{gruggle.js}.  It accepts zero or more
+input files using repeated \texttt{-i} flags.  All parsed graphs are
+merged; if no inputs are given an empty digraph is used.
+Style switches:
+\begin{itemize}[leftmargin=*]
+  \item \texttt{--curved} (default): curved spline edges
+  \item \texttt{--ortho} or \texttt{--rectilinear}: rectilinear edges (\texttt{splines=ortho})
+\end{itemize}
+After parsing/merging, subcommands are applied in order.  Examples:
+\begin{verbatim}
+node gruggle.js --ortho -i g1.dot -i g2.dot set-name merged to-svg merged.svg
+node gruggle.js chain "add-node nx:1:100" "add-edge 50 nx.* nx.*" \
+                     "keep-paths nx1 nx5" "to-svg pruned.svg"
+\end{verbatim}
+
+\section{DOT Parsing and Merging}
+
+The parser handles both \texttt{graph}/\texttt{digraph}, optional
+\texttt{strict}, named/unnamed graphs, subgraphs, edge ops
+\texttt{->}/\texttt{--}, port/compass points, bracketed attribute
+lists, quoted IDs, HTML-like IDs, numbers, comments (\texttt{//},
+\texttt{/* */}, \texttt{\#}), and default attribute statements
+(\texttt{graph}, \texttt{node}, \texttt{edge}).  When merging, later
+files' attributes override earlier ones on conflicts; edges are
+deduplicated by endpoints/ports/direction with attribute merge.
+
+Default emitted style: box-shaped, rounded, light-blue nodes and
+muted-blue edges; orthogonal vs.\ curved splines are controlled by the
+CLI switch above.
+
+\section{Subcommands}
+
+Subcommands operate on the in-memory graph and can be composed with
+the \texttt{chain} meta-command.  Tokens inside a chain are parsed with
+a simple shell-like splitter (quotes supported).
+\begin{itemize}[leftmargin=*]
+  \item \textbf{set-name} \texttt{<name>}: rename the graph.
+  \item \textbf{add-nodes} \texttt{<id>|<prefix:start:end>}: add a
+        single node or a numeric range (e.g.\ \texttt{nx:1:3}
+        $\rightarrow$ \texttt{nx1}, \texttt{nx2}, \texttt{nx3}).
+  \item \textbf{add-edges} \texttt{<label> <fromRe> <toRe>}: add edges
+        for all pairs whose IDs match the regexes, using the current
+        graph direction.  Attribute \texttt{label} is set when
+        provided and non-empty.
+  \item \textbf{add-edges} \texttt{<count> <fromRe> <toRe> [label]}:
+        pick up to \texttt{count} random distinct pairs from the regex
+        matches and add those edges (optional label).
+  \item \textbf{add-chain} \texttt{<root> <n>}: add nodes
+        \texttt{root\_1}.. \texttt{root\_n} linked in a chain.
+  \item \textbf{add-grid} \texttt{<root> <rows> <cols>}: add a
+        \texttt{rows} x \texttt{cols} grid with nodes
+        \texttt{root\_i\_j} and directional grid edges (top-to-bottom,
+        left-to-right).
+  \item \textbf{delete-isolated-nodes}: remove nodes with no incident
+        edges.
+  \item \textbf{remove-nodes} \texttt{<regex>}: delete nodes matching
+        the regex and their incident edges.
+  \item \textbf{remove-edges-between-nodes} \texttt{<fromRe> <toRe>}:
+        delete edges whose tail/head IDs match the regex pair.
+  \item \textbf{add-labels-to-edges-on-paths} \texttt{<fromRe> <toRe> <label>}:
+        add the given label (appended to any existing comma-separated
+        labels) on every edge lying on a path from sources matching
+        \texttt{fromRe} to targets matching \texttt{toRe}.
+  \item \textbf{remove-labels-from-edges-on-paths} \texttt{<fromRe> <toRe> <label>}:
+        remove the given label from every edge lying on such paths; if
+        no labels remain, the attribute is removed.
+  \item \textbf{select-nodes} / \textbf{deselect-nodes} \texttt{<regex>}:
+        mark/unmark nodes whose IDs match the regex.
+  \item \textbf{select-edges} / \textbf{deselect-edges}:
+        either \texttt{<labelRegex>} (matches any label component) or
+        \texttt{<fromRe> <toRe>} (matches endpoints) to mark/unmark edges.
+  \item \textbf{select-nodes-label} \texttt{<labelRegex>}: select nodes
+        whose label attribute has a matching component (comma-separated).
+  \item \textbf{delete-selected}: delete selected nodes (and their
+        incident edges) and selected edges.
+  \item \textbf{set-node-attr-on-selected} \texttt{<attr> <value>} /
+        \textbf{set-edge-attr-on-selected} \texttt{<attr> <value>}:
+        set a DOT attribute on selected nodes/edges.
+  \item \textbf{unset-node-attr-on-selected} \texttt{<attr>} /
+        \textbf{unset-edge-attr-on-selected} \texttt{<attr>}:
+        remove a DOT attribute on selected nodes/edges.
+  \item \textbf{clear-visual-attrs-on-selected}: clear common visual
+        attributes (color, fillcolor, fontcolor, style, shape,
+        penwidth, arrowsize, fontsize) on selected nodes/edges.
+  \item \textbf{add-labels-to-selected} \texttt{<label>}: append the
+        label (comma-separated) to all selected nodes and edges.
+  \item \textbf{remove-labels-from-selected} \texttt{<label>}: remove
+        the label from selected nodes/edges; drops the attribute if empty.
+  \item \textbf{keep-paths} \texttt{<fromRe> <toRe>}: mark all nodes
+        and edges that lie on at least one path from any source
+        matching \texttt{fromRe} to any target matching \texttt{toRe}.
+        Marks set \texttt{keep=true} and clear \texttt{remove}.
+  \item \textbf{remove-paths} \texttt{<fromRe> <toRe>}: similarly mark
+        nodes/edges on such paths, setting \texttt{remove=true} and
+        clearing \texttt{keep}.
+  \item \textbf{keep-path-edges} \texttt{<fromRe> <toRe>}: mark only
+        the edges (not nodes) that lie on such paths with
+        \texttt{keep=true}.
+  \item \textbf{remove-path-edges} \texttt{<fromRe> <toRe>}: mark only
+        the edges (not nodes) on such paths with
+        \texttt{remove=true}.
+  \item \textbf{filter-to-paths} \texttt{<fromRe> <toRe>}: keep only
+        nodes/edges on such paths (mark all others as remove).
+  \item \textbf{select-nodes-on-paths} \texttt{<fromRe> <toRe>}:
+        select all nodes on such paths (for later bulk ops).
+  \item \textbf{select-edges-on-paths} \texttt{<fromRe> <toRe>}:
+        select all edges on such paths.
+  \item \textbf{find-path} \texttt{<regex> <label>}: run greggle
+        \texttt{find-path} to annotate one matching path's edges with
+        the given label using greggle-compatible regular-path
+        semantics. The regex may include lifted node predicates such
+        as \texttt{P@} and \texttt{@P}.
+  \item \textbf{select-neighbours} \texttt{[in|out|both] <hops>}:
+        expand selection by BFS over neighbours (default both,1).
+  \item \textbf{select-nodes-degree} \texttt{<lt|le|eq|ge|gt> <k>}:
+        select nodes by total degree (in+out for digraphs).
+  \item \textbf{select-nodes-indegree} \texttt{<lt|le|eq|ge|gt> <k>}:
+        select nodes by indegree (for undirected graphs, each edge
+        counts as both in and out).
+  \item \textbf{select-nodes-outdegree} \texttt{<lt|le|eq|ge|gt> <k>}:
+        select nodes by outdegree (for undirected graphs, each edge
+        counts as both in and out).
+  \item \textbf{select-component-of-nodes} \texttt{<regex>}: select
+        nodes/edges in components of matching nodes.
+  \item \textbf{select-components-with-selected}: select nodes/edges in
+        any component that already contains a selected node.
+  \item \textbf{clear-selection}: clear selection on all nodes/edges.
+  \item \textbf{invert-selection-nodes}: flip selection flags on nodes.
+  \item \textbf{invert-selection-edges}: flip selection flags on edges.
+  \item \textbf{select-neighbours} \texttt{[in|out|both] <hops>}:
+        expand selection by BFS over neighbours (default both,1).
+  \item \textbf{select-nodes-degree} \texttt{<lt|le|eq|ge|gt> <k>}:
+        select nodes by total degree (in+out for digraphs).
+  \item \textbf{chain} \texttt{"cmd1 ..."} \texttt{"cmd2 ..."}: run
+        each nested command in order. Inside a chain, \texttt{-f
+        <file>} splices commands line-by-line from the file
+        (comments/blank lines skipped) at that point in sequence.
+  \item \textbf{to-svg} \texttt{<filename>}: pipe the current DOT
+        through \texttt{dot -Tsvg -o <filename>} (assumes \texttt{dot}
+        is on \texttt{PATH}).
+\end{itemize}
+
+\paragraph{Keep/remove semantics.}
+Elements carry in-memory \emph{keep} and \emph{remove} flags that flip
+with the operations above (keep clears remove, remove clears keep).
+When emitting the final graph:
+\begin{itemize}[leftmargin=*]
+  \item If any element is marked keep, only kept elements are emitted.
+  \item Otherwise, elements marked remove are suppressed; the rest are
+        emitted.
+\end{itemize}
+No flags are written into DOT attributes.
+
+\section{Output}
+
+Default output is DOT on stdout, reflecting merged defaults and the
+current subcommand state.  Using \texttt{to-svg} writes an SVG file
+via Graphviz with the same styling preamble (boxy light-blue nodes,
+blue edges, curved or orthogonal per CLI switch).
+
+\section{Example Workflow}
+\begin{verbatim}
+# Merge two graphs, add 20 random edges among nx* nodes, retain only
+# paths from nx1 to nx5, emit both DOT and SVG with orthogonal edges.
+node gruggle.js --ortho -i a.dot -i b.dot \
+  chain "add-edge 20 nx.* nx.*" "keep-paths nx1 nx5" "to-svg pruned.svg" \
+  > pruned.dot
+\end{verbatim}
+
+\section{Illustrative Examples}
+
+\subsection{Ring/Chain/Grid Builders}
+Figure~\ref{fig:chain-ring} and Figure~\ref{fig:grid} illustrate the synthetic builders discussed here.
+\begin{figure}[h]
+  \centering
+  \gmfig{add_chain.golden}{0.4\textwidth}
+  \gmfig{add_ring.golden}{0.4\textwidth}
+  \caption{Left: chain of four nodes. Right: ring of three nodes.}
+  \label{fig:chain-ring}
+\end{figure}
+\begin{figure}[h]
+  \centering
+  \gmfig{add_grid.golden}{0.5\textwidth}
+  \caption{2x2 grid built with \texttt{add-grid g 2 2}.}
+  \label{fig:grid}
+\end{figure}
+\begin{verbatim}
+# Chain of four nodes c_1 -> c_2 -> c_3 -> c_4
+node gruggle.js chain "add-chain c 4" > chain.dot
+
+# Ring of three nodes r_0 -> r_1 -> r_2 -> r_0
+node gruggle.js chain "add-ring r 3 0" > ring.dot
+
+# 2x2 grid g_1_1, g_1_2, g_2_1, g_2_2 with edges down/right
+node gruggle.js chain "add-grid g 2 2" > grid.dot
+\end{verbatim}
+
+\subsection{Random Selection and Labeling}
+Figure~\ref{fig:rnd} shows random node/edge selection annotated with \texttt{rnd}.
+\begin{figure}[h]
+  \centering
+  \gmfig{select_random_nodes_edges.golden}{0.45\textwidth}
+  \caption{Randomly selected nodes/edges labeled \texttt{rnd}.}
+  \label{fig:rnd}
+\end{figure}
+\begin{verbatim}
+# Select up to 10 nodes and edges at random, mark them 'rnd'
+node gruggle.js -i sample1.dot chain \
+  "select-random-nodes 10 .*" \
+  "select-random-edges 10 .* .*" \
+  "add-labels-to-selected rnd" > random.dot
+\end{verbatim}
+Resulting edges/nodes carry labels like \texttt{name:rnd} or \texttt{label="x,rnd"}.
+
+\subsection{Path Highlighting via Greggle (find-path)}
+Figure~\ref{fig:pathlab} shows greggle-driven path annotation.
+\begin{figure}[h]
+  \centering
+  \gmfig{find_path.golden}{0.5\textwidth}
+  \caption{Edges on one matching path annotated with \texttt{pathlab}.}
+   \label{fig:pathlab}
+\end{figure}
+\begin{verbatim}
+# Highlight one path whose edge labels match (concat x y) with 'pathlab'
+node gruggle.js -i sample1.dot chain \
+  "find-path (concat x y) pathlab" > path_highlighted.dot
+\end{verbatim}
+Edges on the witness path gain \texttt{pathlab} in their label (e.g., \texttt{label="x,pathlab"}).
+The same command also supports lifted node predicates inside the regex.
+For example, \texttt{(concat a (all-of a @TARGET))} selects a
+two-edge witness whose second edge is labelled \texttt{a} and whose
+sink node label matches \texttt{TARGET}.
+
+\subsection{Component-Based Selection}
+Figure~\ref{fig:components} visualizes component selection from regex and from existing selection.
+\begin{figure}[h]
+  \centering
+  \gmfig{select_component_of_nodes.golden}{0.45\textwidth}
+  \gmfig{select_components_with_selected.golden}{0.45\textwidth}
+  \caption{Selecting components by node regex (left) and from existing selection (right).}
+  \label{fig:components}
+\end{figure}
+\begin{verbatim}
+# Select components containing nodes matching x*
+node gruggle.js -i comps.dot chain \
+  "select-component-of-nodes x.*" \
+  "add-labels-to-selected compA" > comps_marked.dot
+
+# Select components containing already-selected nodes
+node gruggle.js -i comps.dot chain \
+  "select-nodes y2" \
+  "select-components-with-selected" \
+  "add-labels-to-selected compB" > comps2.dot
+\end{verbatim}
+Nodes and internal edges in those components are labeled \texttt{name:compA} or \texttt{name:compB}.
+
+\subsection{Selection Utilities}
+Figure~\ref{fig:visattrs} shows styling and clearing of selected elements.
+\begin{figure}[h]
+  \centering
+  \gmfig{visual_attrs_on_selected.golden}{0.45\textwidth}
+  \caption{Visual attrs set then cleared on selected nodes/edges.}
+  \label{fig:visattrs}
+\end{figure}
+\begin{verbatim}
+# Label-selected nodes/edges, then clear visual styling
+node gruggle.js -i sample1.dot chain \
+  "select-nodes s1" \
+  "select-edges x" \
+  "set-node-attr-on-selected fillcolor yellow" \
+  "set-edge-attr-on-selected color red" \
+  "clear-visual-attrs-on-selected" > styled.dot
+\end{verbatim}
+
+\subsection{Degree and Neighborhood Selection}
+Figure~\ref{fig:deg-neigh} illustrates degree-based selection and neighbour expansion before the corresponding command snippets.
+\begin{figure}[h]
+  \centering
+  \gmfig{select_nodes_degree.golden}{0.45\textwidth}
+  \gmfig{select_neighbours.golden}{0.45\textwidth}
+  \caption{Left: nodes with degree $\ge 3$ labeled \texttt{degsel}. Right: 2-hop neighbour expansion labeled \texttt{neigh}.}
+  \label{fig:deg-neigh}
+\end{figure}
+\begin{verbatim}
+# Select nodes with degree >= 3
+node gruggle.js -i sample1.dot chain \
+  "select-nodes-degree ge 3" \
+  "add-labels-to-selected degsel" > deg.dot
+
+# BFS expand selection by 2 hops (undirected sense)
+node gruggle.js -i sample1.dot chain \
+  "select-nodes s1" \
+  "select-neighbours both 2" \
+  "add-labels-to-selected neigh" > neigh.dot
+\end{verbatim}
+
+\subsection{Directed Indegree/Outdegree Selection}
+Figure~\ref{fig:indeg-outdeg} shows indegree and outdegree filtering on a directed sample graph.
+\begin{figure}[h]
+  \centering
+  \gmfig{select_nodes_indegree.golden}{0.45\textwidth}
+  \gmfig{select_nodes_outdegree.golden}{0.45\textwidth}
+  \caption{Left: nodes with indegree $\ge 2$ labeled \texttt{indegsel}. Right: nodes with outdegree $=0$ labeled \texttt{outdegsel}. Undirected edges count toward both in/out.}
+  \label{fig:indeg-outdeg}
+\end{figure}
+\begin{verbatim}
+# Indegree >= 2 (counts incoming arcs; undirected edges count as both)
+node gruggle.js -i sample1.dot chain \
+  "select-nodes-indegree ge 2" \
+  "add-labels-to-selected indegsel" > indeg.dot
+
+# Outdegree == 0 (no outgoing arcs; undirected edges count as both)
+node gruggle.js -i sample1.dot chain \
+  "select-nodes-outdegree eq 0" \
+  "add-labels-to-selected outdegsel" > outdeg.dot
+\end{verbatim}
+These directed-aware predicates complement the total-degree selector when working with asymmetric graphs.
+
+\subsection{SVG Output}
+\begin{verbatim}
+node gruggle.js --ortho -i sample1.dot chain \
+  "add-nodes 3 extra" \
+  "to-svg sample1.svg"
+\end{verbatim}
+The SVG retains the light-blue, rounded-box styling and orthogonal edges when \texttt{--ortho} is used.
+
+\end{document}

@@ -1,0 +1,78 @@
+BG white DF {courier 10 normal} T {package com.trading.messagehandler;} T {
+} T {
+} T {import com.trading.domain.Quote;} T {
+} T {import com.trading.domain.Trade;} T {
+} T {import com.trading.domain.mprewriter;} T {
+} T {import com.trading.service.MarketDataCalculator;} T {
+} T {import com.trading.service.MarketDataCalculatorImpl;} T {
+} T {import com.trading.tasks.MarketEventCalculationTask;} T {
+} T {import com.trading.utils.WrappedLogger;} T {
+} T {
+} T {import java.util.concurrent.BlockingQueue;} T {
+} T {import java.util.concurrent.LinkedBlockingQueue;} T {
+} T {
+} T /** T {
+} T {  This is the implementation of the MarketDataHandler, and it is} T {
+} T {  meant to be an application-level singleton (a "bean" perhaps).} T {
+} T {  The single instance is supposed to be wired up with the market-data} T {
+} T {  client/broker/queue to feed the events into our system. See} T {
+} T {  the MarketDataHandler interface comments for further details.} T {
+} T { */} T {
+} T public\ class\ MarketDataHandlerImpl\ implements\ MarketDataHandler\ \{ T {
+} T {    private MarketDataCalculatorImpl calculator;} T {
+} T {    WrappedLogger log = new WrappedLogger();} T {
+} T {
+} T {    BlockingQueue<Object> stagingQueue = new LinkedBlockingQueue<>();} T {
+} T {
+} T {
+} T {   private void initCalculatorThread()} T {
+} S #aafba2 T \ \ \ \{ N .spectral/kZtuYGs1JePrbs.txt T {mprewriter.scope_START(10001);} P { #aafba2 -background {#aafba2}} /S #aafba2 T {
+} T {       Thread marketEventCalculationThread = new Thread(new MarketEventCalculationTask(stagingQueue, calculator));} T {
+} T {       marketEventCalculationThread.start();} T {
+} T \ \ \ \} T {
+} T {
+} S #aafba2 T \ \ \ \ public\ MarketDataHandlerImpl(MarketDataCalculatorImpl\ calculator)\ \{ N .spectral/sjUz8UvTW6Ael03.txt T {mprewriter.scope_START(10002);} /S #aafba2 T {
+} T {        this.calculator = calculator;} T {
+} T {        initCalculatorThread();} T {
+} T \ \ \ \ \} T {
+} T {
+} T {    /*} T {
+} T {     mvn dependency:copy-dependencies} T {
+} T {     java -cp "target/classes;target/dependency/*" clojure.main} T {
+} T {(ns my-clojure-app.core} T {
+} T {  (:import [com.trading.messagehandler MarketDataHandlerImpl]))} T {
+} T {(println (MarketDataHandlerImpl/factorial 10))} T {
+} T {     */} T {
+} S #fd9f9f T \ \ \ \ public\ static\ int\ factorial(int\ n)\ \{mprewriter.scope_START(10003)\; P { #fd9f9f -background {#fd9f9f}} /S #fd9f9f T {
+} T {       if (n <= 1) return 1;} T {
+} T {       else return n * factorial(n - 1 );} T {
+} T \ \ \ \ \} T {
+} T \ \ \ \ public\ MarketDataHandlerImpl()\ \ \{ T {
+} T {        this(new MarketDataCalculatorImpl());} T {
+} T \ \ \ \ \} T {
+} T {
+} T {    @Override} T {
+} T {    public void handleTradeEvent(Trade trade)} T {
+} S #aafba2 T \ \ \ \ \{ N .spectral/vjdHAchX3fN.txt T {mprewriter.scope_START(10004);} /S #aafba2 T {
+} S #aafba2 T \ \ \ \ \ \ \ \ try\ \{ N .spectral/bTSesfmXCgKt.txt T {mprewriter.scope_START(10005);} /S #aafba2 T {
+} T {            stagingQueue.put(trade);} T {
+} S #fd9f9f T \ \ \ \ \ \ \ \ \}\ catch(InterruptedException\ ex)\ \{mprewriter.scope_START(10006)\; /S #fd9f9f T {
+} T {            log.error("Staging queue addition interrupted for trade {0}", trade);} T {
+} T \ \ \ \ \ \ \ \ \} T {
+} T \ \ \ \ \} T {
+} T {
+} T {    @Override} T {
+} T {    public void handleQuoteEvent(Quote quote)} T {
+} S #aafba2 T \ \ \ \ \{ N .spectral/rMPC53htZx0TBwI.txt T {mprewriter.scope_START(10007);} /S #aafba2 T {
+} S #aafba2 T \ \ \ \ \ \ \ \ try\ \{ N .spectral/ccDcEfPTahh.txt T {mprewriter.scope_START(10008);} /S #aafba2 T {
+} T {            stagingQueue.put(quote);} T {
+} S #fd9f9f T \ \ \ \ \ \ \ \ \}\ catch(InterruptedException\ ex)\ \{mprewriter.scope_START(10009)\; /S #fd9f9f T {
+} T {            log.error("Staging queue addition interrupted for quote {0}", quote);} T {
+} T \ \ \ \ \ \ \ \ \} T {
+} T \ \ \ \ \} T {
+} T {
+} T {    @Override} T {
+} S #aafba2 T \ \ \ \ public\ MarketDataCalculator\ getCalculator()\ \{ N .spectral/iMbRIOi3KMcJh5q.txt T mprewriter.scope_START(10010)\;return\ calculator\;\ \}\; /S #aafba2 T {
+} T {
+} T \} T {
+}

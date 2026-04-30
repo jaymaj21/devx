@@ -1,0 +1,5 @@
+# Only instrument these ranges in the non-fractal demo (others skipped unless added here)
+# Format: Fully-qualified-class:line or line-range
+# Example: method entries around the two loops in Main (adjust as needed)
+com.example.demo.Main:16-30
+

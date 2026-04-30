@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if command -v dot >/dev/null 2>&1; then
+  node ../gruggle.js -i sample1.dot -i sample2.dot chain \
+    "set-name merged" \
+    "add-edges extra s3 t.*" \
+    "to-svg merged.svg"
+else
+  node ../gruggle.js -i sample1.dot -i sample2.dot chain \
+    "set-name merged" \
+    "add-edges extra s3 t.*"
+fi

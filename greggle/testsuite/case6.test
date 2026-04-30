@@ -1,0 +1,3 @@
+../greggle all_some_demo.dot "(exists-path x y (all-of a b))"
+
+../greggle all_some_demo.dot "(exists-path x y (some-of b c))"

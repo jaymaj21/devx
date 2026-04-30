@@ -1,0 +1,17 @@
+digraph sample1 {
+    graph [nodesep=0.35, ranksep=0.5, splines=spline];
+    node [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    edge [arrowsize=0.8, color="#4a6fa5", penwidth=1.2];
+    a [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    b [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    s1 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    s2 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    t1 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    t2 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    s1 -> a [label="x,pathlab"];
+    a -> t1 [label="y,pathlab"];
+    s2 -> b [label=x];
+    b -> t2 [label=y];
+    a -> b [label=z];
+    b -> a [label=w];
+}

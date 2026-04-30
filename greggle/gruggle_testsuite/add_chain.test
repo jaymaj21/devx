@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+set -euo pipefail
+node ../gruggle.js chain "add-chain c 4"

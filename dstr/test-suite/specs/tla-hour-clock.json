@@ -1,0 +1,70 @@
+{
+  "name": "tla-hour-clock",
+  "variables": ["hr"],
+  "domains": {
+    "hr": {
+      "set": [
+        { "lit": 1 }, { "lit": 2 }, { "lit": 3 }, { "lit": 4 },
+        { "lit": 5 }, { "lit": 6 }, { "lit": 7 }, { "lit": 8 },
+        { "lit": 9 }, { "lit": 10 }, { "lit": 11 }, { "lit": 12 }
+      ]
+    }
+  },
+  "init": {
+    "in": [
+      { "var": "hr" },
+      {
+        "set": [
+          { "lit": 1 }, { "lit": 2 }, { "lit": 3 }, { "lit": 4 },
+          { "lit": 5 }, { "lit": 6 }, { "lit": 7 }, { "lit": 8 },
+          { "lit": 9 }, { "lit": 10 }, { "lit": 11 }, { "lit": 12 }
+        ]
+      }
+    ]
+  },
+  "actions": [
+    {
+      "name": "tick",
+      "body": {
+        "or": [
+          { "and": [ { "=": [ { "var": "hr" }, { "lit": 1 } ] }, { "=": [ { "next": "hr" }, { "lit": 2 } ] } ] },
+          { "and": [ { "=": [ { "var": "hr" }, { "lit": 2 } ] }, { "=": [ { "next": "hr" }, { "lit": 3 } ] } ] },
+          { "and": [ { "=": [ { "var": "hr" }, { "lit": 3 } ] }, { "=": [ { "next": "hr" }, { "lit": 4 } ] } ] },
+          { "and": [ { "=": [ { "var": "hr" }, { "lit": 4 } ] }, { "=": [ { "next": "hr" }, { "lit": 5 } ] } ] },
+          { "and": [ { "=": [ { "var": "hr" }, { "lit": 5 } ] }, { "=": [ { "next": "hr" }, { "lit": 6 } ] } ] },
+          { "and": [ { "=": [ { "var": "hr" }, { "lit": 6 } ] }, { "=": [ { "next": "hr" }, { "lit": 7 } ] } ] },
+          { "and": [ { "=": [ { "var": "hr" }, { "lit": 7 } ] }, { "=": [ { "next": "hr" }, { "lit": 8 } ] } ] },
+          { "and": [ { "=": [ { "var": "hr" }, { "lit": 8 } ] }, { "=": [ { "next": "hr" }, { "lit": 9 } ] } ] },
+          { "and": [ { "=": [ { "var": "hr" }, { "lit": 9 } ] }, { "=": [ { "next": "hr" }, { "lit": 10 } ] } ] },
+          { "and": [ { "=": [ { "var": "hr" }, { "lit": 10 } ] }, { "=": [ { "next": "hr" }, { "lit": 11 } ] } ] },
+          { "and": [ { "=": [ { "var": "hr" }, { "lit": 11 } ] }, { "=": [ { "next": "hr" }, { "lit": 12 } ] } ] },
+          { "and": [ { "=": [ { "var": "hr" }, { "lit": 12 } ] }, { "=": [ { "next": "hr" }, { "lit": 1 } ] } ] }
+        ]
+      }
+    }
+  ],
+  "next": { "actionRef": "tick" },
+  "invariants": [
+    {
+      "name": "hour-in-range",
+      "body": {
+        "in": [
+          { "var": "hr" },
+          {
+            "set": [
+              { "lit": 1 }, { "lit": 2 }, { "lit": 3 }, { "lit": 4 },
+              { "lit": 5 }, { "lit": 6 }, { "lit": 7 }, { "lit": 8 },
+              { "lit": 9 }, { "lit": 10 }, { "lit": 11 }, { "lit": 12 }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "properties": [
+    {
+      "name": "can-reach-twelve",
+      "body": { "eventually": { "=": [ { "var": "hr" }, { "lit": 12 } ] } }
+    }
+  ]
+}

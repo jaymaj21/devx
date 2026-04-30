@@ -1,0 +1,712 @@
+
+        <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<title>MarketDataCalculatorImpl.java.html</title>
+<meta name="Generator" content="Spectral">
+<meta name="settings" content="use_css,pre_wrap,no_foldcolumn,expand_tabs,prevent_copy=1">
+      <script type="text/javascript">
+  
+var externalContent = {};
+
+        function execCmd(command, value = null) {
+            document.execCommand(command, false, value);
+        }
+		function dumpPreElementHierarchy(preElementId) {
+    const preElement = document.getElementById(preElementId);
+    if (!preElement) {
+        console.error("Element with the specified ID not found.");
+        return;
+    }
+
+    let output = "";
+
+    function traverse(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            output += node.textContent;
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+            if (["SPAN", "B", "FONT"].includes(node.tagName)) {
+                output += " S ";  // Start marker
+            }
+
+            // Recursively process child nodes
+            node.childNodes.forEach(traverse);
+
+            if (["SPAN", "B", "FONT"].includes(node.tagName)) {
+                output += " /S ";  // End marker
+            }
+        }
+    }
+    traverse(preElement);
+    console.log(output.trim());
+   }
+		function getHtmlAsHlt() {
+		    var topPre = document.getElementById("vimCodeElement")
+            var spans = topPre.querySelectorAll("span");
+            spans.forEach(span => {
+                const computedStyles = window.getComputedStyle(span);
+                console.log("Styles for class" + span.className);
+                console.log("Color:" + computedStyles.color );
+                console.log("Font Size:" + computedStyles.fontSize );
+                console.log("Background Color:" + computedStyles.backgroundColor);
+                console.log('----------------------');
+            });
+        }
+
+var Base64 = {
+
+    // private property
+    _keyStr : "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=",
+
+    // public method for encoding
+    encode : function (input) {
+        var output = "";
+        var chr1, chr2, chr3, enc1, enc2, enc3, enc4;
+        var i = 0;
+
+        input = Base64._utf8_encode(input);
+
+        while (i < input.length) {
+
+            chr1 = input.charCodeAt(i++);
+            chr2 = input.charCodeAt(i++);
+            chr3 = input.charCodeAt(i++);
+
+            enc1 = chr1 >> 2;
+            enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+            enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
+            enc4 = chr3 & 63;
+
+            if (isNaN(chr2)) {
+                enc3 = enc4 = 64;
+            } else if (isNaN(chr3)) {
+                enc4 = 64;
+            }
+
+            output = output +
+            this._keyStr.charAt(enc1) + this._keyStr.charAt(enc2) +
+            this._keyStr.charAt(enc3) + this._keyStr.charAt(enc4);
+
+        }
+
+        return output;
+    },
+
+    // public method for decoding
+    decode : function (input) {
+        var output = "";
+        var chr1, chr2, chr3;
+        var enc1, enc2, enc3, enc4;
+        var i = 0;
+
+        input = input.replace(/[^A-Za-z0-9\+\/\=]/g, "");
+
+        while (i < input.length) {
+
+            enc1 = this._keyStr.indexOf(input.charAt(i++));
+            enc2 = this._keyStr.indexOf(input.charAt(i++));
+            enc3 = this._keyStr.indexOf(input.charAt(i++));
+            enc4 = this._keyStr.indexOf(input.charAt(i++));
+
+            chr1 = (enc1 << 2) | (enc2 >> 4);
+            chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+            chr3 = ((enc3 & 3) << 6) | enc4;
+
+            output = output + String.fromCharCode(chr1);
+
+            if (enc3 != 64) {
+                output = output + String.fromCharCode(chr2);
+            }
+            if (enc4 != 64) {
+                output = output + String.fromCharCode(chr3);
+            }
+
+        }
+
+        output = Base64._utf8_decode(output);
+
+        return output;
+
+    },
+
+    // private method for UTF-8 encoding
+    _utf8_encode : function (string) {
+        string = string.replace(/\r\n/g,"\n");
+        var utftext = "";
+
+        for (var n = 0; n < string.length; n++) {
+
+            var c = string.charCodeAt(n);
+
+            if (c < 128) {
+                utftext += String.fromCharCode(c);
+            }
+            else if((c > 127) && (c < 2048)) {
+                utftext += String.fromCharCode((c >> 6) | 192);
+                utftext += String.fromCharCode((c & 63) | 128);
+            }
+            else {
+                utftext += String.fromCharCode((c >> 12) | 224);
+                utftext += String.fromCharCode(((c >> 6) & 63) | 128);
+                utftext += String.fromCharCode((c & 63) | 128);
+            }
+
+        }
+
+        return utftext;
+    },
+
+    // private method for UTF-8 decoding
+    _utf8_decode : function (utftext) {
+        var string = "";
+        var i = 0;
+        var c = c1 = c2 = 0;
+
+        while ( i < utftext.length ) {
+
+            c = utftext.charCodeAt(i);
+
+            if (c < 128) {
+                string += String.fromCharCode(c);
+                i++;
+            }
+            else if((c > 191) && (c < 224)) {
+                c2 = utftext.charCodeAt(i+1);
+                string += String.fromCharCode(((c & 31) << 6) | (c2 & 63));
+                i += 2;
+            }
+            else {
+                c2 = utftext.charCodeAt(i+1);
+                c3 = utftext.charCodeAt(i+2);
+                string += String.fromCharCode(((c & 15) << 12) | ((c2 & 63) << 6) | (c3 & 63));
+                i += 3;
+            }
+
+        }
+
+        return string;
+    }
+
+}
+function loadComments() 
+{
+    var lines = window.document.getElementById("notes").value.split("\n");
+    for(var i = 0; i < lines.length; ++i) {
+        line = lines[i];
+        
+        var words = line.split(" ");
+        if (words.length < 6) continue;
+        var px = parseFloat(words[4]);
+        var py = parseFloat(words[5]);
+        var y = Math.round(py*window.document.getElementById("content").scrollHeight);
+        //var x = Math.round(px*window.document.getElementById("content").scrollWidth);
+        var x = Math.round(parseFloat(words[2]));
+        var note = "";
+        for (var j = 6; j < words.length; ++j) {
+           note = note + words[j]+ " ";
+        }
+        
+         var newDiv = document.createElement("div"); 
+        var newContent = document.createTextNode(note); 
+        newDiv.appendChild(newContent);
+        newDiv.style.position='absolute';
+        newDiv.style.top =  y+'px';
+        newDiv.style.left = x+'px';
+        newDiv.style.backgroundColor = '#ffff80';
+        newDiv.style.fontFamily = "Courier New";
+        newDiv.style.fontSize = "10pt";
+        document.body.appendChild(newDiv);
+
+        
+    }
+   
+}
+function popup(txt, popupid)
+{
+  var generator=window.open('',popupid,',resizable=false,height=800,width=1000,titlebar=0,toolbar=0');
+  var doc = generator.document;
+  doc.write("<html><head>");
+  doc.write("<style type=\"text/css\">");
+  doc.write("body { background-color: white ;  color: black; }"); 
+  doc.write("\ntextarea {width: 100%;  height: 100%; }"); 
+  doc.write("</style></head>");
+
+  doc.write("<body><textarea id=myarea>");
+  doc.write("</textarea></body></html>");
+  generator.focus();
+  doc.getElementById('myarea').value = txt;
+  doc.close();
+}
+function escapeHtml(text) {
+    var map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+
+    return text.replace(/[&<>"']/g, function (m) {
+        return map[m];
+    });
+}
+
+function popupWithLineNumber(txt, popupid,linenum)
+{
+    var generator=window.open('',popupid,',resizable=false,height=800,width=1200,titlebar=0,toolbar=0');
+  var doc = generator.document;
+  doc.write("<html><head><");
+  doc.write("script>");
+  doc.write("\nfunction selectText(containerid) {");
+  doc.write("\n    if (document.selection) { // IE");
+  doc.write("\n        var range = document.body.createTextRange();");
+  doc.write("\n        element = document.getElementById(containerid);");
+  doc.write("\n        if(element != null)");
+  doc.write("\n        {");
+  doc.write("\n            range.moveToElementText(element);");
+  doc.write("\n            range.select();");
+  doc.write("\n            element.scrollIntoView();");
+  doc.write("\n            setTimeout(function() {");
+  doc.write("\n                    element.scrollIntoView({ behavior: \"smooth\" });");
+  doc.write("\n                }, 1000);");
+  doc.write("\n        }");
+  doc.write("\n    } else if (window.getSelection) {");
+  doc.write("\n        var range = document.createRange();");
+  doc.write("\n        element = document.getElementById(containerid);");
+  doc.write("\n        if (element != null)");
+  doc.write("\n        {");
+  doc.write("\n            range.selectNode(element);");
+  doc.write("\n            window.getSelection().removeAllRanges();");
+  doc.write("\n            window.getSelection().addRange(range);");
+  doc.write("\n            element.scrollIntoView();");
+  doc.write("\n            setTimeout(function() {");
+  doc.write("\n                    element.scrollIntoView({ behavior: \"smooth\" });");
+  doc.write("\n                }, 1000);");
+  doc.write("\n            ");
+  doc.write("\n        }");
+  doc.write("\n    }");
+  doc.write("\n}");
+  doc.write("\nsetTimeout(function() {selectText(\"line_"+linenum+"\")},1000);");
+  doc.write("</");
+  doc.write("script>\n");
+  doc.write("<style type=\"text/css\">");
+  doc.write("body { background-color: white ;  color: black; }"); 
+  doc.write("\ntextarea {width: 100%;  height: 100%; }"); 
+  doc.write("\npre {  font-family: monospace; font-size: 10pt;  display: inline; margin: 0;  white-space: pre-wrap;    white-space: -moz-pre-wrap;   white-space: -pre-wrap;       white-space: -o-pre-wrap;     word-wrap: break-word;       }");
+  doc.write("\n</style></head>");
+  doc.write("<body id=myarea>");
+  doc.write("</body></html>");
+  generator.focus();
+  
+  const lines = txt.split(/\n/); 
+  // Iterate through the pieces (lines)
+  bodyHtml="";
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (i > 0) bodyHtml+="</pre></span>";
+    bodyHtml+="<span id=\"line_"+(i+1) +"\"><pre>"+escapeHtml(line)+"\n";
+  }
+  if(lines.length > 0) bodyHtml+="</pre>";
+  doc.getElementById('myarea').innerHTML = bodyHtml;
+  
+  var s = doc.getElementsByTagName('script');
+  generator.eval(s[0].text);
+  
+  doc.close();
+}
+
+
+function popupTsv(txt, popupid)
+{
+  var generator=window.open('',popupid,',resizable=false,height=800,width=1000,titlebar=0,toolbar=0');
+  var doc = generator.document;
+  doc.write("<html><head>");
+  doc.write("<style type=\"text/css\">");
+  doc.write("\nbody { background-color: white ;  color: black;  }"); 
+  doc.write("\ntable,th,td {border: 1px solid white; border-collapse: collapse; font-family: 'Lucida Console', 'Courier New', monospace; font-size: 10}"); 
+  doc.write("\nth, td {background-color: #96D4D4;}")
+  doc.write("</style></head>");
+  doc.write("<body id='body1'>");
+  doc.write("</body></html>");
+  generator.focus();
+  
+
+  var table = doc.createElement('TABLE');
+  var tbody = doc.createElement('TBODY');
+  table.appendChild(tbody);
+  var lines=txt.split("\n");
+  for(var i=0,l;l=lines[i];i++){
+    var fields=l.split("\t");
+    if(fields.length==0) return;
+    var tr=doc.createElement('TR');
+    for(var j=0,f;f=fields[j];j++){
+      var td=doc.createElement('TD');
+      if(f[0]=='"') {
+         f = f.substr(1); 
+      }
+      if(f.substr(-1) == '\n' || f.substr(-1) == '\r') {
+          f = f.substr(0,f.length-1);
+      }
+      if(f.substr(-1) == '\n' || f.substr(-1) == '\r') {
+          f = f.substr(0,f.length-1);
+      }
+      if(f.substr(-1) == '"') {
+          f = f.substr(0,f.length-1);
+      }
+      td.innerHTML = f;
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  doc.getElementById('body1').appendChild(table);
+  doc.close();
+}
+
+function popupHtml (txt, popupid)
+{
+  var generator=window.open('',popupid,',resizable=false,height=800,width=1200,titlebar=0,toolbar=0');
+  var doc = generator.document;
+  doc.write("<html><head>");
+  doc.write("<style type=\"text/css\">");
+  doc.write("body { background-color: white ;  color: black; }"); 
+  doc.write("\ntextarea {width: 100%;  height: 100%; }"); 
+  doc.write("</style></head>");
+  doc.write("<body id=myarea>");
+  doc.write("</body></html>");
+  generator.focus();
+  doc.getElementById('myarea').innerHTML = txt;
+  
+  var s = doc.getElementsByTagName('Script');
+  generator.eval(s[0].text);
+  generator.eval(s[1].text);
+  
+  doc.close();
+}
+
+function popupHtmlAndGotoTag (txt, popupid, tag)
+{
+  var generator=window.open('',popupid,',resizable=false,height=800,width=1200,titlebar=0,toolbar=0');
+  var doc = generator.document;
+  doc.write("<html><head>");
+  doc.write("<style type=\"text/css\">");
+  doc.write("body { background-color: white ;  color: black; }"); 
+  doc.write("\ntextarea {width: 100%;  height: 100%; }"); 
+  doc.write("</style></head>");
+  doc.write("<body id=myarea>");
+  
+  doc.write("</html>");
+  generator.focus();
+  doc.getElementById('myarea').innerHTML = txt;
+  
+  var s = doc.getElementsByTagName('Script');
+  
+  generator.eval(s[0].text);
+  generator.eval(s[1].text+";selectText(\""+tag +"\");");
+
+  
+  doc.close();
+}
+
+function showWalkthroughContent(tag, fname) 
+{
+    var content = Base64.decode(externalContent[fname]);
+    popupHtmlAndGotoTag(content,fname,tag);
+}
+
+function showGrepLineWalkthroughContent(line, fname) 
+{
+    var content = Base64.decode(externalContent[fname]);
+    popupWithLineNumber(content,fname,line);
+}
+
+function showText(str, popupid)
+{
+  dec = Base64.decode(str);
+  popup(dec, popupid);
+} 
+
+function showTextHtml(str, popupid)  {
+  dec = Base64.decode(str);
+  popupHtml(dec, popupid);
+  
+} 
+
+function showTextTsv(str, popupid)  {
+  dec = Base64.decode(str);
+  popupTsv(dec, popupid);
+  
+} 
+
+function selectSpan(className) {
+      const spans = document.querySelectorAll('span.'+className);
+      if (spans.length === 0) return;
+
+      const range = document.createRange();
+      range.setStartBefore(spans[0]);
+      range.setEndAfter(spans[spans.length - 1]);
+
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+}
+    
+function selectText(containerid) {
+    if (document.selection) { // IE
+        var range = document.body.createTextRange();
+        element = document.getElementById(containerid);
+        if(element != null)
+        {
+            range.moveToElementText(element);
+            range.select();
+            element.scrollIntoView();
+            setTimeout(function() {
+                    element.scrollIntoView({ behavior: "smooth" });
+                }, 1000);
+        }
+    } else if (window.getSelection) {
+        var range = document.createRange();
+        element = document.getElementById(containerid);
+        if (element != null)
+        {
+            range.selectNode(element);
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
+            element.scrollIntoView();
+            setTimeout(function() {
+                    element.scrollIntoView({ behavior: "smooth" });
+                }, 1000);
+            
+        }
+    }
+}
+
+function playVideo(txt,popupid)
+{
+var generator=window.open('',popupid,',resizable=false,height=400,width=500,titlebar=0,toolbar=0');
+  var doc = generator.document;
+  doc.write("<html><head>");
+  doc.write("<style type=\"text/css\">");
+  doc.write("body { background-color: white ;  color: black; }"); 
+  doc.write("\nvideo {width: 100%;  height: 100%; }"); 
+  doc.write("</style></head>");
+  doc.write("<body><video controls id=myarea>");
+  doc.write("</video></body></html>");
+  generator.focus();
+  doc.getElementById('myarea').src = txt;
+  doc.close();
+}
+
+function playAudio(txt,popupid)
+{
+var generator=window.open('',popupid,',resizable=false,height=100,width=400,titlebar=0,toolbar=0');
+  var doc = generator.document;
+  doc.write("<html><head>");
+  doc.write("<style type=\"text/css\">");
+  doc.write("body { background-color: white ;  color: black; }"); 
+  doc.write("\nvideo {width: 100%;  height: 100%; }"); 
+  doc.write("</style></head>");
+  doc.write("<body><audio controls id=myarea>");
+  doc.write("</audio></body></html>");
+  generator.focus();
+  doc.getElementById('myarea').src = txt;
+  doc.close();
+  audio = new Audio(txt);
+  audio.play();
+}
+
+function playSound(txt,popupid)
+{
+  audio = new Audio(txt);
+  audio.play();
+}
+
+
+function playImage(txt,popupid)
+{
+  var generator=window.open('',popupid,',resizable=false,height=600,width=800,titlebar=0,toolbar=0');
+  var doc = generator.document;
+  doc.write("<html><head>");
+  doc.write("<style type=\"text/css\">");
+  doc.write("body { background-color: white ;  color: black; }"); 
+  doc.write("\nvideo {width: 100%;  height: 100%; }"); 
+  doc.write("</style></head>");
+  doc.write("<body><img  id=myarea>");
+  doc.write("</img></body></html>");
+  generator.focus();
+  doc.getElementById('myarea').src = txt;
+  doc.close();
+}
+
+
+    function onBodyLoad() {
+        var targetId = window.location.hash.substr(1)
+        selectText(targetId);
+  
+     }
+     
+      </script>
+   <style type="text/css">
+a {
+    font-family: monospace;
+    font-size: 10pt;
+    display: inline; 
+}
+
+.link-style {
+  color: #007bff; /* Link color, you can change this to your desired color */
+  text-decoration: underline; /* Underline the text */
+  cursor: pointer; /* Change cursor to pointer on hover to indicate interactivity */
+}
+
+.link-style:hover {
+  color: #0056b3; /* Change color on hover for visual feedback */
+}        
+        
+
+img {
+  display: inline-block;
+  vertical-align:middle;
+}
+pre { 
+    font-family: monospace;
+    font-size: 10pt; 
+    display: inline;
+    margin: 0;
+    //white-space: pre;
+    white-space: pre-wrap;       // CSS 3 
+    white-space: -moz-pre-wrap;  // Mozilla, since 1999 
+    white-space: -pre-wrap;      // Opera 4-6 
+    white-space: -o-pre-wrap;    // Opera 7 
+    
+    word-wrap: break-word;       // Internet Explorer 5.5+ 
+  }
+body { background-color: white ;  color: black; } 
+  
+.caafba2 { background-color : #aafba2 ;  }
+.cfd9f9f { background-color : #fd9f9f ;  }
+     
+</style> 
+
+</head>
+<body>
+   
+<div id="content" contenteditable=true>
+<pre id='vimCodeElement'>
+package com.trading.service;
+
+import com.trading.domain.Flag;
+import com.trading.domain.mprewriter;
+import com.trading.utils.LargestTradePerFlagForSingleSymbol;
+import com.trading.domain.Quote;
+import com.trading.domain.Trade;
+import com.trading.utils.WrappedLogger;
+
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+/**
+ Implementation of the MarketDataCalculator interface.
+ It stores :
+ (A) a hashmap from symbols mapping to the latest quote for the symbol. The key is the symbol (a String) and the value is the latest Quote
+ (B) a hashmap from symbols mapping to a lookup table of the largest trade grouped per flag, for that symbol. The key is the symbol (a String) and the value is the said lookup table (a LargestTradePerFlagForSingleSymbol)
+ When it processes a quote or a trade, it just updates the above two hashmaps.
+ */
+public class MarketDataCalculatorImpl implements  MarketDataCalculator {
+
+    static WrappedLogger log = new WrappedLogger();
+    private final Map&lt;String, LargestTradePerFlagForSingleSymbol&gt; largestTradesByTag;
+
+    private final Map&lt;String, Quote&gt; latestQuotes;
+
+<span class="caafba2">    public MarketDataCalculatorImpl() {</span></pre><span class="caafba2"><a name="dMSZs8Dy3N6Il"></a><button onclick="showText(`IDcgSElUUyBJTiA3IENPTlRFWFRTDQpjb20udHJhZGluZy5zZXJ2aWNlLk1hcmtldERhdGFDYWxj
+dWxhdG9ySW1wbFRlc3QudGVzdExhcmdlc3RUcmFkZUZvckFic2VudFN5bWJvbCAxDQpjb20udHJh
+ZGluZy5zZXJ2aWNlLk1hcmtldERhdGFDYWxjdWxhdG9ySW1wbFRlc3QudGVzdExhcmdlc3RUcmFk
+ZSAxDQpjb20udHJhZGluZy5zZXJ2aWNlLk1hcmtldERhdGFDYWxjdWxhdG9ySW1wbFRlc3QudGVz
+dExhcmdlc3RUcmFkZVdoaWxlSW5nZXN0aW5nVHdvSW52YWxpZEZsYWdzIDENCmNvbS50cmFkaW5n
+LnNlcnZpY2UuTWFya2V0RGF0YUNhbGN1bGF0b3JJbXBsVGVzdC50ZXN0TWlkUHJpY2VPbkFic2Vu
+dFN5bWJvbCAxDQpjb20udHJhZGluZy5tZXNzYWdlaGFuZGxlci5NYXJrZXREYXRhSGFuZGxlcklt
+cGxUZXN0LmhhbmRsZVNvbWVFdmVudHNBbmRBc3NlcnRPbkNhbGN1bGF0b3JSZXN1bHQgMQ0KY29t
+LnRyYWRpbmcuc2VydmljZS5NYXJrZXREYXRhQ2FsY3VsYXRvckltcGxUZXN0LnRlc3RNaWRQcmlj
+ZSAxDQpjb20udHJhZGluZy5zZXJ2aWNlLk1hcmtldERhdGFDYWxjdWxhdG9ySW1wbFRlc3QudGVz
+dExhcmdlc3RUcmFkZVdoaWxlSW5nZXN0aW5nSW52YWxpZEZsYWcgMQ0KDQo=`,'dMSZs8Dy3N6Il')">† 1</button></span><pre><span></span><span class="caafba2">mprewriter.scope_START(20001);</span>
+        largestTradesByTag = new ConcurrentHashMap&lt;&gt;();
+        latestQuotes = new ConcurrentHashMap&lt;&gt;();
+    }
+
+<span class="caafba2">    public void processTrade(Trade trade) {</span></pre><span class="caafba2"><a name="kP2ryXpYKr0wpf"></a><button onclick="showText(`IDE4IEhJVFMgSU4gNSBDT05URVhUUw0KY29tLnRyYWRpbmcuc2VydmljZS5NYXJrZXREYXRhQ2Fs
+Y3VsYXRvckltcGxUZXN0LnRlc3RMYXJnZXN0VHJhZGVGb3JBYnNlbnRTeW1ib2wgMw0KY29tLnRy
+YWRpbmcuc2VydmljZS5NYXJrZXREYXRhQ2FsY3VsYXRvckltcGxUZXN0LnRlc3RMYXJnZXN0VHJh
+ZGUgMw0KY29tLnRyYWRpbmcuc2VydmljZS5NYXJrZXREYXRhQ2FsY3VsYXRvckltcGxUZXN0LnRl
+c3RMYXJnZXN0VHJhZGVXaGlsZUluZ2VzdGluZ1R3b0ludmFsaWRGbGFncyAzDQpjb20udHJhZGlu
+Zy5tZXNzYWdlaGFuZGxlci5NYXJrZXREYXRhSGFuZGxlckltcGxUZXN0LmhhbmRsZVNvbWVFdmVu
+dHNBbmRBc3NlcnRPbkNhbGN1bGF0b3JSZXN1bHQgNg0KY29tLnRyYWRpbmcuc2VydmljZS5NYXJr
+ZXREYXRhQ2FsY3VsYXRvckltcGxUZXN0LnRlc3RMYXJnZXN0VHJhZGVXaGlsZUluZ2VzdGluZ0lu
+dmFsaWRGbGFnIDMNCg0K`,'kP2ryXpYKr0wpf')">† 2</button></span><pre><span></span><span class="caafba2">mprewriter.scope_START(20002);</span>
+        log.info("Processing trade {0}", trade);
+        LargestTradePerFlagForSingleSymbol tradesByFlagForSymbol = largestTradesByTag.getOrDefault(trade.getSymbol(), null);
+<span class="caafba2">        if (tradesByFlagForSymbol ==null) {</span></pre><span class="caafba2"><a name="mPnRMf26wEhRyyZ"></a><button onclick="showText(`IDYgSElUUyBJTiA1IENPTlRFWFRTDQpjb20udHJhZGluZy5zZXJ2aWNlLk1hcmtldERhdGFDYWxj
+dWxhdG9ySW1wbFRlc3QudGVzdExhcmdlc3RUcmFkZUZvckFic2VudFN5bWJvbCAxDQpjb20udHJh
+ZGluZy5zZXJ2aWNlLk1hcmtldERhdGFDYWxjdWxhdG9ySW1wbFRlc3QudGVzdExhcmdlc3RUcmFk
+ZSAxDQpjb20udHJhZGluZy5zZXJ2aWNlLk1hcmtldERhdGFDYWxjdWxhdG9ySW1wbFRlc3QudGVz
+dExhcmdlc3RUcmFkZVdoaWxlSW5nZXN0aW5nVHdvSW52YWxpZEZsYWdzIDENCmNvbS50cmFkaW5n
+Lm1lc3NhZ2VoYW5kbGVyLk1hcmtldERhdGFIYW5kbGVySW1wbFRlc3QuaGFuZGxlU29tZUV2ZW50
+c0FuZEFzc2VydE9uQ2FsY3VsYXRvclJlc3VsdCAyDQpjb20udHJhZGluZy5zZXJ2aWNlLk1hcmtl
+dERhdGFDYWxjdWxhdG9ySW1wbFRlc3QudGVzdExhcmdlc3RUcmFkZVdoaWxlSW5nZXN0aW5nSW52
+YWxpZEZsYWcgMQ0KDQo=`,'mPnRMf26wEhRyyZ')">† 3</button></span><pre><span></span><span class="caafba2">mprewriter.scope_START(20003);</span>
+            tradesByFlagForSymbol = new LargestTradePerFlagForSingleSymbol();
+            largestTradesByTag.put(trade.getSymbol(), tradesByFlagForSymbol);
+        }
+        tradesByFlagForSymbol.ingestTrade(trade);
+    }
+
+<span class="caafba2">    public void processQuote(Quote quote) {</span></pre><span class="caafba2"><a name="tPZ84XkfxCu4"></a><button onclick="showText(`IDQgSElUUyBJTiAzIENPTlRFWFRTDQpjb20udHJhZGluZy5zZXJ2aWNlLk1hcmtldERhdGFDYWxj
+dWxhdG9ySW1wbFRlc3QudGVzdE1pZFByaWNlT25BYnNlbnRTeW1ib2wgMQ0KY29tLnRyYWRpbmcu
+bWVzc2FnZWhhbmRsZXIuTWFya2V0RGF0YUhhbmRsZXJJbXBsVGVzdC5oYW5kbGVTb21lRXZlbnRz
+QW5kQXNzZXJ0T25DYWxjdWxhdG9yUmVzdWx0IDINCmNvbS50cmFkaW5nLnNlcnZpY2UuTWFya2V0
+RGF0YUNhbGN1bGF0b3JJbXBsVGVzdC50ZXN0TWlkUHJpY2UgMQ0KDQo=`,'tPZ84XkfxCu4')">† 4</button></span><pre><span></span><span class="caafba2">mprewriter.scope_START(20004);</span>
+        log.info("Processing quote {0}", quote);
+        latestQuotes.put(quote.getSymbol(), quote);
+    }
+
+    @Override
+<span class="caafba2">    public Trade getLargestTrade(String symbol, Flag flag) {</span></pre><span class="caafba2"><a name="anLwTPQMHiSOlmM"></a><button onclick="showText(`IDEzIEhJVFMgSU4gNSBDT05URVhUUw0KY29tLnRyYWRpbmcuc2VydmljZS5NYXJrZXREYXRhQ2Fs
+Y3VsYXRvckltcGxUZXN0LnRlc3RMYXJnZXN0VHJhZGVGb3JBYnNlbnRTeW1ib2wgMQ0KY29tLnRy
+YWRpbmcuc2VydmljZS5NYXJrZXREYXRhQ2FsY3VsYXRvckltcGxUZXN0LnRlc3RMYXJnZXN0VHJh
+ZGUgNA0KY29tLnRyYWRpbmcuc2VydmljZS5NYXJrZXREYXRhQ2FsY3VsYXRvckltcGxUZXN0LnRl
+c3RMYXJnZXN0VHJhZGVXaGlsZUluZ2VzdGluZ1R3b0ludmFsaWRGbGFncyAxDQpjb20udHJhZGlu
+Zy5tZXNzYWdlaGFuZGxlci5NYXJrZXREYXRhSGFuZGxlckltcGxUZXN0LmhhbmRsZVNvbWVFdmVu
+dHNBbmRBc3NlcnRPbkNhbGN1bGF0b3JSZXN1bHQgNg0KY29tLnRyYWRpbmcuc2VydmljZS5NYXJr
+ZXREYXRhQ2FsY3VsYXRvckltcGxUZXN0LnRlc3RMYXJnZXN0VHJhZGVXaGlsZUluZ2VzdGluZ0lu
+dmFsaWRGbGFnIDENCg0K`,'anLwTPQMHiSOlmM')">† 5</button></span><pre><span></span><span class="caafba2">mprewriter.scope_START(20005);</span>
+        LargestTradePerFlagForSingleSymbol largestTradeForSingleSymbol = largestTradesByTag.getOrDefault(symbol, null);
+<span class="caafba2">        if (largestTradeForSingleSymbol == null) {</span></pre><span class="caafba2"><a name="ldgScGaVq1LRY"></a><button onclick="showText(`IDIgSElUUyBJTiAyIENPTlRFWFRTDQpjb20udHJhZGluZy5zZXJ2aWNlLk1hcmtldERhdGFDYWxj
+dWxhdG9ySW1wbFRlc3QudGVzdExhcmdlc3RUcmFkZUZvckFic2VudFN5bWJvbCAxDQpjb20udHJh
+ZGluZy5tZXNzYWdlaGFuZGxlci5NYXJrZXREYXRhSGFuZGxlckltcGxUZXN0LmhhbmRsZVNvbWVF
+dmVudHNBbmRBc3NlcnRPbkNhbGN1bGF0b3JSZXN1bHQgMQ0KDQo=`,'ldgScGaVq1LRY')">† 6</button></span><pre><span></span><span class="caafba2">mprewriter.scope_START(20006);</span>
+            return null;
+        }
+        return largestTradeForSingleSymbol.get(flag);
+    }
+
+    @Override
+<span class="caafba2">    public Double getMidPrice(String symbol) {</span></pre><span class="caafba2"><a name="g4c2MDrHNtJ"></a><button onclick="showText(`IDUgSElUUyBJTiAzIENPTlRFWFRTDQpjb20udHJhZGluZy5zZXJ2aWNlLk1hcmtldERhdGFDYWxj
+dWxhdG9ySW1wbFRlc3QudGVzdE1pZFByaWNlT25BYnNlbnRTeW1ib2wgMQ0KY29tLnRyYWRpbmcu
+bWVzc2FnZWhhbmRsZXIuTWFya2V0RGF0YUhhbmRsZXJJbXBsVGVzdC5oYW5kbGVTb21lRXZlbnRz
+QW5kQXNzZXJ0T25DYWxjdWxhdG9yUmVzdWx0IDMNCmNvbS50cmFkaW5nLnNlcnZpY2UuTWFya2V0
+RGF0YUNhbGN1bGF0b3JJbXBsVGVzdC50ZXN0TWlkUHJpY2UgMQ0KDQoNCg0K`,'g4c2MDrHNtJ')">† 7</button></span><pre><span></span><span class="caafba2">mprewriter.scope_START(20007);</span>
+        Quote quote = latestQuotes.get(symbol);
+        if (quote == null) return null;
+        return quote.getMidPrice();
+    }
+}
+
+
+    </pre> </div>
+
+    <script>onBodyLoad();</script>
+
+</body>
+</html>
+    
+<!-- vim: set foldmethod=manual : -->

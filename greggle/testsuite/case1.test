@@ -1,0 +1,1 @@
+../greggle large_graph1.dot "(and (exists-path x y (concat a (plus c))) (exists-path x y (concat c (plus b))))"

@@ -1,0 +1,21 @@
+BG white DF {{Courier New} 14} T { } T {
+} T {cd ./branch-probe-demoapp; mvn clean} T {
+} T {cd ..} T {
+} T {cd ./branch-probe-instrumenter; mvn clean} T {
+} T {cd ..} T {
+} T {cd ./branch-probe-suite/branch-probe-instrumenter; mvn clean} T {
+} T {cd ../..} T {
+} T {cd ./branch-probe-suite/mprewriter-runtime; mvn clean} T {
+} T {cd ../..} T {
+} T {cd ./branch-probe-suite; mvn clean} T {
+} T {cd ..} T {
+} T {cd ./code-analytics; mvn clean} T {
+} T {cd ..} T {
+} T {cd ./} T {JavaAppWithUdpProbes; mvn clean} T {
+} T {cd ..} T {
+} T {
+} T {zip -r java_sources.zip ./branch-probe-demoapp ./branch-probe-instrumenter ./branch-probe-suite/branch-probe-instrumenter ./branch-probe-suite/mprewriter-runtime ./branch-probe-suite ./code-analytics ./JavaAppWithUdpProbes} T {
+} T {
+} T {
+} T {
+}

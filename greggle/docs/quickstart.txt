@@ -1,0 +1,156 @@
+greggle Developer Quickstart
+===========================
+
+What is greggle?
+---------------
+
+greggle is a small, self-contained graph query engine:
+
+- Graphs with edges labelled by atomic propositions.
+- Regular path expressions over these labels (a, b, a(b)+, etc.).
+- Logical combinators (AND, OR, EXISTS) over path predicates.
+- A finite-domain, relation-based execution engine.
+
+This version is intentionally minimal and designed to be easy to extend. It
+uses simple in-memory data structures instead of BDDs, but preserves the same
+overall architecture: variables range over finite domains, and queries are
+evaluated into relations over those variables.
+
+
+Directory layout
+----------------
+
+Under `c:\\Git\\jmtools\\greggle`:
+
+- `src/greggle_domain.h/.cpp`
+  - Implements `Domain`, `Variable`, and `Relation`.
+  - `Domain` describes a finite set of values (e.g. graph nodes).
+  - `Variable` associates a name and domain.
+  - `Relation` is a set of tuples over a list of variables, with operations:
+    - `joinAnd`  – natural join for logical AND.
+    - `unionOr`  – union for logical OR (same var set only).
+    - `projectOut` – existential quantification (∃ over given vars).
+
+- `src/greggle_graph.h/.cpp`
+  - Simple directed graph:
+    - `Graph(numNodes)` – nodes 0..numNodes-1.
+    - `addEdge(src, dst, labels)` – labels is `std::set<std::string>` of propositions.
+    - `outgoing(node)` – adjacency list for graph traversal.
+
+- `src/greggle_regex.h/.cpp`
+  - Regular-expression AST:
+    - `Regex::Kind` = `Symbol`, `Concat`, `Alt`, `Star`, `Plus`.
+    - Builder helpers:
+      - `sym("a")`
+      - `concat({re1, re2, ...})`
+      - `alt({re1, re2})`
+      - `star(re)`
+      - `plus(re)`
+
+- `src/greggle_query.h/.cpp`
+  - Core query representation and evaluator:
+    - `Expr::Kind` = `Exists`, `And`, `Or`, `ExistsPath`.
+    - Constructors:
+      - `Expr::exists(vars, subExpr)`
+      - `Expr::makeAnd(children)`
+      - `Expr::makeOr(children)`
+      - `Expr::existsPath(v1, v2, regex)`
+    - `Relation eval(const Expr&, const Graph&, const std::vector<const Variable*>& allVars)`
+      evaluates a query expression to a `Relation` over its free variables.
+  - Path evaluation:
+    - Uses a simple Thompson-construction NFA over regex symbols.
+    - Computes all `(u,v)` such that there is a path from `u` to `v` whose
+      edge-label sequence is accepted by the regex.
+
+- `src/main.cpp`
+  - Contains two small demos that also serve as test cases:
+    - `runExistsPathDemo()`
+      - Builds a small graph with labels `a` and `b`.
+      - Runs a query `exists-path(x,y, a (b)+)` and prints all matching `(x,y)`.
+    - `runAndDemo()`
+      - Builds another small graph.
+      - Runs a conjunction of two path predicates:
+        - `exists-path(x,y, a b)`
+        - `exists-path(x,y, a (b)+)`
+      - Prints the intersected result.
+
+- `docs/quickstart.txt` – this file.
+- `docs/architecture.txt` - higher-level notes on how this implementation
+  fits together architecturally.
+
+
+Building and running
+--------------------
+
+This implementation is pure C++17 and depends only on the standard library.
+
+From `c:\\Git\\jmtools\\greggle`, a typical g++ build might look like:
+
+    g++ -std=c++17 -O2 src/*.cpp -o greggle_demo
+
+On Windows with MSVC (Developer Command Prompt), something like:
+
+    cl /EHsc /std:c++17 src\\*.cpp /Fe:greggle_demo.exe
+
+Then run:
+
+    greggle_demo
+
+You should see output similar to:
+
+    === greggle demo: exists-path ===
+    x=0, y=2
+    === end demo ===
+
+    === greggle demo: conjunction of path predicates ===
+    x=0, y=2
+    === end demo ===
+
+
+Extending greggle
+----------------
+
+This code is intentionally small and straightforward so that you can extend it:
+
+- To add new primitive predicates:
+  - Define C++ helpers that build `Relation` objects for node/edge-level
+    conditions (e.g., node type, port direction).
+  - Add new `Expr::Kind` variants and handlers in `eval`.
+
+- To add more logical constructs:
+  - Implement additional expression kinds (e.g. `Not`, `Forall`) and map
+    them to operations on `Relation`:
+    - `Not` = complement with respect to a known domain.
+    - `Forall` = dual of `Exists` (quantify over complement).
+
+- To integrate with your original BDD-based backend:
+  - Use `src/relations` from `square_afresh` as a reference for the
+    Domain/Variable/Relation API backed by BuDDy.
+  - Replace the set-based implementation in `greggle_domain.*` with BDD-backed
+    implementations, preserving the method signatures.
+
+- To add a richer query-language syntax:
+  - Implement a parser that reads query files similar to `queryexpr.lsp` and
+    builds `Expr` ASTs programmatically.
+  - Map the constructs `(exists-path ...)`, `(all-paths ...)`, `(and ...)`,
+    `(or ...)`, `(exists ...)` to the `Expr` kinds defined here.
+
+
+Current limitations
+-------------------
+
+This initial greggle implementation is deliberately modest:
+
+- Only positive atomic edge labels are supported (no `~p` negation, no
+  proposition groups) in the path matcher.
+- The logical layer supports:
+  - `exists-path`
+  - `and`, `or`
+  - `exists` (via `projectOut`)
+  but no `not` or `forall` yet.
+- Relations are backed by `std::set` of explicit tuples instead of BDDs,
+  so it is intended for small graphs and small queries.
+
+Despite these limits, the structure closely mirrors the original architecture,
+so you can upgrade the individual pieces (regex, BDDs, richer query language)
+incrementally while keeping the overall design intact.

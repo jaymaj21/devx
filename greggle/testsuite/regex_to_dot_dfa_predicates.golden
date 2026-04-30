@@ -1,0 +1,23 @@
+digraph greggle_regex_nfa {
+  rankdir=LR;
+  node [shape=circle, fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+  start [shape=diamond, label="start"];
+
+  q0 [shape=circle, label="q0"];
+  q1 [shape=circle, label="q1"];
+  q2 [shape=circle, label="q2"];
+  q3 [shape=circle, label="q3"];
+  q4 [shape=doublecircle, label="q4"];
+
+  start -> q0;
+
+  q0 -> q1 [label="(some-of (all-of a (negate b) (negate c)) (all-of a b (negate c)) (all-of a (negate b) c) (all-of a b c))"];
+  q0 -> q2 [label="(some-of (all-of (negate a) (negate b) (negate c)) (all-of (negate a) b (negate c)) (all-of (negate a) (negate b) c) (all-of (negate a) b c))"];
+  q1 -> q3 [label="(some-of (all-of (negate a) (negate b) (negate c)) (all-of a (negate b) (negate c)))"];
+  q1 -> q4 [label="(some-of (all-of (negate a) b (negate c)) (all-of a b (negate c)) (all-of (negate a) (negate b) c) (all-of a (negate b) c) (all-of (negate a) b c) (all-of a b c))"];
+  q2 -> q3 [label="(some-of (all-of (negate a) (negate b) (negate c)) (all-of a (negate b) (negate c)))"];
+  q2 -> q4 [label="(some-of (all-of (negate a) b (negate c)) (all-of a b (negate c)) (all-of (negate a) (negate b) c) (all-of a (negate b) c) (all-of (negate a) b c) (all-of a b c))"];
+  q3 -> q3 [label="dot"];
+  q4 -> q3 [label="dot"];
+}

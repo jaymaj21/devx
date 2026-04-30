@@ -1,0 +1,27 @@
+; Variables:
+; - hr: current hour on a 12-hour clock.
+;   - 1..12: the displayed hour value.
+
+(system tla-hour-clock
+  (vars hr)
+  (domain hr 1 2 3 4 5 6 7 8 9 10 11 12)
+  (init (in hr (set 1 2 3 4 5 6 7 8 9 10 11 12)))
+  (action tick
+    (or
+      (and (= hr 1) (= hr+ 2))
+      (and (= hr 2) (= hr+ 3))
+      (and (= hr 3) (= hr+ 4))
+      (and (= hr 4) (= hr+ 5))
+      (and (= hr 5) (= hr+ 6))
+      (and (= hr 6) (= hr+ 7))
+      (and (= hr 7) (= hr+ 8))
+      (and (= hr 8) (= hr+ 9))
+      (and (= hr 9) (= hr+ 10))
+      (and (= hr 10) (= hr+ 11))
+      (and (= hr 11) (= hr+ 12))
+      (and (= hr 12) (= hr+ 1))))
+  (next @tick)
+  (invariant hour-in-range
+    (in hr (set 1 2 3 4 5 6 7 8 9 10 11 12)))
+  (property can-reach-twelve
+    (eventually (= hr 12))))

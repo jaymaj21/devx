@@ -1,0 +1,14 @@
+digraph "mutex-2proc" {
+  graph [rankdir="TB", labelloc="t", label="mutex-2proc\nreachable 3/12 states\n4 visible transitions\n0 deadlocks\n0 invariant-bad states\nactions: p1-enter, p1-exit, p2-enter, p2-exit\nproperties: p1-can-reach-cs=true, p2-can-reach-cs=true", fontname="Helvetica", overlap="false", splines="true", nodesep="0.3", ranksep="0.6"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, margin="0.18,0.12", color="#355070", fillcolor="#f8f9fb"];
+  edge [fontname="Helvetica", fontsize=10, color="#6d597a"];
+  "__start__" [shape=point, width=0.2, color="#2a9d8f", fillcolor="#2a9d8f", label=""];
+  "n_5b5b227031222c2269646c65225d2c5b227032222c2269646c65225d2c5b226c6f636b222c2266726565225d5d" [label="s0\np1 = \"idle\"\np2 = \"idle\"\nlock = \"free\"\ninit", tooltip="[[\"p1\",\"idle\"],[\"p2\",\"idle\"],[\"lock\",\"free\"]]", fillcolor="#d8f3dc", color="#2d6a4f", penwidth=2];
+  "n_5b5b227031222c2269646c65225d2c5b227032222c226373225d2c5b226c6f636b222c227032225d5d" [label="s1\np1 = \"idle\"\np2 = \"cs\"\nlock = \"p2\"", tooltip="[[\"p1\",\"idle\"],[\"p2\",\"cs\"],[\"lock\",\"p2\"]]"];
+  "n_5b5b227031222c226373225d2c5b227032222c2269646c65225d2c5b226c6f636b222c227031225d5d" [label="s2\np1 = \"cs\"\np2 = \"idle\"\nlock = \"p1\"", tooltip="[[\"p1\",\"cs\"],[\"p2\",\"idle\"],[\"lock\",\"p1\"]]"];
+  "__start__" -> "n_5b5b227031222c2269646c65225d2c5b227032222c2269646c65225d2c5b226c6f636b222c2266726565225d5d" [color="#2a9d8f", penwidth=2];
+  "n_5b5b227031222c2269646c65225d2c5b227032222c2269646c65225d2c5b226c6f636b222c2266726565225d5d" -> "n_5b5b227031222c2269646c65225d2c5b227032222c226373225d2c5b226c6f636b222c227032225d5d" [label="p2-enter"];
+  "n_5b5b227031222c2269646c65225d2c5b227032222c2269646c65225d2c5b226c6f636b222c2266726565225d5d" -> "n_5b5b227031222c226373225d2c5b227032222c2269646c65225d2c5b226c6f636b222c227031225d5d" [label="p1-enter"];
+  "n_5b5b227031222c2269646c65225d2c5b227032222c226373225d2c5b226c6f636b222c227032225d5d" -> "n_5b5b227031222c2269646c65225d2c5b227032222c2269646c65225d2c5b226c6f636b222c2266726565225d5d" [label="p2-exit"];
+  "n_5b5b227031222c226373225d2c5b227032222c2269646c65225d2c5b226c6f636b222c227031225d5d" -> "n_5b5b227031222c2269646c65225d2c5b227032222c2269646c65225d2c5b226c6f636b222c2266726565225d5d" [label="p1-exit"];
+}

@@ -1,0 +1,4 @@
+# Exclude tight inner loop condition in the fractal demo
+# Format: Fully-qualified-class:line or range (e.g., com.example.Foo:10-20)
+com.example.fractaldemo.Main:23
+

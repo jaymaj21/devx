@@ -1,0 +1,7 @@
+testsuite/java_svr_rust_probe.test
+testsuite/java_svr_java_probe.test
+testsuite/java_svr_cpp_probe.test
+testsuite/rust_svr_cpp_probe.test
+testsuite/java_svr_rust_probe_v2.test
+testsuite/java_svr_java_branch_probe_demo.test
+testsuite/java_svr_java_fractal_probe.test

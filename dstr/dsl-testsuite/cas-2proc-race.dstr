@@ -1,0 +1,95 @@
+; Two processes race to perform CAS(mem, 0, id) on a shared cell.
+; Each process attempts the CAS at most once.
+; Variables:
+; - p1pc: local state of process 1.
+;   - a0: process 1 has not yet started its CAS attempt.
+;   - try: process 1 is poised to attempt CAS(mem, 0, 1).
+;   - won: process 1 succeeded and wrote 1 into mem.
+;   - lost: process 1 attempted CAS after mem was no longer 0.
+; - p2pc: local state of process 2.
+;   - a0: process 2 has not yet started its CAS attempt.
+;   - try: process 2 is poised to attempt CAS(mem, 0, 2).
+;   - won: process 2 succeeded and wrote 2 into mem.
+;   - lost: process 2 attempted CAS after mem was no longer 0.
+; - mem: shared memory cell updated by CAS.
+;   - 0: initial value, so either process may still succeed.
+;   - 1: process 1 has successfully swapped in its value.
+;   - 2: process 2 has successfully swapped in its value.
+
+(load "cas-macro-lib.lisp")
+
+(defun initial-to-try (pc)
+  `(and
+    (= ,pc a0)
+    (= ,(next-var-symbol pc) 'try)))
+
+(defmacro start-attempt (pc other-pc)
+  (cons (initial-to-try pc)
+        (preserve-clauses other-pc 'mem)))
+
+(defmacro p1-actions ()
+  '((action p1-start
+      (!start-attempt p1pc p2pc))
+    (action p1-cas-success
+      (= p1pc try)
+      (= mem 0)
+      (= p1pc+ won)
+      (!preserve p2pc)
+      (= mem+ 1))
+    (action p1-cas-fail
+      (= p1pc try)
+      (!= mem 0)
+      (= p1pc+ lost)
+      (!preserve p2pc mem))))
+
+(defmacro p2-actions ()
+  '((action p2-start
+      (!start-attempt p2pc p1pc))
+    (action p2-cas-success
+      (= p2pc try)
+      (= mem 0)
+      (= p2pc+ won)
+      (!preserve p1pc)
+      (= mem+ 2))
+    (action p2-cas-fail
+      (= p2pc try)
+      (!= mem 0)
+      (= p2pc+ lost)
+      (!preserve p1pc mem))))
+
+(system cas-2proc-race
+  (vars p1pc p2pc mem)
+  (domain p1pc a0 try won lost)
+  (domain p2pc a0 try won lost)
+  (domain mem 0 1 2)
+  (init
+    (= p1pc a0)
+    (= p2pc a0)
+    (= mem 0))
+
+  (!p1-actions)
+  (!p2-actions)
+
+  (next
+    (or
+      @p1-start @p1-cas-success @p1-cas-fail
+      @p2-start @p2-cas-success @p2-cas-fail))
+
+  (invariant at-most-one-winner
+    (not (and (= p1pc won) (= p2pc won))))
+
+  (invariant winner-matches-memory
+    (and
+      (implies (= p1pc won) (= mem 1))
+      (implies (= p2pc won) (= mem 2))
+      (implies (= mem 1) (not (= p2pc won)))
+      (implies (= mem 2) (not (= p1pc won)))))
+
+  (property p1-can-win
+    (eventually (= p1pc won)))
+  (property p2-can-win
+    (eventually (= p2pc won)))
+  (property p1-can-lose
+    (eventually (= p1pc lost)))
+  (property p2-can-lose
+    (eventually (= p2pc lost))))

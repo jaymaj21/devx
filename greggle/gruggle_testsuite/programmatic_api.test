@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+node - <<'EOF'
+const { Gruggle, parseChainString } = require('../gruggle.js');
+
+const gm = Gruggle.fromDot('digraph G { a -> b; }');
+gm.chain(parseChainString('add-nodes c')).chain(['add-edges', 'lbl', 'a.*', 'c']);
+const dot = gm.toDot();
+if (!dot.includes('a -> b') || !dot.includes('a -> c') || !/label=lbl/.test(dot)) {
+  throw new Error('Gruggle programmatic chain failed');
+}
+
+const gm2 = new Gruggle();
+gm2.apply(['add-nodes', 'n:1:2']).apply(['add-edges', 'lbl', 'n1', 'n2']);
+const dot2 = gm2.toDot();
+if (!dot2.includes('n1 -> n2') || !dot2.includes('label=lbl')) {
+  throw new Error('Gruggle apply failed');
+}
+EOF

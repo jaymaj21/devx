@@ -1,0 +1,10 @@
+digraph node_label_and_path {
+  A;
+  AB;
+  B1;
+  Z;
+
+  A  -> Z [label="a"];
+  AB -> Z [label="b"];
+}
+

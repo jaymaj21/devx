@@ -1,0 +1,10 @@
+digraph node_lifted_path {
+  s [label="SRC"];
+  m [label="MID"];
+  t [label="TARGET"];
+  u [label="OTHER"];
+
+  s -> m [label="a"];
+  m -> t [label="a"];
+  m -> u [label="a"];
+}

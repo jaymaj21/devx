@@ -1,0 +1,10 @@
+digraph find_path_node_pred {
+  n1 [label="SRC"];
+  n2 [label="MID"];
+  n3 [label="TARGET"];
+  n4 [label="OTHER"];
+
+  n1 -> n2 [label="a"];
+  n2 -> n3 [label="a"];
+  n2 -> n4 [label="a"];
+}

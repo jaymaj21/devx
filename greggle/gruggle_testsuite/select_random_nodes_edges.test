@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+node ../gruggle.js -i sample1.dot chain \
+  "select-random-nodes 10 .*" \
+  "select-random-edges 10 .* .*" \
+  "add-labels-to-selected rnd"

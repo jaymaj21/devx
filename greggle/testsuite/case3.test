@@ -1,0 +1,1 @@
+../greggle handmade_sample.dot "(exists-path x y (concat a (plus (concat b a))) )"  | grep -v Garbage

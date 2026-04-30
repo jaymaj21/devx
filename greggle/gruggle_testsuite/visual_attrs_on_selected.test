@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+node ../gruggle.js -i sample1.dot chain \
+  "select-nodes s1" \
+  "select-edges x" \
+  "set-node-attr-on-selected fillcolor yellow" \
+  "set-edge-attr-on-selected color red" \
+  "unset-edge-attr-on-selected color" \
+  "clear-visual-attrs-on-selected"

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rich Text Editor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .toolbar {
+            border: 1px solid #ccc;
+            padding: 5px;
+            background: #f3f3f3;
+        }
+        .editor {
+            border: 1px solid #ccc;
+            min-height: 300px;
+            padding: 10px;
+            margin-top: 5px;
+            outline: none;
+        }
+        .toolbar button, select {
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button onclick="execCmd('bold')">Bold</button>
+        <button onclick="execCmd('italic')">Italic</button>
+        <button onclick="execCmd('underline')">Underline</button>
+        <button onclick="execCmd('foreColor', prompt('Enter a color:', 'red'))">Text Color</button>
+        <button onclick="execCmd('hiliteColor', prompt('Enter a highlight color:', 'yellow'))">Highlight</button>
+        <button onclick="execCmd('insertImage', prompt('Enter image URL:'))">Insert Image</button>
+		<button onclick="getEditorHTML()">Get HTML</button>
+<button onclick="setEditorHTML()">Set HTML</button>
+
+        <select onchange="execCmd('fontName', this.value)">
+            <option value="Arial">Arial</option>
+            <option value="Verdana">Verdana</option>
+            <option value="Times New Roman">Times New Roman</option>
+        </select>
+        <select onchange="execCmd('fontSize', this.value)">
+            <option value="1">Small</option>
+            <option value="3" selected>Normal</option>
+            <option value="5">Large</option>
+        </select>
+        <button onclick="execCmd('removeFormat')">Clear Formatting</button>
+    </div>
+    <div id="editor" class="editor" contenteditable="true"></div>
+    
+    <script>
+        function execCmd(command, value = null) {
+            document.execCommand(command, false, value);
+        }
+		function getEditorHTML() {
+			const htmlContent = document.getElementById('editor').innerHTML;
+			console.log(htmlContent); // Log or send it elsewhere
+			alert("Editor HTML:\n" + htmlContent); // Show in an alert box
+			return htmlContent;
+        }
+
+		function setEditorHTML() {
+			const htmlContent = prompt("Paste HTML content here:");
+			if (htmlContent !== null) {
+				document.getElementById('editor').innerHTML = htmlContent;
+			}
+		}
+    </script>
+</body>
+</html>

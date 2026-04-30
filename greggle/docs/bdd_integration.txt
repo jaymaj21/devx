@@ -1,0 +1,180 @@
+BDD-backed Relation Integration for greggle
+==========================================
+
+Overview
+--------
+
+The current greggle prototype uses a simple `std::set<Tuple>` implementation
+for `Relation`. This is fine for small graphs and small queries, but Binary
+Decision Diagrams (BDDs) via the BuDDy library can be used to represent
+relations symbolically and scale to much larger graphs.
+
+This note sketches how to integrate a BDD-backed relation layer into greggle
+while keeping the rest of the architecture (graph, regex, query AST) unchanged.
+
+
+1. Target API
+-------------
+
+The key idea is to preserve the `Domain` / `Variable` / `Relation` interface
+used by greggle, but change the implementation of `Relation` (and possibly
+`Domain` / `Variable`) to be BDD-backed.
+
+The functions greggle relies on today are:
+
+- `Relation(const std::vector<const Variable*>& vars)`
+- `void addTuple(const std::vector<int>& vals)`
+- `Relation joinAnd(const Relation& other) const`
+- `Relation unionOr(const Relation& other) const`
+- `Relation difference(const Relation& other) const`
+- `Relation projectOut(const std::vector<const Variable*>& toRemove) const`
+- `void traverse(const std::function<void(const Tuple&)>& cb) const`
+- `const std::vector<const Variable*>& vars() const`
+
+If you can provide a BDD-backed implementation of these methods with the same
+signatures and semantics, none of the regex or query-evaluation code needs
+to change.
+
+
+2. Mapping to the existing relations code
+-----------------------------------------
+
+In `square_afresh/src/relations`, the library defines:
+
+- `class Domain`
+- `class Variable`
+- `class Relation`
+
+with semantics very close to what greggle uses:
+
+- `Domain` describes a finite domain of values and knows how many BDD
+  variables (bits) are needed.
+- `Variable` is associated with a `Domain` and an FDD (finite-domain) block
+  in BuDDy.
+- `Relation` wraps a BuDDy `bdd` and includes:
+  - `orSelf`, `andSelf`, `notSelf`
+  - `quantifyExists`, `quantifyForall`
+  - `applyEqualityAndQuantifyFirst`
+  - `product`, `transitiveClosure`
+  - `traverse(TupleCallback&)`
+
+To integrate this into greggle, you can:
+
+1. Copy or reuse `Domain.h/.cpp`, `Variable.h/.cpp`, and `Relation.h/.cpp`
+   from `square_afresh/src/relations` into `greggle/src/bdd_relations`.
+2. Adjust include paths so that BuDDy headers (`bdd.h`, `fdd.h`, etc.) are
+   found (e.g. by copying `src/bdd` or installing BuDDy separately).
+3. Either:
+   - Replace the implementation in `greggle_domain.*` to simply forward to
+     these classes, or
+   - Remove `greggle_domain.*` and include the original headers directly,
+     updating namespaces as needed.
+
+
+3. Sketch of a BDD-backed Relation adapter
+------------------------------------------
+
+One possible approach is to introduce a wrapper that presents the greggle API
+but delegates to the original `Relation`.
+
+For example (simplified, sketch only):
+
+```c++
+// greggle_bdd_relation.h
+
+#pragma once
+
+#include "Domain.h"   // from square_afresh
+#include "Variable.h" // from square_afresh
+#include "Relation.h" // from square_afresh
+
+namespace greggle {
+
+using BDDDomain   = ::Domain;
+using BDDVariable = ::Variable;
+
+class BDDRelation {
+public:
+    BDDRelation() = default;
+    explicit BDDRelation(const std::vector<const BDDVariable*>& vars)
+        : _vars(vars), _rel(_vars.empty() ? nullptr : new ::Relation(const_cast<BDDVariable*>(_vars[0]), nullptr)) {
+        // Note: in the original code, Relation's variadic constructor and
+        // other helpers are used; adjust this to match the real ctor.
+    }
+
+    const std::vector<const BDDVariable*>& vars() const { return _vars; }
+
+    void addTuple(const std::vector<int>& vals);
+
+    BDDRelation joinAnd(const BDDRelation& other) const;
+    BDDRelation unionOr(const BDDRelation& other) const;
+    BDDRelation difference(const BDDRelation& other) const;
+    BDDRelation projectOut(const std::vector<const BDDVariable*>& toRemove) const;
+
+    void traverse(const std::function<void(const std::vector<int>&)>& cb) const;
+
+private:
+    std::vector<const BDDVariable*> _vars;
+    std::unique_ptr<::Relation> _rel;
+};
+
+} // namespace greggle
+```
+
+Implementations would use the underlying BuDDy-based `Relation` operations:
+
+- `joinAnd` → `this->_rel->andSelf(other._rel.get())` or a non-destructive
+  version using a copy.
+- `unionOr` → `this->_rel->orSelf(other._rel.get())`.
+- `difference` → `A \ B` is `A ∧ ¬B` via `andSelf` + `notSelf`.
+- `projectOut(vars)` → repeated calls to `quantifyExists` over the indicated
+  variables.
+- `traverse` → `Relation::traverse(TupleCallback&)`, where the callback
+  decodes BDD assignments into integer tuples over the domains.
+
+Once you have a working `BDDRelation`, you can drop it into the greggle
+`eval` implementation by:
+
+- Replacing `Relation` with `BDDRelation` in the type signatures (or aliasing
+  it `using Relation = BDDRelation;`).
+- Removing the set-based code in `greggle_domain.*`.
+
+
+4. Practical steps
+------------------
+
+1. Bring BuDDy and the original relations layer into the greggle build:
+   - Copy the `src/bdd` and `src/relations` directories from `square_afresh`
+     into `greggle/src/`.
+   - Adjust include paths in your build system.
+
+2. Decide on wrapping vs. replacing:
+   - If you want minimal file edits in greggle:
+     - Add `using Domain = ::Domain;`, `using Variable = ::Variable;`,
+       `using Relation = ::Relation;` in a new header and include that
+       instead of `greggle_domain.h`.
+   - If you prefer a cleaner separation:
+     - Implement `BDDRelation` as above and update `greggle_query.*` to use
+       it instead of the set-based `Relation`.
+
+3. Verify:
+   - Re-run the existing demos (programmatic and parsed queries).
+   - For small graphs, you should see the same outputs as with the set-based
+     implementation.
+   - Then scale up to larger graphs to benefit from BuDDy.
+
+
+5. Summary
+----------
+
+Integrating a BDD-backed relation layer into greggle is mostly an engineering
+task of aligning interfaces:
+
+- The semantic model (finite-domain variables, relational algebra, path
+  predicates via automata) is already present in greggle.
+- The BuDDy-based `Domain`/`Variable`/`Relation` implementation in
+  `square_afresh` is almost a drop-in replacement for the simplified
+  `greggle_domain.*` layer.
+
+Once the substitution is done, greggle can serve as a modern, lightweight
+front-end and test harness for a full-scale symbolic relational engine.

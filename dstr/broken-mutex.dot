@@ -1,0 +1,11 @@
+digraph "broken-mutex" {
+  graph [rankdir="LR", labelloc="t", label="broken-mutex\nreachable 2/4 states\n2 visible transitions\n0 deadlocks\n1 invariant-bad states\nactions: both-enter\nproperties: none", fontname="Helvetica"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", color="#355070", fillcolor="#f8f9fb"];
+  edge [fontname="Helvetica", color="#6d597a"];
+  "__start__" [shape=point, width=0.2, color="#2a9d8f", fillcolor="#2a9d8f", label=""];
+  "n_5b5b227031222c2269646c65225d2c5b227032222c2269646c65225d5d" [label="p1 = \"idle\"\np2 = \"idle\"\ninit", tooltip="[[\"p1\",\"idle\"],[\"p2\",\"idle\"]]", fillcolor="#d8f3dc", color="#2d6a4f", penwidth=2];
+  "n_5b5b227031222c226373225d2c5b227032222c226373225d5d" [label="p1 = \"cs\"\np2 = \"cs\"\nviolates: mutual-exclusion", tooltip="[[\"p1\",\"cs\"],[\"p2\",\"cs\"]]", fillcolor="#ffe3e3", color="#c92a2a", penwidth=2];
+  "__start__" -> "n_5b5b227031222c2269646c65225d2c5b227032222c2269646c65225d5d" [color="#2a9d8f", penwidth=2];
+  "n_5b5b227031222c2269646c65225d2c5b227032222c2269646c65225d5d" -> "n_5b5b227031222c226373225d2c5b227032222c226373225d5d" [label="both-enter"];
+  "n_5b5b227031222c226373225d2c5b227032222c226373225d5d" -> "n_5b5b227031222c226373225d2c5b227032222c226373225d5d" [label="both-enter"];
+}

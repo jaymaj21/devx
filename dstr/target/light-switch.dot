@@ -1,0 +1,11 @@
+digraph "light-switch" {
+  graph [rankdir="TB", labelloc="t", label="light-switch\nreachable 2/2 states\n2 visible transitions\n0 deadlocks\n0 invariant-bad states\nactions: turn-on, turn-off\nproperties: eventually-on=true", fontname="Helvetica", overlap="false", splines="true", nodesep="0.3", ranksep="0.6"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, margin="0.18,0.12", color="#355070", fillcolor="#f8f9fb"];
+  edge [fontname="Helvetica", fontsize=10, color="#6d597a"];
+  "__start__" [shape=point, width=0.2, color="#2a9d8f", fillcolor="#2a9d8f", label=""];
+  "n_5b5b226c69676874222c226f6666225d5d" [label="s0\nlight = \"off\"\ninit", tooltip="[[\"light\",\"off\"]]", fillcolor="#d8f3dc", color="#2d6a4f", penwidth=2];
+  "n_5b5b226c69676874222c226f6e225d5d" [label="s1\nlight = \"on\"", tooltip="[[\"light\",\"on\"]]"];
+  "__start__" -> "n_5b5b226c69676874222c226f6666225d5d" [color="#2a9d8f", penwidth=2];
+  "n_5b5b226c69676874222c226f6666225d5d" -> "n_5b5b226c69676874222c226f6e225d5d" [label="turn-on"];
+  "n_5b5b226c69676874222c226f6e225d5d" -> "n_5b5b226c69676874222c226f6666225d5d" [label="turn-off"];
+}

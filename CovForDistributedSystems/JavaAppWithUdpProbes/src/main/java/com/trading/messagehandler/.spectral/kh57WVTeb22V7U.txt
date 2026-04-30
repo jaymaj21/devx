@@ -1,0 +1,3 @@
+ 6 HITS IN 1 CONTEXTS
+com.trading.messagehandler.MarketDataHandlerImplTest.handleSomeEventsAndAssertOnCalculatorResult 6
+

@@ -1,0 +1,73 @@
+DONT_FAIL_ON_DIFF
+DONT_FAIL_ON_ERROR
+Response from child : [TCP] Listening on port 8084...
+[UDP] Listening on port 8083...
+Welcome to Analytics Engine Shell. :help for commands.
+admin> [LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=1: Main module started.
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=1: Fractal result: 55
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=1: Fractal demo execution ended.
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=2: Factorial called with n=6
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=4: Factorial called with n=5
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=6: Factorial called with n=4
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=1: Fractal demo execution started.
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=10: Factorial called with n=2
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=8: Factorial called with n=3
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=1: Factorial of 6 is 720
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=12: Factorial called with n=1
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=1: Main module finished.
+Hit Records Map:
+AppID      InstanceID   ThreadID     StackDepth   LocationID   Count     
+--------------------------------------------------------------------------------
+12345      2            23740        5            1003         1         
+12345      2            23740        2            1001         1         
+12345      2            23740        13           1002         1         
+12345      2            23740        1            2042         1         
+12345      2            23740        1            1000         1         
+12345      2            23740        7            1003         1         
+12345      2            23740        4            1001         1         
+12345      2            23740        11           1003         1         
+12345      2            23740        9            1003         1         
+12345      2            23740        6            1001         1         
+12345      2            23740        10           1001         1         
+12345      2            23740        12           1001         1         
+12345      2            23740        3            1003         1         
+12345      2            23740        8            1001         1         
+admin> 
+[TCP] Listening on port 8084...
+[UDP] Listening on port 8083...
+Welcome to Analytics Engine Shell. :help for commands.
+admin> [LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=1: Main module started.
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=1: Fractal result: 55
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=1: Fractal demo execution ended.
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=2: Factorial called with n=6
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=4: Factorial called with n=5
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=6: Factorial called with n=4
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=1: Fractal demo execution started.
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=10: Factorial called with n=2
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=8: Factorial called with n=3
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=1: Factorial of 6 is 720
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=12: Factorial called with n=1
+[LOG] AppID=12345 InstanceID=2 ThreadID=23740 StackDepth=1: Main module finished.
+Hit Records Map:
+AppID      InstanceID   ThreadID     StackDepth   LocationID   Count     
+--------------------------------------------------------------------------------
+12345      2            23740        5            1003         1         
+12345      2            23740        2            1001         1         
+12345      2            23740        13           1002         1         
+12345      2            23740        1            2042         1         
+12345      2            23740        1            1000         1         
+12345      2            23740        7            1003         1         
+12345      2            23740        4            1001         1         
+12345      2            23740        11           1003         1         
+12345      2            23740        9            1003         1         
+12345      2            23740        6            1001         1         
+12345      2            23740        10           1001         1         
+12345      2            23740        12           1001         1         
+12345      2            23740        3            1003         1         
+12345      2            23740        8            1001         1         
+admin> 
+Response from child : Bye!
+
+Bye!
+
+

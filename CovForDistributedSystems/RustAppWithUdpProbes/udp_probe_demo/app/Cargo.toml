@@ -1,0 +1,8 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+mprewriter = { path = "../mprewriter" }
+mprewriter_macros = { path = "../mprewriter_macros" }

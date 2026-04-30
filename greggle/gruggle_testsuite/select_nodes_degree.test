@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+node ../gruggle.js -i sample1.dot chain \
+  "select-nodes-degree ge 3" \
+  "add-labels-to-selected degsel"

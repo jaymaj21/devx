@@ -1,0 +1,17 @@
+digraph sample1 {
+    graph [nodesep=0.35, ranksep=0.5, splines=spline];
+    node [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    edge [arrowsize=0.8, color="#4a6fa5", penwidth=1.2];
+    a [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, label="a:rnd", shape=box, style="rounded,filled"];
+    b [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, label="b:rnd", shape=box, style="rounded,filled"];
+    s1 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, label="s1:rnd", shape=box, style="rounded,filled"];
+    s2 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, label="s2:rnd", shape=box, style="rounded,filled"];
+    t1 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, label="t1:rnd", shape=box, style="rounded,filled"];
+    t2 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, label="t2:rnd", shape=box, style="rounded,filled"];
+    s1 -> a [label="x,rnd"];
+    a -> t1 [label="y,rnd"];
+    s2 -> b [label="x,rnd"];
+    b -> t2 [label="y,rnd"];
+    a -> b [label="z,rnd"];
+    b -> a [label="w,rnd"];
+}

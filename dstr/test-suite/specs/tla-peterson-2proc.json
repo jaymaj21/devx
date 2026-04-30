@@ -1,0 +1,211 @@
+{
+  "name": "tla-peterson-2proc",
+  "variables": ["p1pc", "p2pc", "c1", "c2", "turn"],
+  "domains": {
+    "p1pc": { "set": [ { "lit": "a0" }, { "lit": "a1" }, { "lit": "a2" }, { "lit": "a3" }, { "lit": "cs" }, { "lit": "a4" } ] },
+    "p2pc": { "set": [ { "lit": "a0" }, { "lit": "a1" }, { "lit": "a2" }, { "lit": "a3" }, { "lit": "cs" }, { "lit": "a4" } ] },
+    "c1": { "set": [ { "lit": true }, { "lit": false } ] },
+    "c2": { "set": [ { "lit": true }, { "lit": false } ] },
+    "turn": { "set": [ { "lit": 1 }, { "lit": 2 } ] }
+  },
+  "init": {
+    "and": [
+      { "=": [ { "var": "p1pc" }, { "lit": "a0" } ] },
+      { "=": [ { "var": "p2pc" }, { "lit": "a0" } ] },
+      { "=": [ { "var": "c1" }, { "lit": false } ] },
+      { "=": [ { "var": "c2" }, { "lit": false } ] },
+      { "=": [ { "var": "turn" }, { "lit": 1 } ] }
+    ]
+  },
+  "actions": [
+    {
+      "name": "p1-a0",
+      "body": {
+        "and": [
+          { "=": [ { "var": "p1pc" }, { "lit": "a0" } ] },
+          { "=": [ { "next": "p1pc" }, { "lit": "a1" } ] },
+          { "=": [ { "next": "p2pc" }, { "var": "p2pc" } ] },
+          { "=": [ { "next": "c1" }, { "var": "c1" } ] },
+          { "=": [ { "next": "c2" }, { "var": "c2" } ] },
+          { "=": [ { "next": "turn" }, { "var": "turn" } ] }
+        ]
+      }
+    },
+    {
+      "name": "p1-a1",
+      "body": {
+        "and": [
+          { "=": [ { "var": "p1pc" }, { "lit": "a1" } ] },
+          { "=": [ { "next": "p1pc" }, { "lit": "a2" } ] },
+          { "=": [ { "next": "c1" }, { "lit": true } ] },
+          { "=": [ { "next": "p2pc" }, { "var": "p2pc" } ] },
+          { "=": [ { "next": "c2" }, { "var": "c2" } ] },
+          { "=": [ { "next": "turn" }, { "var": "turn" } ] }
+        ]
+      }
+    },
+    {
+      "name": "p1-a2",
+      "body": {
+        "and": [
+          { "=": [ { "var": "p1pc" }, { "lit": "a2" } ] },
+          { "=": [ { "next": "p1pc" }, { "lit": "a3" } ] },
+          { "=": [ { "next": "turn" }, { "lit": 2 } ] },
+          { "=": [ { "next": "p2pc" }, { "var": "p2pc" } ] },
+          { "=": [ { "next": "c1" }, { "var": "c1" } ] },
+          { "=": [ { "next": "c2" }, { "var": "c2" } ] }
+        ]
+      }
+    },
+    {
+      "name": "p1-a3",
+      "body": {
+        "and": [
+          { "=": [ { "var": "p1pc" }, { "lit": "a3" } ] },
+          { "or": [ { "not": { "var": "c2" } }, { "=": [ { "var": "turn" }, { "lit": 1 } ] } ] },
+          { "=": [ { "next": "p1pc" }, { "lit": "cs" } ] },
+          { "=": [ { "next": "p2pc" }, { "var": "p2pc" } ] },
+          { "=": [ { "next": "c1" }, { "var": "c1" } ] },
+          { "=": [ { "next": "c2" }, { "var": "c2" } ] },
+          { "=": [ { "next": "turn" }, { "var": "turn" } ] }
+        ]
+      }
+    },
+    {
+      "name": "p1-cs",
+      "body": {
+        "and": [
+          { "=": [ { "var": "p1pc" }, { "lit": "cs" } ] },
+          { "=": [ { "next": "p1pc" }, { "lit": "a4" } ] },
+          { "=": [ { "next": "p2pc" }, { "var": "p2pc" } ] },
+          { "=": [ { "next": "c1" }, { "var": "c1" } ] },
+          { "=": [ { "next": "c2" }, { "var": "c2" } ] },
+          { "=": [ { "next": "turn" }, { "var": "turn" } ] }
+        ]
+      }
+    },
+    {
+      "name": "p1-a4",
+      "body": {
+        "and": [
+          { "=": [ { "var": "p1pc" }, { "lit": "a4" } ] },
+          { "=": [ { "next": "p1pc" }, { "lit": "a0" } ] },
+          { "=": [ { "next": "c1" }, { "lit": false } ] },
+          { "=": [ { "next": "p2pc" }, { "var": "p2pc" } ] },
+          { "=": [ { "next": "c2" }, { "var": "c2" } ] },
+          { "=": [ { "next": "turn" }, { "var": "turn" } ] }
+        ]
+      }
+    },
+    {
+      "name": "p2-a0",
+      "body": {
+        "and": [
+          { "=": [ { "var": "p2pc" }, { "lit": "a0" } ] },
+          { "=": [ { "next": "p2pc" }, { "lit": "a1" } ] },
+          { "=": [ { "next": "p1pc" }, { "var": "p1pc" } ] },
+          { "=": [ { "next": "c1" }, { "var": "c1" } ] },
+          { "=": [ { "next": "c2" }, { "var": "c2" } ] },
+          { "=": [ { "next": "turn" }, { "var": "turn" } ] }
+        ]
+      }
+    },
+    {
+      "name": "p2-a1",
+      "body": {
+        "and": [
+          { "=": [ { "var": "p2pc" }, { "lit": "a1" } ] },
+          { "=": [ { "next": "p2pc" }, { "lit": "a2" } ] },
+          { "=": [ { "next": "c2" }, { "lit": true } ] },
+          { "=": [ { "next": "p1pc" }, { "var": "p1pc" } ] },
+          { "=": [ { "next": "c1" }, { "var": "c1" } ] },
+          { "=": [ { "next": "turn" }, { "var": "turn" } ] }
+        ]
+      }
+    },
+    {
+      "name": "p2-a2",
+      "body": {
+        "and": [
+          { "=": [ { "var": "p2pc" }, { "lit": "a2" } ] },
+          { "=": [ { "next": "p2pc" }, { "lit": "a3" } ] },
+          { "=": [ { "next": "turn" }, { "lit": 1 } ] },
+          { "=": [ { "next": "p1pc" }, { "var": "p1pc" } ] },
+          { "=": [ { "next": "c1" }, { "var": "c1" } ] },
+          { "=": [ { "next": "c2" }, { "var": "c2" } ] }
+        ]
+      }
+    },
+    {
+      "name": "p2-a3",
+      "body": {
+        "and": [
+          { "=": [ { "var": "p2pc" }, { "lit": "a3" } ] },
+          { "or": [ { "not": { "var": "c1" } }, { "=": [ { "var": "turn" }, { "lit": 2 } ] } ] },
+          { "=": [ { "next": "p2pc" }, { "lit": "cs" } ] },
+          { "=": [ { "next": "p1pc" }, { "var": "p1pc" } ] },
+          { "=": [ { "next": "c1" }, { "var": "c1" } ] },
+          { "=": [ { "next": "c2" }, { "var": "c2" } ] },
+          { "=": [ { "next": "turn" }, { "var": "turn" } ] }
+        ]
+      }
+    },
+    {
+      "name": "p2-cs",
+      "body": {
+        "and": [
+          { "=": [ { "var": "p2pc" }, { "lit": "cs" } ] },
+          { "=": [ { "next": "p2pc" }, { "lit": "a4" } ] },
+          { "=": [ { "next": "p1pc" }, { "var": "p1pc" } ] },
+          { "=": [ { "next": "c1" }, { "var": "c1" } ] },
+          { "=": [ { "next": "c2" }, { "var": "c2" } ] },
+          { "=": [ { "next": "turn" }, { "var": "turn" } ] }
+        ]
+      }
+    },
+    {
+      "name": "p2-a4",
+      "body": {
+        "and": [
+          { "=": [ { "var": "p2pc" }, { "lit": "a4" } ] },
+          { "=": [ { "next": "p2pc" }, { "lit": "a0" } ] },
+          { "=": [ { "next": "c2" }, { "lit": false } ] },
+          { "=": [ { "next": "p1pc" }, { "var": "p1pc" } ] },
+          { "=": [ { "next": "c1" }, { "var": "c1" } ] },
+          { "=": [ { "next": "turn" }, { "var": "turn" } ] }
+        ]
+      }
+    }
+  ],
+  "next": {
+    "or": [
+      { "actionRef": "p1-a0" }, { "actionRef": "p1-a1" }, { "actionRef": "p1-a2" },
+      { "actionRef": "p1-a3" }, { "actionRef": "p1-cs" }, { "actionRef": "p1-a4" },
+      { "actionRef": "p2-a0" }, { "actionRef": "p2-a1" }, { "actionRef": "p2-a2" },
+      { "actionRef": "p2-a3" }, { "actionRef": "p2-cs" }, { "actionRef": "p2-a4" }
+    ]
+  },
+  "invariants": [
+    {
+      "name": "mutual-exclusion",
+      "body": {
+        "not": {
+          "and": [
+            { "in": [ { "var": "p1pc" }, { "set": [ { "lit": "cs" }, { "lit": "a4" } ] } ] },
+            { "in": [ { "var": "p2pc" }, { "set": [ { "lit": "cs" }, { "lit": "a4" } ] } ] }
+          ]
+        }
+      }
+    }
+  ],
+  "properties": [
+    {
+      "name": "p1-can-reach-cs",
+      "body": { "eventually": { "=": [ { "var": "p1pc" }, { "lit": "cs" } ] } }
+    },
+    {
+      "name": "p2-can-reach-cs",
+      "body": { "eventually": { "=": [ { "var": "p2pc" }, { "lit": "cs" } ] } }
+    }
+  ]
+}

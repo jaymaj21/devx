@@ -1,0 +1,92 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{9E9C7E4F-1C9D-4D77-B1E0-5D70C9E0B6C3}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>greggle</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>src;src\relations;src\buddy22\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>src;src\relations;src\buddy22\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <!-- Core greggle sources (shared with demo) -->
+    <ClCompile Include="src\greggle_domain.cpp" />
+    <ClCompile Include="src\greggle_graph.cpp" />
+    <ClCompile Include="src\greggle_parse.cpp" />
+    <ClCompile Include="src\greggle_query.cpp" />
+    <ClCompile Include="src\greggle_regex.cpp" />
+    <ClCompile Include="src\query_tool_main.cpp" />
+
+    <!-- Relations layer -->
+    <ClCompile Include="src\relations\Domain.cpp" />
+    <ClCompile Include="src\relations\Relation.cpp" />
+    <ClCompile Include="src\relations\RelTest.cpp" />
+    <ClCompile Include="src\relations\RelTraverse.cpp" />
+    <ClCompile Include="src\relations\TupleCallback.cpp" />
+    <ClCompile Include="src\relations\Variable.cpp" />
+
+    <!-- Buddy (BDD) C sources -->
+    <ClCompile Include="src\buddy22\src\bddio.c" />
+    <ClCompile Include="src\buddy22\src\bddop.c" />
+    <ClCompile Include="src\buddy22\src\bvec.c" />
+    <ClCompile Include="src\buddy22\src\cache.c" />
+    <ClCompile Include="src\buddy22\src\fdd.c" />
+    <ClCompile Include="src\buddy22\src\imatrix.c" />
+    <ClCompile Include="src\buddy22\src\kernel.c" />
+    <ClCompile Include="src\buddy22\src\pairs.c" />
+    <ClCompile Include="src\buddy22\src\prime.c" />
+    <ClCompile Include="src\buddy22\src\reorder.c" />
+    <ClCompile Include="src\buddy22\src\tree.c" />
+    <ClCompile Include="src\buddy22\src\cppext_shim.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

@@ -1,0 +1,14 @@
+\begin{thebibliography}{1}
+
+\bibitem{bryant1986graph}
+Randal~E Bryant.
+\newblock Graph-based algorithms for boolean function manipulation.
+\newblock {\em IEEE Transactions on Computers}, C-35(8):677--691, 1986.
+
+\bibitem{vardi2007automata}
+M.~Y. Vardi.
+\newblock Automata-theoretic model checking revisited.
+\newblock In {\em Verification, Model Checking, and Abstract Interpretation},
+  pages 137--153. Springer, 2007.
+
+\end{thebibliography}

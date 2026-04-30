@@ -1,0 +1,7 @@
+ 18 HITS IN 5 CONTEXTS
+com.trading.service.MarketDataCalculatorImplTest.testLargestTradeForAbsentSymbol 3
+com.trading.service.MarketDataCalculatorImplTest.testLargestTrade 3
+com.trading.service.MarketDataCalculatorImplTest.testLargestTradeWhileIngestingTwoInvalidFlags 3
+com.trading.messagehandler.MarketDataHandlerImplTest.handleSomeEventsAndAssertOnCalculatorResult 6
+com.trading.service.MarketDataCalculatorImplTest.testLargestTradeWhileIngestingInvalidFlag 3
+

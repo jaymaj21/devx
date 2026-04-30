@@ -1,0 +1,329 @@
+DONT_FAIL_ON_DIFF
+DONT_FAIL_ON_ERROR
+Instrumented: target\branch-probe-demoapp-1.0.0.jar -> target\branch-probe-demoapp-1.0.0-instrumented.jar
+PROBE 2 com.example.demo.Main#main (Main.java:5) METHOD_ENTRY
+DemoApp: start
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 13 com.example.demo.Service#fizzBuzz (Service.java:6) IF_FALSE
+PROBE 15 com.example.demo.Service#fizzBuzz (Service.java:7) IF_FALSE
+PROBE 17 com.example.demo.Service#fizzBuzz (Service.java:8) IF_FALSE
+fizzBuzz(1) = 1
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 13 com.example.demo.Service#fizzBuzz (Service.java:6) IF_FALSE
+PROBE 15 com.example.demo.Service#fizzBuzz (Service.java:7) IF_FALSE
+PROBE 17 com.example.demo.Service#fizzBuzz (Service.java:8) IF_FALSE
+fizzBuzz(2) = 2
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 13 com.example.demo.Service#fizzBuzz (Service.java:6) IF_FALSE
+PROBE 14 com.example.demo.Service#fizzBuzz (Service.java:7) IF_TRUE
+fizzBuzz(3) = Fizz
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 13 com.example.demo.Service#fizzBuzz (Service.java:6) IF_FALSE
+PROBE 15 com.example.demo.Service#fizzBuzz (Service.java:7) IF_FALSE
+PROBE 17 com.example.demo.Service#fizzBuzz (Service.java:8) IF_FALSE
+fizzBuzz(4) = 4
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 13 com.example.demo.Service#fizzBuzz (Service.java:6) IF_FALSE
+PROBE 15 com.example.demo.Service#fizzBuzz (Service.java:7) IF_FALSE
+PROBE 16 com.example.demo.Service#fizzBuzz (Service.java:8) IF_TRUE
+fizzBuzz(5) = Buzz
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 13 com.example.demo.Service#fizzBuzz (Service.java:6) IF_FALSE
+PROBE 14 com.example.demo.Service#fizzBuzz (Service.java:7) IF_TRUE
+fizzBuzz(6) = Fizz
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 13 com.example.demo.Service#fizzBuzz (Service.java:6) IF_FALSE
+PROBE 15 com.example.demo.Service#fizzBuzz (Service.java:7) IF_FALSE
+PROBE 17 com.example.demo.Service#fizzBuzz (Service.java:8) IF_FALSE
+fizzBuzz(7) = 7
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 13 com.example.demo.Service#fizzBuzz (Service.java:6) IF_FALSE
+PROBE 15 com.example.demo.Service#fizzBuzz (Service.java:7) IF_FALSE
+PROBE 17 com.example.demo.Service#fizzBuzz (Service.java:8) IF_FALSE
+fizzBuzz(8) = 8
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 13 com.example.demo.Service#fizzBuzz (Service.java:6) IF_FALSE
+PROBE 14 com.example.demo.Service#fizzBuzz (Service.java:7) IF_TRUE
+fizzBuzz(9) = Fizz
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 13 com.example.demo.Service#fizzBuzz (Service.java:6) IF_FALSE
+PROBE 15 com.example.demo.Service#fizzBuzz (Service.java:7) IF_FALSE
+PROBE 16 com.example.demo.Service#fizzBuzz (Service.java:8) IF_TRUE
+fizzBuzz(10) = Buzz
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 13 com.example.demo.Service#fizzBuzz (Service.java:6) IF_FALSE
+PROBE 15 com.example.demo.Service#fizzBuzz (Service.java:7) IF_FALSE
+PROBE 17 com.example.demo.Service#fizzBuzz (Service.java:8) IF_FALSE
+fizzBuzz(11) = 11
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 13 com.example.demo.Service#fizzBuzz (Service.java:6) IF_FALSE
+PROBE 14 com.example.demo.Service#fizzBuzz (Service.java:7) IF_TRUE
+fizzBuzz(12) = Fizz
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 13 com.example.demo.Service#fizzBuzz (Service.java:6) IF_FALSE
+PROBE 15 com.example.demo.Service#fizzBuzz (Service.java:7) IF_FALSE
+PROBE 17 com.example.demo.Service#fizzBuzz (Service.java:8) IF_FALSE
+fizzBuzz(13) = 13
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 13 com.example.demo.Service#fizzBuzz (Service.java:6) IF_FALSE
+PROBE 15 com.example.demo.Service#fizzBuzz (Service.java:7) IF_FALSE
+PROBE 17 com.example.demo.Service#fizzBuzz (Service.java:8) IF_FALSE
+fizzBuzz(14) = 14
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 12 com.example.demo.Service#fizzBuzz (Service.java:6) IF_TRUE
+fizzBuzz(15) = FizzBuzz
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 13 com.example.demo.Service#fizzBuzz (Service.java:6) IF_FALSE
+PROBE 15 com.example.demo.Service#fizzBuzz (Service.java:7) IF_FALSE
+PROBE 17 com.example.demo.Service#fizzBuzz (Service.java:8) IF_FALSE
+fizzBuzz(16) = 16
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 13 com.example.demo.Service#fizzBuzz (Service.java:6) IF_FALSE
+PROBE 15 com.example.demo.Service#fizzBuzz (Service.java:7) IF_FALSE
+PROBE 17 com.example.demo.Service#fizzBuzz (Service.java:8) IF_FALSE
+fizzBuzz(17) = 17
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 13 com.example.demo.Service#fizzBuzz (Service.java:6) IF_FALSE
+PROBE 14 com.example.demo.Service#fizzBuzz (Service.java:7) IF_TRUE
+fizzBuzz(18) = Fizz
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 13 com.example.demo.Service#fizzBuzz (Service.java:6) IF_FALSE
+PROBE 15 com.example.demo.Service#fizzBuzz (Service.java:7) IF_FALSE
+PROBE 17 com.example.demo.Service#fizzBuzz (Service.java:8) IF_FALSE
+fizzBuzz(19) = 19
+PROBE 3 com.example.demo.Main#main (Main.java:8) IF_TRUE
+PROBE 11 com.example.demo.Service#fizzBuzz (Service.java:6) METHOD_ENTRY
+PROBE 13 com.example.demo.Service#fizzBuzz (Service.java:6) IF_FALSE
+PROBE 15 com.example.demo.Service#fizzBuzz (Service.java:7) IF_FALSE
+PROBE 16 com.example.demo.Service#fizzBuzz (Service.java:8) IF_TRUE
+fizzBuzz(20) = Buzz
+PROBE 4 com.example.demo.Main#main (Main.java:8) IF_FALSE
+PROBE 5 com.example.demo.Main#main (Main.java:13) IF_TRUE
+PROBE 18 com.example.demo.Service#categoryOf (Service.java:13) METHOD_ENTRY
+PROBE 19 com.example.demo.Service#categoryOf (Service.java:13) IF_FALSE
+categoryOf(-1) = minus one
+PROBE 5 com.example.demo.Main#main (Main.java:13) IF_TRUE
+PROBE 18 com.example.demo.Service#categoryOf (Service.java:13) METHOD_ENTRY
+PROBE 20 com.example.demo.Service#categoryOf (Service.java:14) IF_FALSE
+categoryOf(0) = zero
+PROBE 5 com.example.demo.Main#main (Main.java:13) IF_TRUE
+PROBE 18 com.example.demo.Service#categoryOf (Service.java:13) METHOD_ENTRY
+PROBE 21 com.example.demo.Service#categoryOf (Service.java:15) IF_FALSE
+categoryOf(1) = small
+PROBE 5 com.example.demo.Main#main (Main.java:13) IF_TRUE
+PROBE 18 com.example.demo.Service#categoryOf (Service.java:13) METHOD_ENTRY
+PROBE 21 com.example.demo.Service#categoryOf (Service.java:15) IF_FALSE
+categoryOf(2) = small
+PROBE 5 com.example.demo.Main#main (Main.java:13) IF_TRUE
+PROBE 18 com.example.demo.Service#categoryOf (Service.java:13) METHOD_ENTRY
+PROBE 21 com.example.demo.Service#categoryOf (Service.java:15) IF_FALSE
+categoryOf(3) = small
+PROBE 5 com.example.demo.Main#main (Main.java:13) IF_TRUE
+PROBE 18 com.example.demo.Service#categoryOf (Service.java:13) METHOD_ENTRY
+PROBE 22 com.example.demo.Service#categoryOf (Service.java:16) IF_FALSE
+categoryOf(4) = medium
+PROBE 5 com.example.demo.Main#main (Main.java:13) IF_TRUE
+PROBE 18 com.example.demo.Service#categoryOf (Service.java:13) METHOD_ENTRY
+PROBE 22 com.example.demo.Service#categoryOf (Service.java:16) IF_FALSE
+categoryOf(5) = medium
+PROBE 5 com.example.demo.Main#main (Main.java:13) IF_TRUE
+PROBE 18 com.example.demo.Service#categoryOf (Service.java:13) METHOD_ENTRY
+PROBE 23 com.example.demo.Service#categoryOf (Service.java:17) IF_FALSE
+PROBE 25 com.example.demo.Service#categoryOf (Service.java:19) IF_FALSE
+PROBE 26 com.example.demo.Service#categoryOf (Service.java:20) IF_TRUE
+PROBE 28 com.example.demo.Service#categoryOf (Service.java:20) IF_FALSE
+categoryOf(42) = even large
+PROBE 6 com.example.demo.Main#main (Main.java:13) IF_FALSE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 31 com.example.demo.Service#fib (Service.java:25) IF_FALSE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 31 com.example.demo.Service#fib (Service.java:25) IF_FALSE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 31 com.example.demo.Service#fib (Service.java:25) IF_FALSE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 31 com.example.demo.Service#fib (Service.java:25) IF_FALSE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 31 com.example.demo.Service#fib (Service.java:25) IF_FALSE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 30 com.example.demo.Service#fib (Service.java:25) IF_TRUE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 30 com.example.demo.Service#fib (Service.java:25) IF_TRUE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 30 com.example.demo.Service#fib (Service.java:25) IF_TRUE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 31 com.example.demo.Service#fib (Service.java:25) IF_FALSE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 30 com.example.demo.Service#fib (Service.java:25) IF_TRUE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 30 com.example.demo.Service#fib (Service.java:25) IF_TRUE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 31 com.example.demo.Service#fib (Service.java:25) IF_FALSE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 31 com.example.demo.Service#fib (Service.java:25) IF_FALSE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 30 com.example.demo.Service#fib (Service.java:25) IF_TRUE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 30 com.example.demo.Service#fib (Service.java:25) IF_TRUE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 30 com.example.demo.Service#fib (Service.java:25) IF_TRUE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 31 com.example.demo.Service#fib (Service.java:25) IF_FALSE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 31 com.example.demo.Service#fib (Service.java:25) IF_FALSE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 31 com.example.demo.Service#fib (Service.java:25) IF_FALSE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 30 com.example.demo.Service#fib (Service.java:25) IF_TRUE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 30 com.example.demo.Service#fib (Service.java:25) IF_TRUE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 30 com.example.demo.Service#fib (Service.java:25) IF_TRUE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 31 com.example.demo.Service#fib (Service.java:25) IF_FALSE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 30 com.example.demo.Service#fib (Service.java:25) IF_TRUE
+PROBE 29 com.example.demo.Service#fib (Service.java:25) METHOD_ENTRY
+PROBE 30 com.example.demo.Service#fib (Service.java:25) IF_TRUE
+fib(6) = 8
+PROBE 41 com.example.demo.TryCatch#div (TryCatch.java:6) METHOD_ENTRY
+div: 10 / 2 = 5
+div: finally for 10 / 2
+PROBE 41 com.example.demo.TryCatch#div (TryCatch.java:6) METHOD_ENTRY
+PROBE 42 com.example.demo.TryCatch#div (TryCatch.java:8) CATCH_ENTRY(java.lang.ArithmeticException)
+div: caught java.lang.ArithmeticException: / by zero
+div: finally for 1 / 0
+PROBE 9 com.example.demo.Main#lambda$main$0 (Main.java:25) METHOD_ENTRY
+PROBE 32 com.example.demo.Service#branchyLambda (Service.java:30) METHOD_ENTRY
+PROBE 33 com.example.demo.Service#branchyLambda (Service.java:30) IF_TRUE
+PROBE 36 com.example.demo.Service#branchyLambda (Service.java:31) IF_FALSE
+PROBE 38 com.example.demo.Service#branchyLambda (Service.java:33) IF_FALSE
+lambda: ok (hello)
+PROBE 39 com.example.demo.Service#branchyLambda (Service.java:35) IF_FALSE
+PROBE 8 com.example.demo.Main#main (Main.java:27) IF_FALSE
+DemoApp: end
+Response from child : [TCP] Listening on port 8084...
+[UDP] Listening on port 8083...
+Welcome to Analytics Engine Shell. :help for commands.
+admin> Hit Records Map:
+AppID      InstanceID   ThreadID     StackDepth   LocationID   Count     
+--------------------------------------------------------------------------------
+12345      2            1            2            11           20        
+12345      2            1            7            29           2         
+12345      2            1            2            12           1         
+12345      2            1            2            13           19        
+12345      2            1            2            14           5         
+12345      2            1            2            15           14        
+12345      2            1            2            16           3         
+12345      2            1            5            29           8         
+12345      2            1            2            17           11        
+12345      2            1            3            29           2         
+12345      2            1            2            18           8         
+12345      2            1            6            31           1         
+12345      2            16           2            32           1         
+12345      2            16           2            33           1         
+12345      2            1            6            30           7         
+12345      2            1            4            31           4         
+12345      2            1            2            31           1         
+12345      2            16           2            39           1         
+12345      2            16           2            36           1         
+12345      2            16           2            38           1         
+12345      2            1            2            19           1         
+12345      2            16           1            9            1         
+12345      2            1            2            22           2         
+12345      2            1            2            23           1         
+12345      2            1            6            29           8         
+12345      2            1            2            25           1         
+12345      2            1            2            26           1         
+12345      2            1            4            29           4         
+12345      2            1            2            28           1         
+12345      2            1            2            29           1         
+12345      2            1            5            31           4         
+12345      2            1            7            30           2         
+12345      2            1            5            30           4         
+12345      2            1            3            31           2         
+12345      2            1            2            41           2         
+12345      2            1            2            20           1         
+12345      2            1            2            42           1         
+12345      2            1            2            21           3         
+12345      2            1            1            4            1         
+12345      2            1            1            3            20        
+12345      2            1            1            2            1         
+12345      2            1            1            8            1         
+12345      2            1            1            6            1         
+12345      2            1            1            5            8         
+admin> 
+[TCP] Listening on port 8084...
+[UDP] Listening on port 8083...
+Welcome to Analytics Engine Shell. :help for commands.
+admin> Hit Records Map:
+AppID      InstanceID   ThreadID     StackDepth   LocationID   Count     
+--------------------------------------------------------------------------------
+12345      2            1            2            11           20        
+12345      2            1            7            29           2         
+12345      2            1            2            12           1         
+12345      2            1            2            13           19        
+12345      2            1            2            14           5         
+12345      2            1            2            15           14        
+12345      2            1            2            16           3         
+12345      2            1            5            29           8         
+12345      2            1            2            17           11        
+12345      2            1            3            29           2         
+12345      2            1            2            18           8         
+12345      2            1            6            31           1         
+12345      2            16           2            32           1         
+12345      2            16           2            33           1         
+12345      2            1            6            30           7         
+12345      2            1            4            31           4         
+12345      2            1            2            31           1         
+12345      2            16           2            39           1         
+12345      2            16           2            36           1         
+12345      2            16           2            38           1         
+12345      2            1            2            19           1         
+12345      2            16           1            9            1         
+12345      2            1            2            22           2         
+12345      2            1            2            23           1         
+12345      2            1            6            29           8         
+12345      2            1            2            25           1         
+12345      2            1            2            26           1         
+12345      2            1            4            29           4         
+12345      2            1            2            28           1         
+12345      2            1            2            29           1         
+12345      2            1            5            31           4         
+12345      2            1            7            30           2         
+12345      2            1            5            30           4         
+12345      2            1            3            31           2         
+12345      2            1            2            41           2         
+12345      2            1            2            20           1         
+12345      2            1            2            42           1         
+12345      2            1            2            21           3         
+12345      2            1            1            4            1         
+12345      2            1            1            3            20        
+12345      2            1            1            2            1         
+12345      2            1            1            8            1         
+12345      2            1            1            6            1         
+12345      2            1            1            5            8         
+admin> 
+Response from child : Bye!
+
+Bye!
+
+

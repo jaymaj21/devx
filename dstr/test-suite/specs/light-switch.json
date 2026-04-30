@@ -1,0 +1,41 @@
+{
+  "name": "light-switch",
+  "variables": ["light"],
+  "domains": {
+    "light": { "set": [ { "lit": "off" }, { "lit": "on" } ] }
+  },
+  "init": { "=": [ { "var": "light" }, { "lit": "off" } ] },
+  "actions": [
+    {
+      "name": "turn-on",
+      "body": {
+        "and": [
+          { "=": [ { "var": "light" }, { "lit": "off" } ] },
+          { "=": [ { "next": "light" }, { "lit": "on" } ] }
+        ]
+      }
+    },
+    {
+      "name": "turn-off",
+      "body": {
+        "and": [
+          { "=": [ { "var": "light" }, { "lit": "on" } ] },
+          { "=": [ { "next": "light" }, { "lit": "off" } ] }
+        ]
+      }
+    }
+  ],
+  "next": { "or": [ { "actionRef": "turn-on" }, { "actionRef": "turn-off" } ] },
+  "invariants": [
+    {
+      "name": "type-ok",
+      "body": { "in": [ { "var": "light" }, { "set": [ { "lit": "off" }, { "lit": "on" } ] } ] }
+    }
+  ],
+  "properties": [
+    {
+      "name": "eventually-on",
+      "body": { "eventually": { "=": [ { "var": "light" }, { "lit": "on" } ] } }
+    }
+  ]
+}

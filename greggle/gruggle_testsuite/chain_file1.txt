@@ -1,0 +1,2 @@
+select-edges z
+add-labels-to-selected alpha

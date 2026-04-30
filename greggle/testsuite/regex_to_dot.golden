@@ -1,0 +1,22 @@
+digraph greggle_regex_nfa {
+  rankdir=LR;
+  node [shape=circle, fontname="Helvetica"];
+  edge [fontname="Helvetica"];
+  start [shape=diamond, label="start"];
+
+  q0 [shape=circle, label="q0"];
+  q1 [shape=circle, label="q1"];
+  q2 [shape=circle, label="q2"];
+  q3 [shape=circle, label="q3"];
+  q4 [shape=circle, label="q4"];
+  q5 [shape=doublecircle, label="q5"];
+
+  start -> q0;
+
+  q0 -> q1 [label="a"];
+  q1 -> q4 [label="eps"];
+  q2 -> q3 [label="b"];
+  q3 -> q2 [label="eps"];
+  q3 -> q5 [label="eps"];
+  q4 -> q2 [label="eps"];
+}

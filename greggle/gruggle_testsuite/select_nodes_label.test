@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+node ../gruggle.js -i sample1.dot chain \
+  "select-nodes s1" \
+  "add-labels-to-selected foo,bar" \
+  "clear-selection" \
+  "select-nodes-label bar" \
+  "add-labels-to-selected hit"

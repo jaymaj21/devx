@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+node ../gruggle.js -i sample1.dot chain \
+  "select-nodes-on-paths s1 t1" \
+  "select-edges-on-paths s1 t1" \
+  "add-labels-to-selected pathsel"

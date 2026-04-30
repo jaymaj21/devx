@@ -1,0 +1,40 @@
+{
+  "name": "broken-mutex",
+  "variables": ["p1", "p2"],
+  "domains": {
+    "p1": { "set": [ { "lit": "idle" }, { "lit": "cs" } ] },
+    "p2": { "set": [ { "lit": "idle" }, { "lit": "cs" } ] }
+  },
+  "init": {
+    "and": [
+      { "=": [ { "var": "p1" }, { "lit": "idle" } ] },
+      { "=": [ { "var": "p2" }, { "lit": "idle" } ] }
+    ]
+  },
+  "actions": [
+    {
+      "name": "both-enter",
+      "body": {
+        "and": [
+          { "=": [ { "next": "p1" }, { "lit": "cs" } ] },
+          { "=": [ { "next": "p2" }, { "lit": "cs" } ] }
+        ]
+      }
+    }
+  ],
+  "next": { "actionRef": "both-enter" },
+  "invariants": [
+    {
+      "name": "mutual-exclusion",
+      "body": {
+        "not": {
+          "and": [
+            { "=": [ { "var": "p1" }, { "lit": "cs" } ] },
+            { "=": [ { "var": "p2" }, { "lit": "cs" } ] }
+          ]
+        }
+      }
+    }
+  ],
+  "properties": []
+}

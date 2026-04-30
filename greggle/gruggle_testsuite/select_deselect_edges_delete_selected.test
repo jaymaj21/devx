@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+node ../gruggle.js -i sample1.dot chain \
+  "select-edges .* .*" \
+  "deselect-edges a.* t.*" \
+  "delete-selected"

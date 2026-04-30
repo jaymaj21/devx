@@ -1,0 +1,129 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{listings}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\lstdefinelanguage{JavaScript}{
+  keywords={const, let, var, function, return, if, else, for, while, class, new, this, extends, static},
+  sensitive=true,
+  morecomment=[l]{//},
+  morecomment=[s]{/*}{*/},
+  morestring=[b]",
+  morestring=[b]'
+}
+\lstset{
+  basicstyle=\ttfamily\small,
+  columns=fullflexible,
+  frame=single,
+  breaklines=true
+}
+
+\title{Gruggle JavaScript API Guide}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Overview}
+Gruggle is a single-file DOT loader/transformer that can be used both as a CLI and as a programmatic API from Node.js. The CLI remains unchanged; when \texttt{gruggle.js} is imported via \texttt{require}, no CLI code runs and the API is exposed.
+
+\section{Getting Started}
+\begin{itemize}[leftmargin=1.5em]
+  \item Ensure Node.js is available.
+  \item Place \texttt{gruggle.js} in your project (or install it alongside your code).
+  \item Use either the CLI (\texttt{node gruggle.js ...}) or import it:
+\end{itemize}
+\begin{lstlisting}[language=JavaScript]
+const {
+  Gruggle,
+  parse,
+  serialize,
+  applySubcommands,
+  applyOne,
+  parseChainString,
+  emptyGraph,
+  mergeGraphs,
+} = require('./gruggle');
+\end{lstlisting}
+
+\section{CLI vs Library}
+\begin{itemize}[leftmargin=1.5em]
+  \item CLI: invoked via \texttt{node gruggle.js ...}; supports all documented subcommands.
+  \item Library: when required, the module exports API objects; \texttt{main()} is not executed (checked via \texttt{require.main === module}).
+\end{itemize}
+
+\section{Core Concepts}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Graph object}: plain JS object containing nodes (Map), edges (array), defaults, and attributes.
+  \item \textbf{Subcommands}: the same operations used by the CLI; they can be invoked programmatically via \texttt{applyOne} or \texttt{applySubcommands}.
+  \item \textbf{Chain strings}: CLI-style quoted command strings parsed by \texttt{parseChainString}.
+\end{itemize}
+
+\section{Class: \texttt{Gruggle}}
+Convenience wrapper around the core helpers.
+
+\subsection*{Construction}
+\begin{description}[leftmargin=1.8em, style=nextline]
+  \item[\texttt{new Gruggle(graph = emptyGraph())}] Start from an existing graph object or a fresh empty graph.
+  \item[\texttt{Gruggle.fromDot(text, edgeMode = 'curved')}] Parse DOT text; \texttt{edgeMode} can be \texttt{'curved'} (default) or \texttt{'ortho'}/\texttt{'rectilinear'} (sets \texttt{splines=ortho}).
+  \item[\texttt{Gruggle.fromFiles(files, edgeMode = 'curved')}] Parse and merge a list of DOT files, then set edge mode.
+\end{description}
+
+\subsection*{Methods}
+\begin{description}[leftmargin=1.8em, style=nextline]
+  \item[\texttt{chain(commands)}] Run one or more subcommands using the \texttt{chain} wrapper. Accepts a single chain string (e.g., \texttt{"add-nodes n:1:3"}) or an array of chain strings or token arrays. Returns \texttt{this}.
+  \item[\texttt{apply(tokens)}] Apply a token list directly (e.g., \texttt{['add-nodes', 'n:1:3']}); returns \texttt{this}.
+  \item[\texttt{toDot()}] Serialize the current graph to DOT text (obeys keep/remove flags).
+  \item[\texttt{toSvg(outFile)}] Emit SVG via Graphviz \texttt{dot}, writing to \texttt{outFile}; returns \texttt{this}.
+  \item[\texttt{value()}] Return the underlying graph object (for advanced inspection/manipulation).
+\end{description}
+
+\section{Helper Functions}
+\begin{description}[leftmargin=1.8em, style=nextline]
+  \item[\texttt{parse(text)}] Parse DOT text into a graph object.
+  \item[\texttt{serialize(graph)}] Serialize a graph to DOT text, honoring keep/remove semantics.
+  \item[\texttt{applyOne(graph, tokens)}] Apply a single subcommand token array to a graph.
+  \item[\texttt{applySubcommands(graph, tokens)}] Apply a token array (often starting with a subcommand, e.g., \texttt{['add-nodes', 'n:1:3']} or \texttt{['chain', 'cmd1', 'cmd2']}).
+  \item[\texttt{parseChainString(str)}] Parse a CLI-style chain string into tokens, handling quoted segments.
+  \item[\texttt{emptyGraph()}] Create a new empty digraph with defaults.
+  \item[\texttt{mergeGraphs(graphs)}] Merge multiple graphs (as the CLI does for multiple \texttt{-i} inputs).
+\end{description}
+
+\section{Usage Examples}
+\subsection*{Build and serialize}
+\begin{lstlisting}[language=JavaScript]
+const { Gruggle } = require('./gruggle');
+const gm = new Gruggle();
+gm.apply(['add-nodes', 'n:1:3'])
+  .apply(['add-edges', 'lbl', 'n.*', 'n.*']);
+console.log(gm.toDot());
+\end{lstlisting}
+
+\subsection*{Chain with CLI-style strings}
+\begin{lstlisting}[language=JavaScript]
+const { Gruggle, parseChainString } = require('./gruggle');
+const gm = Gruggle.fromFiles(['graph1.g']);
+gm.chain(parseChainString('add-nodes extra:1:2'))
+  .chain(['add-edges', 'note', 'extra.*', 'n.*'])
+  .toSvg('out.svg');
+\end{lstlisting}
+
+\subsection*{Direct helpers without Gruggle}
+\begin{lstlisting}[language=JavaScript]
+const { parse, applySubcommands, serialize, parseChainString } = require('./gruggle');
+let g = parse('digraph G { a -> b; }');
+g = applySubcommands(g, ['add-nodes', 'c']);
+g = applySubcommands(g, ['add-edges', 'lbl', 'a.*', 'c']);
+console.log(serialize(g));
+\end{lstlisting}
+
+\section{Notes and Compatibility}
+\begin{itemize}[leftmargin=1.5em]
+  \item The CLI behavior is unchanged; all existing tests and subcommands remain valid.
+  \item The API lives in the same single file; distribution remains a single \texttt{gruggle.js}.
+  \item \texttt{toSvg} requires Graphviz \texttt{dot} on PATH, same as the CLI.
+  \item Chain parsing rules match the CLI; use \texttt{parseChainString} when you want to feed a quoted command string.
+\end{itemize}
+
+\end{document}

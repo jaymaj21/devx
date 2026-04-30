@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Git\jmtools\development_tools\CovForDistributedSystems\code-analytics-cpp\build\CMakeFiles\52c6fb51022627b3bc61a646c399338e\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{D99AA1B4-1C56-3DD8-9BC1-3B3D37585A6C}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,11 @@
+digraph G {
+    graph [nodesep=0.35, ranksep=0.5, splines=spline];
+    node [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    edge [arrowsize=0.8, color="#4a6fa5", penwidth=1.2];
+    r_0 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    r_1 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    r_2 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    r_0 -> r_1 [arrowsize=0.8, color="#4a6fa5", penwidth=1.2];
+    r_1 -> r_2 [arrowsize=0.8, color="#4a6fa5", penwidth=1.2];
+    r_2 -> r_0 [arrowsize=0.8, color="#4a6fa5", penwidth=1.2];
+}

@@ -1,0 +1,88 @@
+ The cleanest answer is that the semantics are relational, so they are closer to pruning than building.
+
+  Why:
+
+  - The state universe exists first, as the Cartesian product of domains.
+  - An action is a predicate on a pair (current-state, next-state).
+  - next combines those action predicates into one transition relation.
+  - Reachability then selects the subgraph reachable from init.
+
+  That viewpoint strongly suggests:
+
+  - vertices are already there
+  - candidate edges are already conceptually there
+  - the spec removes disallowed state pairs
+
+  So semantically the spec is pruning a universal binary relation on states.
+
+  But there is still a useful “building” intuition in one sense:
+
+  - each action contributes a region of the allowed edge relation
+  - or in next unions these regions
+  - so one can say actions “add” families of transitions to the final graph
+
+  That is not wrong, but it is secondary. It is a constructive view of a relation whose more fundamental meaning is
+  still predicate-based filtering over all state pairs.
+
+  A good distinction is:
+
+  - Model-theoretic view: pruning.
+    The transition system is the subset of all state pairs satisfying the transition predicate.
+  - Authoring view: often feels like building.
+    The spec writer experiences each action as introducing one possible mode of motion.
+
+  These two views are compatible.
+
+  This matters for the frame-condition discussion:
+
+  - If you think in pruning terms, omission of x+ means “do not filter on that coordinate.”
+  - If you think in update-building terms, omission of x+ feels like “I didn’t say x changes, so maybe it stays put.”
+
+  That tension is exactly why implicit frame conditions are tempting at the DSL level, even though the core semantics
+  are elegantly relational.
+
+  My own judgment:
+
+  - For semantics, keep the pruning story primary.
+  - For pedagogy, present both:
+      - formally, actions define a binary relation over states
+      - intuitively, each action describes one way a state may evolve
+
+  That gives people the right mathematics without fighting their operational intuition.
+
+  If you want, I can write a short markdown note just on this “pruning vs building” perspective and its implications for
+  DSL design.
+
+• Yes. If next denotes false, then there are no transitions.
+
+  More precisely:
+
+  - The full state universe still exists.
+  - init still selects initial states.
+  - But the transition relation is empty, because no state pair satisfies next.
+  - So the reachable graph is just the initial vertices with no outgoing edges.
+
+  So in that case the machine does not “stay in the init state” by an explicit self-loop unless self-loops are allowed
+  by next; rather:
+
+  - it starts in an initial state
+  - and then has no enabled transition at all
+
+  That is an important distinction:
+
+  - empty next means empty edge relation
+  - unconstrained next would mean universal edge relation
+
+  Those are opposites.
+
+  In the current implementation, a NEXT clause is required, so you cannot literally omit it as syntax. But semantically:
+
+  - next = false means no transitions
+  - next = true would mean every state can go to every state, i.e. the full clique-like relation on the state universe
+  - ordinary specs lie between those extremes
+
+  So the “clique” picture is only the conceptual ambient space from which the transition predicate selects edges. The
+  actual graph is whatever binary relation next defines. If next is false, that selected relation is empty.
+
+
+

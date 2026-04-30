@@ -1,0 +1,613 @@
+;;;; dstr-dsl-compiler.lisp
+
+(require :asdf)
+
+(defpackage #:dstr-dsl
+  (:use #:cl))
+
+(in-package #:dstr-dsl)
+
+(defstruct ir-named
+  name
+  body)
+
+(defstruct ir-spec
+  name
+  variables
+  domains
+  init
+  actions
+  next
+  invariants
+  properties)
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defun next-var-symbol (symbol)
+    (unless (symbolp symbol)
+      (error "Expected symbol for next-state suffixing, got ~S" symbol))
+    (intern (concatenate 'string (symbol-name symbol) "+")
+            (or (symbol-package symbol) *package*))))
+
+(defmacro same (var)
+  `(= ,(next-var-symbol var) ,var))
+
+(defmacro unchanged (&rest vars)
+  (mapcar (lambda (var)
+            `(= ,(next-var-symbol var) ,var))
+          vars))
+
+(defun main ()
+  (handler-case
+      (let ((args (cdr sb-ext:*posix-argv*)))
+        (cond
+          ((or (null args) (member "--help" args :test #'string=) (member "-h" args :test #'string=))
+           (print-usage)
+           (sb-ext:exit :code (if args 0 1)))
+          ((= (length args) 1)
+           (compile-input-path (first args) nil))
+          ((= (length args) 2)
+           (compile-input-path (first args) (second args)))
+          (t
+           (error "Expected one input path and an optional output path."))))
+    (error (condition)
+      (format *error-output* "Error: ~A~%" condition)
+      (sb-ext:exit :code 1))))
+
+(defun print-usage ()
+  (format *error-output*
+          "Usage: sbcl --script scripts/dstr-dsl-compiler.lisp <input.dstr|directory> [output.json|directory]~%"))
+
+(defun compile-input-path (input output)
+  (let ((input-path (truename input)))
+    (cond
+      ((uiop:directory-pathname-p input-path)
+       (compile-directory input-path output))
+      ((string-equal (pathname-type input-path) "dstr")
+       (compile-one-file input-path output))
+      (t
+       (error "Input must be a .dstr file or a directory, got ~A" input-path)))))
+
+(defun compile-directory (input-dir output-dir)
+  (let* ((target-dir (if output-dir
+                         (ensure-directory-pathname output-dir)
+                         input-dir))
+         (files (directory (merge-pathnames "*.dstr" (ensure-directory-pathname input-dir)))))
+    (unless files
+      (error "No .dstr files found under ~A" input-dir))
+    (ensure-directories-exist (merge-pathnames "dummy" target-dir))
+    (dolist (file files)
+      (let* ((output-file (merge-pathnames
+                           (make-pathname :name (pathname-name file) :type "json")
+                           target-dir)))
+        (compile-one-file file output-file)))))
+
+(defun compile-one-file (input-file output)
+  (let* ((output-file (if output
+                          (pathname output)
+                          (make-pathname :defaults input-file :type "json")))
+         (form (load-top-level-forms input-file))
+         (ir (parse-system-form form))
+         (json-tree (spec-ir->json ir)))
+    (ensure-directories-exist output-file)
+    (with-open-file (stream output-file
+                            :direction :output
+                            :if-exists :supersede
+                            :if-does-not-exist :create)
+      (write-json json-tree stream 0)
+      (terpri stream))
+    (format t "Wrote ~A~%" output-file)))
+
+(defun read-all-forms (path)
+  (with-open-file (stream path :direction :input)
+    (let ((*read-eval* nil))
+      (loop for form = (read stream nil :eof)
+            until (eq form :eof)
+            collect form))))
+
+(defun load-top-level-forms (path)
+  (let ((forms (read-all-forms path))
+        (system-form nil)
+        (base-dir (uiop:pathname-directory-pathname (truename path))))
+    (unless forms
+      (error "File ~A is empty" path))
+    (dolist (form forms)
+      (setf system-form (process-top-level-form form path base-dir system-form)))
+    (unless system-form
+      (error "File ~A must contain a top-level SYSTEM form" path))
+    (expand-special-forms system-form)))
+
+(defun process-top-level-form (form source-path base-dir system-form)
+  (cond
+    ((and (consp form) (symbol-name= (car form) "defmacro"))
+     (eval form)
+     system-form)
+    ((and (consp form) (symbol-name= (car form) "defun"))
+     (eval form)
+     system-form)
+    ((and (consp form) (symbol-name= (car form) "load"))
+     (eval-load-form form source-path base-dir)
+     system-form)
+    ((and (consp form) (symbol-name= (car form) "system"))
+     (when system-form
+       (error "File ~A must contain exactly one top-level SYSTEM form" source-path))
+     form)
+    (t
+     (error "Unsupported top-level form in ~A: ~S" source-path form))))
+
+(defun eval-load-form (form source-path base-dir)
+  (unless (= (length form) 2)
+    (error "LOAD in ~A expects exactly one argument, got ~S" source-path form))
+  (let ((target (load-target-pathname (second form) base-dir)))
+    (load target :verbose nil :print nil)))
+
+(defun load-target-pathname (designator base-dir)
+  (let* ((raw (etypecase designator
+                (string designator)
+                (pathname (namestring designator))))
+         (candidate (pathname raw)))
+    (if (uiop:absolute-pathname-p candidate)
+        candidate
+        (merge-pathnames candidate base-dir))))
+
+(defun expand-special-forms (form)
+  (cond
+    ((atom form) form)
+    ((symbol-name= (car form) "quote") form)
+    ((symbol-name= (car form) "expand")
+     (expand-expand-form form))
+    ((percent-macro-head-p (car form))
+     (expand-percent-macro-form form))
+    ((bang-macro-head-p (car form))
+     (error "Splicing macro shorthand !... must appear as a list element, got ~S" form))
+    ((dsl-macro-call-p form)
+     (expand-user-macro-form form))
+    (t
+     (cons (expand-special-forms (car form))
+           (expand-special-forms-list (cdr form))))))
+
+(defun expand-special-forms-list (forms)
+  (loop for form in forms
+        append (if (and (consp form) (bang-macro-head-p (car form)))
+                   (expand-bang-macro-form form)
+                   (list (expand-special-forms form)))))
+
+(defun expand-expand-form (form)
+  (unless (>= (length form) 2)
+    (error "EXPAND requires a macro name, got ~S" form))
+  (let ((macro-name (second form)))
+    (unless (symbolp macro-name)
+      (error "EXPAND macro name must be a symbol, got ~S" macro-name))
+    (unless (macro-function macro-name)
+      (error "EXPAND references undefined macro ~S" macro-name))
+    (expand-special-forms (macroexpand-1 (cons macro-name (cddr form))))))
+
+(defun expand-user-macro-form (form)
+  (expand-special-forms (macroexpand-1 form)))
+
+(defun expand-percent-macro-form (form)
+  (let* ((head (car form))
+         (name (symbol-name head)))
+    (unless (> (length name) 1)
+      (error "Percent macro shorthand requires a name after %, got ~S" form))
+    (expand-expand-form
+     (cons 'expand
+           (cons (intern (subseq name 1) (or (symbol-package head) *package*))
+                 (cdr form))))))
+
+(defun expand-bang-macro-form (form)
+  (let* ((head (car form))
+         (name (symbol-name head)))
+    (unless (> (length name) 1)
+      (error "Splicing macro shorthand requires a name after !, got ~S" form))
+    (let ((expanded (macroexpand-1
+                     (cons (intern (subseq name 1) (or (symbol-package head) *package*))
+                           (cdr form)))))
+      (unless (listp expanded)
+        (error "Splicing macro !~A must expand to a list, got ~S" (subseq name 1) expanded))
+      (expand-special-forms-list expanded))))
+
+(defun parse-system-form (form)
+  (unless (and (consp form) (symbol-name= (car form) "system"))
+    (error "Top-level form must be (system ...), got ~S" form))
+  (destructuring-bind (_system raw-name &rest clauses) form
+    (declare (ignore _system))
+    (let ((name (dsl-name raw-name))
+          (variables nil)
+          (domains (make-hash-table :test #'equal))
+          (actions nil)
+          (invariants nil)
+          (properties nil)
+          (init nil)
+          (next nil))
+      (dolist (clause clauses)
+        (unless (consp clause)
+          (error "System clause must be a list, got ~S" clause))
+        (let ((head (car clause))
+              (tail (cdr clause)))
+          (cond
+            ((symbol-name= head "vars")
+             (when variables
+               (error "Only one VARS clause is allowed"))
+             (setf variables (parse-vars tail)))
+            ((symbol-name= head "domain")
+             (destructuring-bind (var &rest domain-body) tail
+               (setf (gethash (dsl-name var) domains)
+                     (parse-domain-clause var domain-body))))
+            ((symbol-name= head "init")
+             (when init
+               (error "Only one INIT clause is allowed"))
+             (setf init tail))
+            ((symbol-name= head "next")
+             (when next
+               (error "Only one NEXT clause is allowed"))
+             (setf next tail))
+            ((symbol-name= head "action")
+             (push (parse-named-clause "action" tail) actions))
+            ((symbol-name= head "invariant")
+             (push (parse-named-clause "invariant" tail) invariants))
+            ((symbol-name= head "property")
+             (push (parse-named-clause "property" tail) properties))
+            (t
+             (error "Unknown system clause ~S" head)))))
+      (unless variables
+        (error "SYSTEM requires a VARS clause"))
+      (unless init
+        (error "SYSTEM requires an INIT clause"))
+      (unless next
+        (error "SYSTEM requires a NEXT clause"))
+      (validate-domain-coverage variables domains)
+      (let* ((ordered-actions (nreverse actions))
+             (ordered-invariants (nreverse invariants))
+             (ordered-properties (nreverse properties))
+             (action-names (mapcar #'ir-named-name ordered-actions))
+             (context (make-context variables action-names)))
+        (make-ir-spec
+         :name name
+         :variables variables
+         :domains (loop for variable in variables
+                        collect (cons variable (gethash variable domains)))
+         :init (compile-body init context nil nil)
+         :actions (mapcar (lambda (action)
+                            (make-ir-named
+                             :name (ir-named-name action)
+                             :body (compile-body (ir-named-body action) context t nil)))
+                          ordered-actions)
+         :next (compile-body next context t t)
+         :invariants (mapcar (lambda (inv)
+                               (make-ir-named
+                                :name (ir-named-name inv)
+                                :body (compile-body (ir-named-body inv) context nil nil)))
+                             ordered-invariants)
+         :properties (mapcar (lambda (prop)
+                               (make-ir-named
+                                :name (ir-named-name prop)
+                                :body (compile-body (ir-named-body prop) context nil nil)))
+                             ordered-properties))))))
+
+(defun parse-vars (vars)
+  (unless vars
+    (error "VARS requires at least one variable"))
+  (let ((names (mapcar #'dsl-name vars)))
+    (when (/= (length names) (length (remove-duplicates names :test #'equal)))
+      (error "Duplicate variable name in VARS clause: ~S" vars))
+    names))
+
+(defun parse-domain-clause (var body)
+  (let ((variable-name (dsl-name var)))
+    (unless body
+      (error "DOMAIN for ~A requires at least one value or expression" variable-name))
+    (if (and (= (length body) 1)
+             (consp (first body)))
+        (compile-expr (first body)
+                      (make-context nil nil)
+                      nil
+                      nil
+                      :domain-literals-p nil)
+        (list* :set
+               (mapcar (lambda (item)
+                         (compile-expr item
+                                       (make-context nil nil)
+                                       nil
+                                       nil
+                                       :domain-literals-p t))
+                       body)))))
+
+(defun parse-named-clause (kind tail)
+  (unless (and tail (cdr tail))
+    (error "~A clause requires a name and at least one body form" (string-upcase kind)))
+  (make-ir-named :name (dsl-name (first tail)) :body (rest tail)))
+
+(defun validate-domain-coverage (variables domains)
+  (dolist (variable variables)
+    (unless (gethash variable domains)
+      (error "Missing DOMAIN clause for variable ~A" variable))))
+
+(defun make-context (variables action-names)
+  (list :variables variables :actions action-names))
+
+(defun context-variables (context)
+  (getf context :variables))
+
+(defun context-actions (context)
+  (getf context :actions))
+
+(defun compile-body (forms context allow-next allow-action-ref)
+  (unless forms
+    (error "Clause body cannot be empty"))
+  (if (= (length forms) 1)
+      (compile-expr (first forms) context allow-next allow-action-ref)
+      (list* :nary "and"
+             (mapcar (lambda (form)
+                       (compile-expr form context allow-next allow-action-ref))
+                     forms))))
+
+(defun compile-expr (form context allow-next allow-action-ref &key (domain-literals-p nil))
+  (cond
+    ((numberp form) (list :lit form))
+    ((stringp form) (list :lit form))
+    ((eq form t) (list :lit t))
+    ((null form) (list :lit nil))
+    ((symbolp form)
+     (compile-symbol-expr form context allow-next allow-action-ref domain-literals-p))
+    ((not (consp form))
+     (error "Unsupported expression atom ~S" form))
+    ((symbol-name= (car form) "quote")
+     (unless (= (length form) 2)
+       (error "QUOTE expects exactly one argument, got ~S" form))
+     (list :lit (quoted-value (second form))))
+    ((symbol-name= (car form) "set")
+     (list* :set
+            (mapcar (lambda (arg)
+                      (compile-expr arg context allow-next allow-action-ref))
+                    (cdr form))))
+    ((symbol-name= (car form) "not")
+     (assert-arity form 2)
+     (list :unary "not"
+           (compile-expr (second form) context allow-next allow-action-ref)))
+    ((symbol-name= (car form) "eventually")
+     (assert-arity form 2)
+     (list :unary "eventually"
+           (compile-expr (second form) context allow-next allow-action-ref)))
+    ((member (dsl-name (car form)) '("forall" "exists") :test #'equal)
+     (compile-quantified-expr form context allow-next allow-action-ref))
+    ((member (dsl-name (car form))
+             '("and" "or" "+" "-" "*" "/" "=" "!=" "<" "<=" ">" ">=" "in" "implies")
+             :test #'equal)
+     (compile-operator-expr form context allow-next allow-action-ref))
+    (t
+     (error "Unsupported expression form ~S" form))))
+
+(defun compile-symbol-expr (symbol context allow-next allow-action-ref domain-literals-p)
+  (let* ((name (dsl-name symbol))
+         (next-name (and (plus-suffixed-name-p name)
+                         (subseq name 0 (1- (length name)))))
+         (action-name (and (> (length name) 1)
+                           (char= (char name 0) #\@)
+                           (subseq name 1))))
+    (cond
+      (domain-literals-p
+       (list :lit name))
+      ((member name (context-variables context) :test #'equal)
+       (list :var name))
+      ((and allow-next
+            next-name
+            (member next-name (context-variables context) :test #'equal))
+       (list :next next-name))
+      ((and allow-action-ref
+            action-name
+            (member action-name (context-actions context) :test #'equal))
+       (list :action-ref action-name))
+      (t
+       (list :lit name)))))
+
+(defun compile-quantified-expr (form context allow-next allow-action-ref)
+  (destructuring-bind (op binding body) form
+    (unless (and (consp binding)
+                 (= (length binding) 3)
+                 (symbolp (first binding))
+                 (symbol-name= (second binding) "in"))
+      (error "~A binding must look like (var in domain), got ~S" op binding))
+    (let ((var-name (dsl-name (first binding))))
+      (list :quantified
+            (dsl-name op)
+            var-name
+            (compile-expr (third binding) context allow-next allow-action-ref)
+            (compile-expr body context allow-next allow-action-ref)))))
+
+(defun compile-operator-expr (form context allow-next allow-action-ref)
+  (let* ((op (dsl-name (car form)))
+         (args (mapcar (lambda (arg)
+                         (compile-expr arg context allow-next allow-action-ref))
+                       (cdr form))))
+    (cond
+      ((member op '("=" "!=" "<" "<=" ">" ">=" "in" "implies") :test #'equal)
+       (unless (= (length args) 2)
+         (error "~A expects exactly two arguments, got ~S" op form))
+       (list :binary op (first args) (second args)))
+      (t
+       (unless args
+         (error "~A expects at least one argument, got ~S" op form))
+       (list* :nary op args)))))
+
+(defun spec-ir->json (spec)
+  (jobject
+   (jpair "name" (ir-spec-name spec))
+   (jpair "variables" (jarray-from-list (ir-spec-variables spec)))
+   (jpair "domains" (jobject-from-alist
+                     (mapcar (lambda (entry)
+                               (cons (car entry) (expr-ir->json (cdr entry))))
+                             (ir-spec-domains spec))))
+   (jpair "init" (expr-ir->json (ir-spec-init spec)))
+   (jpair "actions" (jarray-from-list
+                     (mapcar #'named-ir->json (ir-spec-actions spec))))
+   (jpair "next" (expr-ir->json (ir-spec-next spec)))
+   (jpair "invariants" (jarray-from-list
+                        (mapcar #'named-ir->json (ir-spec-invariants spec))))
+   (jpair "properties" (jarray-from-list
+                        (mapcar #'named-ir->json (ir-spec-properties spec))))))
+
+(defun named-ir->json (named)
+  (jobject
+   (jpair "name" (ir-named-name named))
+   (jpair "body" (expr-ir->json (ir-named-body named)))))
+
+(defun expr-ir->json (expr)
+  (case (first expr)
+    (:lit (jobject (jpair "lit" (second expr))))
+    (:var (jobject (jpair "var" (second expr))))
+    (:next (jobject (jpair "next" (second expr))))
+    (:action-ref (jobject (jpair "actionRef" (second expr))))
+    (:set (jobject (jpair "set" (jarray-from-list (mapcar #'expr-ir->json (rest expr))))))
+    (:unary (jobject (jpair (second expr) (expr-ir->json (third expr)))))
+    (:binary (jobject (jpair (second expr)
+                             (jarray-from-list
+                              (list (expr-ir->json (third expr))
+                                    (expr-ir->json (fourth expr)))))))
+    (:nary (jobject (jpair (second expr)
+                           (jarray-from-list (mapcar #'expr-ir->json (cddr expr))))))
+    (:quantified
+     (jobject
+      (jpair (second expr)
+             (jobject
+              (jpair "var" (third expr))
+              (jpair "in" (expr-ir->json (fourth expr)))
+              (jpair "body" (expr-ir->json (fifth expr)))))))
+    (otherwise
+     (error "Unknown IR expression tag ~S" (first expr)))))
+
+(defun jobject (&rest pairs)
+  (cons :object pairs))
+
+(defun jpair (name value)
+  (list name value))
+
+(defun jarray-from-list (items)
+  (cons :array items))
+
+(defun jobject-from-alist (alist)
+  (cons :object
+        (mapcar (lambda (entry)
+                  (list (car entry) (cdr entry)))
+                alist)))
+
+(defun write-json (node stream indent)
+  (cond
+    ((and (consp node) (eq (car node) :object))
+     (write-json-object (cdr node) stream indent))
+    ((and (consp node) (eq (car node) :array))
+     (write-json-array (cdr node) stream indent))
+    ((stringp node)
+     (write-json-string node stream))
+    ((numberp node)
+     (princ node stream))
+    ((eq node t)
+     (princ "true" stream))
+    ((null node)
+     (princ "false" stream))
+    (t
+     (error "Cannot serialize ~S to JSON" node))))
+
+(defun write-json-object (pairs stream indent)
+  (princ "{" stream)
+  (if (null pairs)
+      (princ "}" stream)
+      (progn
+        (loop for pair in pairs
+              for firstp = t then nil
+              do (unless firstp
+                   (princ "," stream))
+                 (terpri stream)
+                 (write-indentation stream (+ indent 2))
+                 (write-json-string (first pair) stream)
+                 (princ ": " stream)
+                 (write-json (second pair) stream (+ indent 2)))
+        (terpri stream)
+        (write-indentation stream indent)
+        (princ "}" stream))))
+
+(defun write-json-array (items stream indent)
+  (princ "[" stream)
+  (if (null items)
+      (princ "]" stream)
+      (progn
+        (loop for item in items
+              for firstp = t then nil
+              do (unless firstp
+                   (princ "," stream))
+                 (terpri stream)
+                 (write-indentation stream (+ indent 2))
+                 (write-json item stream (+ indent 2)))
+        (terpri stream)
+        (write-indentation stream indent)
+        (princ "]" stream))))
+
+(defun write-json-string (string stream)
+  (write-char #\" stream)
+  (loop for ch across string
+        do (case ch
+             (#\" (princ "\\\"" stream))
+             (#\\ (princ "\\\\" stream))
+             (#\Newline (princ "\\n" stream))
+             (#\Return (princ "\\r" stream))
+             (#\Tab (princ "\\t" stream))
+             (otherwise (write-char ch stream))))
+  (write-char #\" stream))
+
+(defun write-indentation (stream indent)
+  (dotimes (_ indent)
+    (declare (ignore _))
+    (write-char #\Space stream)))
+
+(defun dsl-name (thing)
+  (etypecase thing
+    (symbol (string-downcase (symbol-name thing)))
+    (string thing)))
+
+(defun symbol-name= (symbol string)
+  (and (symbolp symbol)
+       (string-equal (symbol-name symbol) string)))
+
+(defun plus-suffixed-name-p (name)
+  (and (> (length name) 1)
+       (char= (char name (1- (length name))) #\+)))
+
+(defun percent-macro-head-p (thing)
+  (and (symbolp thing)
+       (> (length (symbol-name thing)) 1)
+       (char= (char (symbol-name thing) 0) #\%)))
+
+(defparameter *reserved-dsl-head-names*
+  '("system" "vars" "domain" "init" "action" "next" "invariant" "property"
+    "quote" "set" "not" "eventually" "forall" "exists"
+    "and" "or" "+" "-" "*" "/" "=" "!=" "<" "<=" ">" ">=" "in" "implies"
+    "expand"))
+
+(defun dsl-macro-call-p (form)
+  (and (consp form)
+       (symbolp (car form))
+       (not (member (dsl-name (car form)) *reserved-dsl-head-names* :test #'equal))
+       (macro-function (car form))))
+
+(defun bang-macro-head-p (thing)
+  (and (symbolp thing)
+       (let ((name (symbol-name thing)))
+         (and (> (length name) 1)
+              (char= (char name 0) #\!)
+              (not (string= name "!="))))))
+
+(defun quoted-value (thing)
+  (etypecase thing
+    (symbol (dsl-name thing))
+    (string thing)
+    (number thing)
+    ((eql t) t)
+    (null nil)))
+
+(defun assert-arity (form expected)
+  (unless (= (length form) expected)
+    (error "~A expects ~D element(s), got ~S" (car form) expected form)))
+
+(defun ensure-directory-pathname (path)
+  (uiop:ensure-directory-pathname (pathname path)))
+
+(main)

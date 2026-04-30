@@ -1,0 +1,4 @@
+ 2 HITS IN 2 CONTEXTS
+com.trading.service.MarketDataCalculatorImplTest.testLargestTradeForAbsentSymbol 1
+com.trading.messagehandler.MarketDataHandlerImplTest.handleSomeEventsAndAssertOnCalculatorResult 1
+

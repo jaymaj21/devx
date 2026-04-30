@@ -1,0 +1,3 @@
+[workspace]
+members = ["mprewriter", "mprewriter_macros", "app"]
+resolver = "2"

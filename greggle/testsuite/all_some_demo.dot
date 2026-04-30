@@ -1,0 +1,9 @@
+digraph all_some_demo {
+  0;
+  1;
+  2;
+  0 -> 1 [label="a,b"];
+  0 -> 2 [label="a"];
+  1 -> 2 [label="b,c"];
+}
+

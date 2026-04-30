@@ -1,0 +1,4 @@
+# Only instrument these ranges in fractal demo
+# Format: Fully-qualified-class:line or range
+com.example.fractaldemo.Main:18-30
+

@@ -1,0 +1,3 @@
+# Exclude hot loop lines in non-fractal demo Main
+com.example.demo.Main:8-15
+

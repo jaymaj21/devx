@@ -1,0 +1,135 @@
+{
+  "name": "tla-die-hard",
+  "variables": ["big", "small"],
+  "domains": {
+    "big": {
+      "set": [ { "lit": 0 }, { "lit": 1 }, { "lit": 2 }, { "lit": 3 }, { "lit": 4 }, { "lit": 5 } ]
+    },
+    "small": {
+      "set": [ { "lit": 0 }, { "lit": 1 }, { "lit": 2 }, { "lit": 3 } ]
+    }
+  },
+  "init": {
+    "and": [
+      { "=": [ { "var": "big" }, { "lit": 0 } ] },
+      { "=": [ { "var": "small" }, { "lit": 0 } ] }
+    ]
+  },
+  "actions": [
+    {
+      "name": "fill-small-jug",
+      "body": {
+        "and": [
+          { "=": [ { "next": "small" }, { "lit": 3 } ] },
+          { "=": [ { "next": "big" }, { "var": "big" } ] }
+        ]
+      }
+    },
+    {
+      "name": "fill-big-jug",
+      "body": {
+        "and": [
+          { "=": [ { "next": "big" }, { "lit": 5 } ] },
+          { "=": [ { "next": "small" }, { "var": "small" } ] }
+        ]
+      }
+    },
+    {
+      "name": "empty-small-jug",
+      "body": {
+        "and": [
+          { "=": [ { "next": "small" }, { "lit": 0 } ] },
+          { "=": [ { "next": "big" }, { "var": "big" } ] }
+        ]
+      }
+    },
+    {
+      "name": "empty-big-jug",
+      "body": {
+        "and": [
+          { "=": [ { "next": "big" }, { "lit": 0 } ] },
+          { "=": [ { "next": "small" }, { "var": "small" } ] }
+        ]
+      }
+    },
+    {
+      "name": "small-to-big",
+      "body": {
+        "or": [
+          {
+            "and": [
+              { "<": [ { "+": [ { "var": "big" }, { "var": "small" } ] }, { "lit": 5 } ] },
+              { "=": [ { "next": "big" }, { "+": [ { "var": "big" }, { "var": "small" } ] } ] },
+              { "=": [ { "next": "small" }, { "lit": 0 } ] }
+            ]
+          },
+          {
+            "and": [
+              { ">=": [ { "+": [ { "var": "big" }, { "var": "small" } ] }, { "lit": 5 } ] },
+              { "=": [ { "next": "big" }, { "lit": 5 } ] },
+              { "=": [ { "next": "small" }, { "-": [ { "var": "small" }, { "-": [ { "lit": 5 }, { "var": "big" } ] } ] } ] }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "big-to-small",
+      "body": {
+        "or": [
+          {
+            "and": [
+              { "<": [ { "+": [ { "var": "big" }, { "var": "small" } ] }, { "lit": 3 } ] },
+              { "=": [ { "next": "small" }, { "+": [ { "var": "big" }, { "var": "small" } ] } ] },
+              { "=": [ { "next": "big" }, { "lit": 0 } ] }
+            ]
+          },
+          {
+            "and": [
+              { ">=": [ { "+": [ { "var": "big" }, { "var": "small" } ] }, { "lit": 3 } ] },
+              { "=": [ { "next": "small" }, { "lit": 3 } ] },
+              { "=": [ { "next": "big" }, { "-": [ { "var": "big" }, { "-": [ { "lit": 3 }, { "var": "small" } ] } ] } ] }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "next": {
+    "or": [
+      { "actionRef": "fill-small-jug" },
+      { "actionRef": "fill-big-jug" },
+      { "actionRef": "empty-small-jug" },
+      { "actionRef": "empty-big-jug" },
+      { "actionRef": "small-to-big" },
+      { "actionRef": "big-to-small" }
+    ]
+  },
+  "invariants": [
+    {
+      "name": "type-ok",
+      "body": {
+        "and": [
+          {
+            "in": [
+              { "var": "big" },
+              { "set": [ { "lit": 0 }, { "lit": 1 }, { "lit": 2 }, { "lit": 3 }, { "lit": 4 }, { "lit": 5 } ] }
+            ]
+          },
+          {
+            "in": [
+              { "var": "small" },
+              { "set": [ { "lit": 0 }, { "lit": 1 }, { "lit": 2 }, { "lit": 3 } ] }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "properties": [
+    {
+      "name": "can-measure-four-gallons",
+      "body": { "eventually": { "=": [ { "var": "big" }, { "lit": 4 } ] } }
+    }
+  ]
+}

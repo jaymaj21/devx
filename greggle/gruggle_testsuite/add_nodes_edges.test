@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+set -euo pipefail
+node ../gruggle.js chain "add-nodes n:1:3" "add-edges lbl n.* n.*"

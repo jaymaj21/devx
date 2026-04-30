@@ -1,0 +1,54 @@
+@Override
+public void run() {
+    try (DatagramSocket serverSocket = new DatagramSocket(port)) {
+        System.out.println("[UDP] Listening on port " + port + "...");
+        byte[] buffer = new byte[1200]; // Allow for both hits and log packets
+
+        while (true) {
+            DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+            serverSocket.receive(packet);
+
+            int packetLen = packet.getLength();
+            ByteBuffer messageBuffer = ByteBuffer.wrap(packet.getData(), 0, packetLen);
+
+            while (messageBuffer.remaining() >= 2) {
+                messageBuffer.mark();
+                short messageType = messageBuffer.getShort();
+                messageBuffer.reset();
+
+                if (messageType == 1 && messageBuffer.remaining() >= 16) {
+                    // Hit record (16 bytes)
+                    short msgType = messageBuffer.getShort();
+                    short appId = messageBuffer.getShort();
+                    int instanceId = messageBuffer.getInt();
+                    int threadId = messageBuffer.getInt();
+                    int locationId = messageBuffer.getInt();
+                    String record = String.format("%d,%d,%d,%d", appId, instanceId, threadId, locationId);
+                    hitRecords.merge(record, 1, Integer::sum);
+                } else if (messageType == 2 && messageBuffer.remaining() >= 14) {
+                    // Log message: 14 bytes header + log bytes
+                    short msgType = messageBuffer.getShort();
+                    short appId = messageBuffer.getShort();
+                    int instanceId = messageBuffer.getInt();
+                    int threadId = messageBuffer.getInt();
+                    short logLen = messageBuffer.getShort();
+                    if (messageBuffer.remaining() >= logLen) {
+                        byte[] logBytes = new byte[logLen];
+                        messageBuffer.get(logBytes);
+                        String logMsg = new String(logBytes, java.nio.charset.StandardCharsets.UTF_8);
+                        // You can store/process this log as needed. For now, print it:
+                        System.out.printf("[LOG] AppID=%d InstanceID=%d ThreadID=%d: %s%n", appId, instanceId, threadId, logMsg);
+                    } else {
+                        // Not enough bytes for the declared log string length, likely corrupt packet
+                        break;
+                    }
+                } else {
+                    // Unknown/invalid message or partial/truncated record, stop parsing this packet
+                    break;
+                }
+            }
+        }
+    } catch (IOException e) {
+        System.err.println("[UDP] Socket error: " + e.getMessage());
+    }
+}

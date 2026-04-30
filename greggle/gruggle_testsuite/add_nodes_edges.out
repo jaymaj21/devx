@@ -1,0 +1,17 @@
+digraph G {
+    graph [nodesep=0.35, ranksep=0.5, splines=spline];
+    node [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    edge [arrowsize=0.8, color="#4a6fa5", penwidth=1.2];
+    n1 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    n2 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    n3 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    n1 -> n1 [arrowsize=0.8, color="#4a6fa5", label=lbl, penwidth=1.2];
+    n1 -> n2 [arrowsize=0.8, color="#4a6fa5", label=lbl, penwidth=1.2];
+    n1 -> n3 [arrowsize=0.8, color="#4a6fa5", label=lbl, penwidth=1.2];
+    n2 -> n1 [arrowsize=0.8, color="#4a6fa5", label=lbl, penwidth=1.2];
+    n2 -> n2 [arrowsize=0.8, color="#4a6fa5", label=lbl, penwidth=1.2];
+    n2 -> n3 [arrowsize=0.8, color="#4a6fa5", label=lbl, penwidth=1.2];
+    n3 -> n1 [arrowsize=0.8, color="#4a6fa5", label=lbl, penwidth=1.2];
+    n3 -> n2 [arrowsize=0.8, color="#4a6fa5", label=lbl, penwidth=1.2];
+    n3 -> n3 [arrowsize=0.8, color="#4a6fa5", label=lbl, penwidth=1.2];
+}

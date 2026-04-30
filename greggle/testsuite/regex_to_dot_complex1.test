@@ -1,0 +1,1 @@
+../greggle_regex_to_dot "(concat (alt a (negate b)) (star (some-of c d)) (plus (all-of x y)))"

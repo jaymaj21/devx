@@ -1,0 +1,1 @@
+../greggle node_label_regex.dot "(match x \"A.*\")"

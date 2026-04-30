@@ -1,0 +1,101 @@
+package com.trading.domain;
+
+import java.io.*;
+import java.net.*;
+import java.nio.ByteBuffer;
+import java.nio.file.*;
+
+public class mprewriter {
+	private static final String RECEIVER_HOST = "127.0.0.1";
+	private static final int UDP_PORT = 8083;
+	private static final int TCP_PORT = 8084;
+
+	private static final short APPLICATION_ID = 12345;
+	private static final int INSTANCE_ID = 2;
+	private static final boolean USE_TCP = false;
+
+	private static final int RECEIVER_PORT = USE_TCP ? TCP_PORT : UDP_PORT;
+
+	private static Socket tcpSocket;
+	private static DataOutputStream tcpOutputStream;
+	private static DatagramSocket udpSocket;
+
+	private static final String TIMING_FILE = "timings.csv";
+
+	private static final ByteBuffer buffer = ByteBuffer.allocate(16);
+	private static final byte[] data = buffer.array();
+	private static DatagramPacket udpPacket;
+	private static InetAddress receiverAddress;
+
+	static {
+		try {
+			receiverAddress = InetAddress.getByName(RECEIVER_HOST);
+
+			if (USE_TCP) {
+				tcpSocket = new Socket(receiverAddress, RECEIVER_PORT);
+				tcpOutputStream = new DataOutputStream(tcpSocket.getOutputStream());
+			} else {
+				udpSocket = new DatagramSocket();
+				udpPacket = new DatagramPacket(data, data.length, receiverAddress, RECEIVER_PORT);
+			}
+
+            // Initialize timings file with header if it does not exist
+            if (!Files.exists(Paths.get(TIMING_FILE))) {
+                Files.write(Paths.get(TIMING_FILE), "locationId,timeTakenNanos\n".getBytes(), StandardOpenOption.CREATE);
+            }
+
+		} catch (IOException e) {
+			throw new RuntimeException("Initialization failed", e);
+		}
+	}
+
+	public static void scope_START(int locationId) {
+		long startTime = System.nanoTime();
+		try {
+			int threadId = (int) Thread.currentThread().getId();
+			short messageType = 1;
+
+			synchronized (mprewriter.class) {
+				buffer.rewind();
+				buffer.putShort(messageType);
+				buffer.putShort(APPLICATION_ID);
+				buffer.putInt(INSTANCE_ID);
+				buffer.putInt(threadId);
+				buffer.putInt(locationId);
+
+				if (USE_TCP) {
+					tcpOutputStream.write(data);
+					tcpOutputStream.flush();
+				} else {
+					udpSocket.send(udpPacket);
+				}
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		} finally {
+			long endTime = System.nanoTime();
+			long duration = endTime - startTime;
+			try {
+				Files.write(Paths.get(TIMING_FILE), (locationId + "," + duration + "\n").getBytes(), StandardOpenOption.APPEND);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	public static void close() {
+		try {
+			if (USE_TCP && tcpSocket != null) {
+				tcpSocket.close();
+			} else if (udpSocket != null) {
+				udpSocket.close();
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	public static void add_context_from_callstack() {
+		// Implementation placeholder
+	}
+}

@@ -1,0 +1,81 @@
+greggle Architecture Notes
+=========================
+
+greggle is a small graph query engine. The goal is to provide a compact
+codebase that is easy to extend.
+
+Layers
+------
+
+1. Graph layer (`greggle_graph.*`)
+   - Represents the object model as a labelled directed graph.
+   - Nodes are integer IDs `0..N-1`.
+   - Edges carry sets of proposition labels (strings) indicating which atomic
+     properties hold on that edge.
+
+2. Regular-expression layer (`greggle_regex.*`)
+   - Regular path expressions are represented as an AST:
+     - Symbols (atomic propositions)
+     - Concatenation
+     - Alternation
+     - Kleene star (`*`)
+     - Plus (`+`)
+   - A Thompson-style NFA is constructed from this AST when evaluating
+     path predicates.
+
+3. Finite-domain relational layer (`greggle_domain.*`)
+   - Provides the `Domain` / `Variable` / `Relation` design:
+     - `Domain` = finite set of values, e.g. all nodes in a graph.
+     - `Variable` = named logical variable over a `Domain`.
+     - `Relation` = set of tuples over a list of `Variable*`, with operations:
+       - `joinAnd` for logical conjunction.
+       - `unionOr` for logical disjunction (same variable set).
+       - `projectOut` for existential quantification.
+   - In this implementation, `Relation` is backed by an explicit
+     `std::set<Tuple>` to keep things simple. The API is designed so you can
+     later swap in a BDD backend.
+
+4. Query layer (`greggle_query.*`)
+   - Encodes Datalog-like formulas over variables:
+     - `exists-path(v1, v2, regex)`
+     - `and(expr1, expr2, ...)`
+     - `or(expr1, expr2, ...)`
+     - `exists(vars, expr)`  (∃-quantification)
+   - `eval` maps an `Expr` and a `Graph` to a `Relation`:
+     - Leaf `exists-path` nodes build relations over `(v1, v2)` by
+       exploring the graph with an NFA derived from the regex.
+     - `And` nodes join relations with `joinAnd`.
+     - `Or` nodes union relations with `unionOr`.
+     - `Exists` nodes project out quantified variables with `projectOut`.
+
+Migration path
+--------------
+
+If you want to move from this small prototype to a full-featured system:
+
+1. Swap the relation backend:
+   - Reuse or port the `Domain` / `Variable` / `Relation` implementation from
+     `square_afresh/src/relations` that uses BuDDy.
+   - Keep the `eval` logic and query AST unchanged; only the internals of
+     `Relation` need to change.
+
+2. Expand the query language:
+   - Add `Not` and `Forall` to `Expr::Kind` and implement them in terms of
+     `Relation` operations.
+   - Introduce node/edge predicates (e.g. `(node v predName)`) by generating
+     primitive relations instead of only path relations.
+
+3. Reintroduce full proposition semantics:
+   - Extend the regex/NFA construction and edge-matching logic to handle:
+     - Negated propositions (`~p`).
+     - Mutually exclusive and containment relationships among propositions.
+
+4. Add a textual front-end:
+   - Implement a parser that reads a query language and builds the `Expr` AST
+     defined in `greggle_query.*`.
+   - Map constructs like `(exists-path v1 v2 (a (b a)+))` directly onto
+     the C++ regex builders (`sym`, `concat`, `plus`, etc.).
+
+By following this path, greggle can grow from the current compact prototype into
+a modern, fully-fledged query engine while preserving a clean semantic model and
+taking advantage of contemporary tooling and libraries.

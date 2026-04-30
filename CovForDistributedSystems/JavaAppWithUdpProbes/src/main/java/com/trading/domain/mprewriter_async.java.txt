@@ -1,0 +1,138 @@
+package com.trading.domain;
+
+import java.io.*;
+import java.net.*;
+import java.nio.ByteBuffer;
+import java.nio.file.*;
+import java.util.concurrent.ArrayBlockingQueue;
+
+public class mprewriter {
+	private static final String RECEIVER_HOST = "127.0.0.1";
+	private static final int UDP_PORT = 8083;
+	private static final short APPLICATION_ID = 12345;
+	private static final int INSTANCE_ID = 2;
+	private static final String TIMING_FILE = "timings.csv";
+
+	private static DatagramSocket udpSocket;
+	private static InetAddress receiverAddress;
+
+	private static final int MAX_HITS_PER_PACKET = 70;
+	private static final int BATCH_INTERVAL_MS = 5;
+	private static final int QUEUE_CAPACITY = 10000;
+	private static final ArrayBlockingQueue<Long> probeQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
+	private static final ByteBuffer sendBuffer = ByteBuffer.allocate(16 * MAX_HITS_PER_PACKET);
+	private static DatagramPacket batchPacket;
+
+	private static volatile boolean running = true;
+	private static Thread senderThread;
+
+	static {
+		try {
+			receiverAddress = InetAddress.getByName(RECEIVER_HOST);
+			udpSocket = new DatagramSocket();
+			batchPacket = new DatagramPacket(sendBuffer.array(), 0, receiverAddress, UDP_PORT);
+
+			// Initialize timings file with header if it does not exist
+			if (!Files.exists(Paths.get(TIMING_FILE))) {
+				Files.write(Paths.get(TIMING_FILE), "locationId,timeTakenNanos\n".getBytes(), StandardOpenOption.CREATE);
+			}
+
+			senderThread = new Thread(() -> {
+				while (running && !Thread.currentThread().isInterrupted()) {
+					try {
+						Thread.sleep(BATCH_INTERVAL_MS);
+						sendBuffer.clear();
+						int hitsProcessed = 0;
+
+						Long hit;
+						while (hitsProcessed < MAX_HITS_PER_PACKET && (hit = probeQueue.poll()) != null) {
+							int threadId = (int)(hit >>> 32);
+							int locationId = (int)(hit & 0xFFFFFFFFL);
+
+							sendBuffer.putShort((short) 1); // messageType
+							sendBuffer.putShort(APPLICATION_ID);
+							sendBuffer.putInt(INSTANCE_ID);
+							sendBuffer.putInt(threadId);
+							sendBuffer.putInt(locationId);
+							hitsProcessed++;
+						}
+
+						if (hitsProcessed > 0) {
+							batchPacket.setLength(hitsProcessed * 16);
+							udpSocket.send(batchPacket);
+						}
+					} catch (InterruptedException ie) {
+						Thread.currentThread().interrupt();
+					} catch (IOException ioe) {
+						ioe.printStackTrace();
+					}
+				}
+			}, "ProbeSenderThread");
+
+			senderThread.setDaemon(true);
+			senderThread.start();
+
+		} catch (IOException e) {
+			throw new RuntimeException("Initialization failed", e);
+		}
+	}
+
+	public static void scope_START(int locationId) {
+		long startTime = System.nanoTime();
+		int threadId = (int) Thread.currentThread().getId();
+		long packed = (((long) threadId) << 32) | (locationId & 0xFFFFFFFFL);
+		probeQueue.offer(packed);
+		long endTime = System.nanoTime();
+		long duration = endTime - startTime;
+		try {
+			Files.write(Paths.get(TIMING_FILE), (locationId + "," + duration + "\n").getBytes(), StandardOpenOption.APPEND);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	public static void close() {
+		running = false;
+		senderThread.interrupt();
+
+		try {
+			senderThread.join();
+
+			// Final flush: drain any remaining hits
+			sendBuffer.clear();
+			int hitsProcessed = 0;
+			Long hit;
+			while ((hit = probeQueue.poll()) != null) {
+				int threadId = (int)(hit >>> 32);
+				int locationId = (int)(hit & 0xFFFFFFFFL);
+
+				sendBuffer.putShort((short) 1);
+				sendBuffer.putShort(APPLICATION_ID);
+				sendBuffer.putInt(INSTANCE_ID);
+				sendBuffer.putInt(threadId);
+				sendBuffer.putInt(locationId);
+				hitsProcessed++;
+
+				if (hitsProcessed == MAX_HITS_PER_PACKET) {
+					batchPacket.setLength(hitsProcessed * 16);
+					udpSocket.send(batchPacket);
+					sendBuffer.clear();
+					hitsProcessed = 0;
+				}
+			}
+
+			if (hitsProcessed > 0) {
+				batchPacket.setLength(hitsProcessed * 16);
+				udpSocket.send(batchPacket);
+			}
+		} catch (InterruptedException | IOException e) {
+			e.printStackTrace();
+		}
+
+		udpSocket.close();
+	}
+
+	public static void add_context_from_callstack() {
+		// Implementation placeholder
+	}
+}

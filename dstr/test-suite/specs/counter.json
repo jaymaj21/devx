@@ -1,0 +1,41 @@
+{
+  "name": "counter",
+  "variables": ["x"],
+  "domains": {
+    "x": { "set": [ { "lit": 0 }, { "lit": 1 }, { "lit": 2 }, { "lit": 3 } ] }
+  },
+  "init": { "=": [ { "var": "x" }, { "lit": 0 } ] },
+  "actions": [
+    {
+      "name": "inc",
+      "body": {
+        "and": [
+          { "<": [ { "var": "x" }, { "lit": 3 } ] },
+          { "=": [ { "next": "x" }, { "+": [ { "var": "x" }, { "lit": 1 } ] } ] }
+        ]
+      }
+    },
+    {
+      "name": "reset",
+      "body": {
+        "and": [
+          { "=": [ { "var": "x" }, { "lit": 3 } ] },
+          { "=": [ { "next": "x" }, { "lit": 0 } ] }
+        ]
+      }
+    }
+  ],
+  "next": { "or": [ { "actionRef": "inc" }, { "actionRef": "reset" } ] },
+  "invariants": [
+    {
+      "name": "non-negative",
+      "body": { ">=": [ { "var": "x" }, { "lit": 0 } ] }
+    }
+  ],
+  "properties": [
+    {
+      "name": "can-reach-three",
+      "body": { "eventually": { "=": [ { "var": "x" }, { "lit": 3 } ] } }
+    }
+  ]
+}

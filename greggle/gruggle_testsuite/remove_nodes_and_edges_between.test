@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+node ../gruggle.js -i sample1.dot chain \
+  "remove-nodes b" \
+  "remove-edges-between-nodes s.* t.*"

@@ -1,0 +1,97 @@
+{
+  "name": "mutex-2proc",
+  "variables": ["p1", "p2", "lock"],
+  "domains": {
+    "p1": { "set": [ { "lit": "idle" }, { "lit": "cs" } ] },
+    "p2": { "set": [ { "lit": "idle" }, { "lit": "cs" } ] },
+    "lock": { "set": [ { "lit": "free" }, { "lit": "p1" }, { "lit": "p2" } ] }
+  },
+  "init": {
+    "and": [
+      { "=": [ { "var": "p1" }, { "lit": "idle" } ] },
+      { "=": [ { "var": "p2" }, { "lit": "idle" } ] },
+      { "=": [ { "var": "lock" }, { "lit": "free" } ] }
+    ]
+  },
+  "actions": [
+    {
+      "name": "p1-enter",
+      "body": {
+        "and": [
+          { "=": [ { "var": "p1" }, { "lit": "idle" } ] },
+          { "=": [ { "var": "p2" }, { "next": "p2" } ] },
+          { "=": [ { "var": "lock" }, { "lit": "free" } ] },
+          { "=": [ { "next": "p1" }, { "lit": "cs" } ] },
+          { "=": [ { "next": "lock" }, { "lit": "p1" } ] }
+        ]
+      }
+    },
+    {
+      "name": "p1-exit",
+      "body": {
+        "and": [
+          { "=": [ { "var": "p1" }, { "lit": "cs" } ] },
+          { "=": [ { "var": "lock" }, { "lit": "p1" } ] },
+          { "=": [ { "var": "p2" }, { "next": "p2" } ] },
+          { "=": [ { "next": "p1" }, { "lit": "idle" } ] },
+          { "=": [ { "next": "lock" }, { "lit": "free" } ] }
+        ]
+      }
+    },
+    {
+      "name": "p2-enter",
+      "body": {
+        "and": [
+          { "=": [ { "var": "p2" }, { "lit": "idle" } ] },
+          { "=": [ { "var": "p1" }, { "next": "p1" } ] },
+          { "=": [ { "var": "lock" }, { "lit": "free" } ] },
+          { "=": [ { "next": "p2" }, { "lit": "cs" } ] },
+          { "=": [ { "next": "lock" }, { "lit": "p2" } ] }
+        ]
+      }
+    },
+    {
+      "name": "p2-exit",
+      "body": {
+        "and": [
+          { "=": [ { "var": "p2" }, { "lit": "cs" } ] },
+          { "=": [ { "var": "lock" }, { "lit": "p2" } ] },
+          { "=": [ { "var": "p1" }, { "next": "p1" } ] },
+          { "=": [ { "next": "p2" }, { "lit": "idle" } ] },
+          { "=": [ { "next": "lock" }, { "lit": "free" } ] }
+        ]
+      }
+    }
+  ],
+  "next": {
+    "or": [
+      { "actionRef": "p1-enter" },
+      { "actionRef": "p1-exit" },
+      { "actionRef": "p2-enter" },
+      { "actionRef": "p2-exit" }
+    ]
+  },
+  "invariants": [
+    {
+      "name": "mutual-exclusion",
+      "body": {
+        "not": {
+          "and": [
+            { "=": [ { "var": "p1" }, { "lit": "cs" } ] },
+            { "=": [ { "var": "p2" }, { "lit": "cs" } ] }
+          ]
+        }
+      }
+    }
+  ],
+  "properties": [
+    {
+      "name": "p1-can-reach-cs",
+      "body": { "eventually": { "=": [ { "var": "p1" }, { "lit": "cs" } ] } }
+    },
+    {
+      "name": "p2-can-reach-cs",
+      "body": { "eventually": { "=": [ { "var": "p2" }, { "lit": "cs" } ] } }
+    }
+  ]
+}

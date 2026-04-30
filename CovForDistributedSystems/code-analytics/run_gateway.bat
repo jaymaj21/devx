@@ -1,0 +1,1 @@
+tclsh.exe ../../JMWrap/gateway.tcl 19898 jdb -classpath c:\jmtools\development_tools\CovForDistributedSystems\code-analytics\target\clojure-shell-1.0-SNAPSHOT-jar-with-dependencies.jar com.codeanalytics.ClojureShell

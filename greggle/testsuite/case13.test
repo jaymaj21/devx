@@ -1,0 +1,1 @@
+../greggle node_label_and_path.dot "(and (match x \"A.*\") (exists-path x y a))"

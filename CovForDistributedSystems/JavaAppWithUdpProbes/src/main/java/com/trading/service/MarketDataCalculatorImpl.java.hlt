@@ -1,0 +1,63 @@
+BG white DF {courier 10 normal} T {package com.trading.service;} T {
+} T {
+} T {import com.trading.domain.Flag;} T {
+} T {import com.trading.domain.mprewriter;} T {
+} T {import com.trading.utils.LargestTradePerFlagForSingleSymbol;} T {
+} T {import com.trading.domain.Quote;} T {
+} T {import com.trading.domain.Trade;} T {
+} T {import com.trading.utils.WrappedLogger;} T {
+} T {
+} T {import java.util.*;} T {
+} T {import java.util.concurrent.ConcurrentHashMap;} T {
+} T {
+} T /** T {
+} T { Implementation of the MarketDataCalculator interface.} T {
+} T { It stores :} T {
+} T { (A) a hashmap from symbols mapping to the latest quote for the symbol. The key is the symbol (a String) and the value is the latest Quote} T {
+} T { (B) a hashmap from symbols mapping to a lookup table of the largest trade grouped per flag, for that symbol. The key is the symbol (a String) and the value is the said lookup table (a LargestTradePerFlagForSingleSymbol)} T {
+} T { When it processes a quote or a trade, it just updates the above two hashmaps.} T {
+} T { */} T {
+} T public\ class\ MarketDataCalculatorImpl\ implements\ \ MarketDataCalculator\ \{ T {
+} T {
+} T {    static WrappedLogger log = new WrappedLogger();} T {
+} T {    private final Map<String, LargestTradePerFlagForSingleSymbol> largestTradesByTag;} T {
+} T {
+} T {    private final Map<String, Quote> latestQuotes;} T {
+} T {
+} S #aafba2 T \ \ \ \ public\ MarketDataCalculatorImpl()\ \{ N .spectral/yIEYCmWNE45Z.txt T {mprewriter.scope_START(20001);} P { #aafba2 -background {#aafba2}} /S #aafba2 T {
+} T {        largestTradesByTag = new ConcurrentHashMap<>();} T {
+} T {        latestQuotes = new ConcurrentHashMap<>();} T {
+} T \ \ \ \ \} T {
+} T {
+} S #aafba2 T \ \ \ \ public\ void\ processTrade(Trade\ trade)\ \{ N .spectral/uMVpxsBQKp6wE.txt T {mprewriter.scope_START(20002);} /S #aafba2 T {
+} T {        log.info("Processing trade {0}", trade);} T {
+} T {        LargestTradePerFlagForSingleSymbol tradesByFlagForSymbol = largestTradesByTag.getOrDefault(trade.getSymbol(), null);} T {
+} S #aafba2 T \ \ \ \ \ \ \ \ if\ (tradesByFlagForSymbol\ ==null)\ \{ N .spectral/fkNoDX4fz5eOxk.txt T {mprewriter.scope_START(20003);} /S #aafba2 T {
+} T {            tradesByFlagForSymbol = new LargestTradePerFlagForSingleSymbol();} T {
+} T {            largestTradesByTag.put(trade.getSymbol(), tradesByFlagForSymbol);} T {
+} T \ \ \ \ \ \ \ \ \} T {
+} T {        tradesByFlagForSymbol.ingestTrade(trade);} T {
+} T \ \ \ \ \} T {
+} T {
+} S #aafba2 T \ \ \ \ public\ void\ processQuote(Quote\ quote)\ \{ N .spectral/iPJazdkOjkc.txt T {mprewriter.scope_START(20004);} /S #aafba2 T {
+} T {        log.info("Processing quote {0}", quote);} T {
+} T {        latestQuotes.put(quote.getSymbol(), quote);} T {
+} T \ \ \ \ \} T {
+} T {
+} T {    @Override} T {
+} S #aafba2 T \ \ \ \ public\ Trade\ getLargestTrade(String\ symbol,\ Flag\ flag)\ \{ N .spectral/k3TwcwdQu04tBfh.txt T {mprewriter.scope_START(20005);} /S #aafba2 T {
+} T {        LargestTradePerFlagForSingleSymbol largestTradeForSingleSymbol = largestTradesByTag.getOrDefault(} T s T {ymbol, null);} T {
+} S #aafba2 T \ \ \ \ \ \ \ \ if\ (largestTradeForSingleSymbol\ ==\ null)\ \{ N .spectral/uew7qrIoEME.txt T {mprewriter.scope_START(20006);} /S #aafba2 T {
+} T {            return null;} T {
+} T \ \ \ \ \ \ \ \ \} T {
+} T {        return largestTradeForSingleSymbol.get(flag);} T {
+} T \ \ \ \ \} T {
+} T {
+} T {    @Override} T {
+} S #aafba2 T \ \ \ \ public\ Double\ getMidPrice(String\ symbol)\ \{ N .spectral/fXywoOjVKuuG.txt T {mprewriter.scope_START(20007);} /S #aafba2 T {
+} T {        Quote quote = latestQuotes.get(symbol);} T {
+} T {        if (quote == null) return null;} T {
+} T {        return quote.getMidPrice();} T {
+} T \ \ \ \ \} T {
+} T \} T {
+}

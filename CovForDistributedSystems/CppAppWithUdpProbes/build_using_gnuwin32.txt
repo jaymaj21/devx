@@ -1,0 +1,5 @@
+REM Build the standalone probe demo (includes its own main)
+c++ -DMPREWRITER_STANDALONE=1 mprewriter.cpp -lws2_32 -o mprewriter.exe
+
+REM Build the fractal demo linking against the probe runtime (exclude main in mprewriter)
+c++ -DMPREWRITER_STANDALONE=0 mprewriter.cpp fractal_demo.cpp -lws2_32 -o fractal_demo.exe

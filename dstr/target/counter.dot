@@ -1,0 +1,15 @@
+digraph "counter" {
+  graph [rankdir="TB", labelloc="t", label="counter\nreachable 4/4 states\n4 visible transitions\n0 deadlocks\n0 invariant-bad states\nactions: inc, reset\nproperties: can-reach-three=true", fontname="Helvetica", overlap="false", splines="true", nodesep="0.3", ranksep="0.6"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, margin="0.18,0.12", color="#355070", fillcolor="#f8f9fb"];
+  edge [fontname="Helvetica", fontsize=10, color="#6d597a"];
+  "__start__" [shape=point, width=0.2, color="#2a9d8f", fillcolor="#2a9d8f", label=""];
+  "n_5b5b2278222c305d5d" [label="s0\nx = 0\ninit", tooltip="[[\"x\",0]]", fillcolor="#d8f3dc", color="#2d6a4f", penwidth=2];
+  "n_5b5b2278222c315d5d" [label="s1\nx = 1", tooltip="[[\"x\",1]]"];
+  "n_5b5b2278222c325d5d" [label="s2\nx = 2", tooltip="[[\"x\",2]]"];
+  "n_5b5b2278222c335d5d" [label="s3\nx = 3", tooltip="[[\"x\",3]]"];
+  "__start__" -> "n_5b5b2278222c305d5d" [color="#2a9d8f", penwidth=2];
+  "n_5b5b2278222c305d5d" -> "n_5b5b2278222c315d5d" [label="inc"];
+  "n_5b5b2278222c315d5d" -> "n_5b5b2278222c325d5d" [label="inc"];
+  "n_5b5b2278222c325d5d" -> "n_5b5b2278222c335d5d" [label="inc"];
+  "n_5b5b2278222c335d5d" -> "n_5b5b2278222c305d5d" [label="reset"];
+}

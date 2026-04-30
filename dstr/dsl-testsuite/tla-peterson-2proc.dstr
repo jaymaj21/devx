@@ -1,0 +1,136 @@
+; Variables:
+; - p1pc: control state of process 1.
+;   - a0: idle, before trying to enter.
+;   - a1: setting intent flag c1.
+;   - a2: assigning turn to process 2.
+;   - a3: waiting until the entry condition holds.
+;   - cs: inside the critical section.
+;   - a4: exit step, clearing intent and returning to idle.
+; - p2pc: control state of process 2.
+;   - a0: idle, before trying to enter.
+;   - a1: setting intent flag c2.
+;   - a2: assigning turn to process 1.
+;   - a3: waiting until the entry condition holds.
+;   - cs: inside the critical section.
+;   - a4: exit step, clearing intent and returning to idle.
+; - c1: process 1 intent flag.
+;   - t: process 1 wants to enter the critical section.
+;   - nil: process 1 is not currently requesting entry.
+; - c2: process 2 intent flag.
+;   - t: process 2 wants to enter the critical section.
+;   - nil: process 2 is not currently requesting entry.
+; - turn: tie-breaker indicating whose turn it is to wait.
+;   - 1: process 1 has priority if both contend.
+;   - 2: process 2 has priority if both contend.
+
+(system tla-peterson-2proc
+  (vars p1pc p2pc c1 c2 turn)
+  (domain p1pc a0 a1 a2 a3 cs a4)
+  (domain p2pc a0 a1 a2 a3 cs a4)
+  (domain c1 t nil)
+  (domain c2 t nil)
+  (domain turn 1 2)
+  (init
+    (= p1pc a0)
+    (= p2pc a0)
+    (= c1 nil)
+    (= c2 nil)
+    (= turn 1))
+  (action p1-a0
+    (= p1pc a0)
+    (= p1pc+ a1)
+    (= p2pc+ p2pc)
+    (= c1+ c1)
+    (= c2+ c2)
+    (= turn+ turn))
+  (action p1-a1
+    (= p1pc a1)
+    (= p1pc+ a2)
+    (= c1+ t)
+    (= p2pc+ p2pc)
+    (= c2+ c2)
+    (= turn+ turn))
+  (action p1-a2
+    (= p1pc a2)
+    (= p1pc+ a3)
+    (= turn+ 2)
+    (= p2pc+ p2pc)
+    (= c1+ c1)
+    (= c2+ c2))
+  (action p1-a3
+    (= p1pc a3)
+    (or (not c2) (= turn 1))
+    (= p1pc+ cs)
+    (= p2pc+ p2pc)
+    (= c1+ c1)
+    (= c2+ c2)
+    (= turn+ turn))
+  (action p1-cs
+    (= p1pc cs)
+    (= p1pc+ a4)
+    (= p2pc+ p2pc)
+    (= c1+ c1)
+    (= c2+ c2)
+    (= turn+ turn))
+  (action p1-a4
+    (= p1pc a4)
+    (= p1pc+ a0)
+    (= c1+ nil)
+    (= p2pc+ p2pc)
+    (= c2+ c2)
+    (= turn+ turn))
+  (action p2-a0
+    (= p2pc a0)
+    (= p2pc+ a1)
+    (= p1pc+ p1pc)
+    (= c1+ c1)
+    (= c2+ c2)
+    (= turn+ turn))
+  (action p2-a1
+    (= p2pc a1)
+    (= p2pc+ a2)
+    (= c2+ t)
+    (= p1pc+ p1pc)
+    (= c1+ c1)
+    (= turn+ turn))
+  (action p2-a2
+    (= p2pc a2)
+    (= p2pc+ a3)
+    (= turn+ 1)
+    (= p1pc+ p1pc)
+    (= c1+ c1)
+    (= c2+ c2))
+  (action p2-a3
+    (= p2pc a3)
+    (or (not c1) (= turn 2))
+    (= p2pc+ cs)
+    (= p1pc+ p1pc)
+    (= c1+ c1)
+    (= c2+ c2)
+    (= turn+ turn))
+  (action p2-cs
+    (= p2pc cs)
+    (= p2pc+ a4)
+    (= p1pc+ p1pc)
+    (= c1+ c1)
+    (= c2+ c2)
+    (= turn+ turn))
+  (action p2-a4
+    (= p2pc a4)
+    (= p2pc+ a0)
+    (= c2+ nil)
+    (= p1pc+ p1pc)
+    (= c1+ c1)
+    (= turn+ turn))
+  (next
+    (or @p1-a0 @p1-a1 @p1-a2 @p1-a3 @p1-cs @p1-a4
+        @p2-a0 @p2-a1 @p2-a2 @p2-a3 @p2-cs @p2-a4))
+  (invariant mutual-exclusion
+    (not
+      (and
+        (in p1pc (set cs a4))
+        (in p2pc (set cs a4)))))
+  (property p1-can-reach-cs
+    (eventually (= p1pc cs)))
+  (property p2-can-reach-cs
+    (eventually (= p2pc cs))))

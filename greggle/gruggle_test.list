@@ -1,0 +1,6 @@
+gruggle_testsuite/add_nodes_edges.test
+gruggle_testsuite/keep_paths_nodes_and_edges.test
+gruggle_testsuite/keep_path_edges_only.test
+gruggle_testsuite/add_remove_labels_on_paths.test
+gruggle_testsuite/remove_nodes_and_edges_between.test
+gruggle_testsuite/merge_and_svg.test

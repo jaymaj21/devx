@@ -1,0 +1,12 @@
+digraph comps {
+    graph [nodesep=0.35, ranksep=0.5, splines=spline];
+    node [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    edge [arrowsize=0.8, color="#4a6fa5", penwidth=1.2];
+    x1 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    x2 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    y1 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, label="y1:compB", shape=box, style="rounded,filled"];
+    y2 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, label="y2:compB", shape=box, style="rounded,filled"];
+    z1 [color="#4a6fa5", fillcolor="#e6f2ff", fontname=Helvetica, fontsize=10, shape=box, style="rounded,filled"];
+    x1 -> x2;
+    y1 -> y2 [label=compB];
+}

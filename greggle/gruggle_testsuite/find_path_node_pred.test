@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+set -euo pipefail
+node ../gruggle.js -i find_path_node_pred.dot chain "find-path (concat a (all-of a @TARGET)) pathlab"

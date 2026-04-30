@@ -1,0 +1,15 @@
+digraph sample1 {
+  s1;
+  s2;
+  a;
+  b;
+  t1;
+  t2;
+
+  s1 -> a [label="x"];
+  a  -> t1 [label="y"];
+  s2 -> b [label="x"];
+  b  -> t2 [label="y"];
+  a  -> b  [label="z"];
+  b  -> a  [label="w"];
+}

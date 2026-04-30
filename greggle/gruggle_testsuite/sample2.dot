@@ -1,0 +1,9 @@
+digraph sample2 {
+  s3;
+  mid;
+  t3;
+
+  s3  -> mid [label="p"];
+  mid -> t3  [label="q"];
+  mid -> a   [label="r"];
+}

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+node ../gruggle.js -i sample_components.dot chain \
+  "select-component-of-nodes x1" \
+  "add-labels-to-selected compA"

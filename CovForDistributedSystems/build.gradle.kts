@@ -1,0 +1,7 @@
+plugins { idea }
+
+subprojects {
+    tasks.withType<JavaCompile>().configureEach {
+        options.encoding = "UTF-8"
+    }
+}

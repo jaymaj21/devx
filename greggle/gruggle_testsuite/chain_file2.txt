@@ -1,0 +1,3 @@
+deselect-edges z
+select-nodes s1
+add-labels-to-selected beta

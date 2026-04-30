@@ -1,0 +1,15 @@
+echo DONT_FAIL_ON_DIFF
+echo DONT_FAIL_ON_ERROR
+tclsh.exe ../../JMWrap/gateway.tcl 19898 java -cp ../code-analytics/target/clojure-shell-1.0-SNAPSHOT-jar-with-dependencies.jar com.codeanalytics.ClojureShell &
+sleep 2
+(cd ../java-fractal-demo; java -jar target/java-fractal-demo-1.0-SNAPSHOT.jar )
+sleep 20
+tclsh ../../JMWrap/gateway_client.tcl 127.0.0.1 19898 :hits
+
+tclsh ../../JMWrap/gateway_client.tcl 127.0.0.1 19898 :exit
+
+tclsh ../../JMWrap/gateway_client.tcl 127.0.0.1 19898 gateway-exit
+sleep 1
+
+
+
