@@ -1,0 +1,3 @@
+[workspace]
+members = ["xml_schema_macro", "app"]
+resolver = "2"

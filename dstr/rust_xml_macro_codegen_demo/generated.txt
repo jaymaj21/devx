@@ -1,0 +1,2496 @@
+#![feature(prelude_import)]
+//! SupportDesk demo app
+//!
+//! This binary intentionally contains very little hand-written domain code.
+//! The XML schema drives generation of:
+//! - Rust domain structs
+//! - SQLite table creation and DAO functions
+//! - JSON serde helpers
+//! - TinyProto binary serializer/deserializer helpers
+extern crate std;
+#[prelude_import]
+use std::prelude::rust_2021::*;
+use rusqlite::Connection;
+use xml_schema_macro::generate_app_schema;
+pub mod generated_domain {
+    pub const XML_SCHEMA_PATH: &str = "schema/customer_support.xml";
+    pub struct Customer {
+        pub id: i64,
+        pub email: String,
+        pub display_name: String,
+        pub vip: bool,
+    }
+    #[automatically_derived]
+    impl ::core::fmt::Debug for Customer {
+        #[inline]
+        fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+            ::core::fmt::Formatter::debug_struct_field4_finish(
+                f,
+                "Customer",
+                "id",
+                &self.id,
+                "email",
+                &self.email,
+                "display_name",
+                &self.display_name,
+                "vip",
+                &&self.vip,
+            )
+        }
+    }
+    #[automatically_derived]
+    impl ::core::clone::Clone for Customer {
+        #[inline]
+        fn clone(&self) -> Customer {
+            Customer {
+                id: ::core::clone::Clone::clone(&self.id),
+                email: ::core::clone::Clone::clone(&self.email),
+                display_name: ::core::clone::Clone::clone(&self.display_name),
+                vip: ::core::clone::Clone::clone(&self.vip),
+            }
+        }
+    }
+    #[automatically_derived]
+    impl ::core::marker::StructuralPartialEq for Customer {}
+    #[automatically_derived]
+    impl ::core::cmp::PartialEq for Customer {
+        #[inline]
+        fn eq(&self, other: &Customer) -> bool {
+            self.id == other.id && self.vip == other.vip && self.email == other.email
+                && self.display_name == other.display_name
+        }
+    }
+    #[doc(hidden)]
+    #[allow(
+        non_upper_case_globals,
+        unused_attributes,
+        unused_qualifications,
+        clippy::absolute_paths,
+    )]
+    const _: () = {
+        #[allow(unused_extern_crates, clippy::useless_attribute)]
+        extern crate serde as _serde;
+        #[automatically_derived]
+        impl _serde::Serialize for Customer {
+            fn serialize<__S>(
+                &self,
+                __serializer: __S,
+            ) -> _serde::__private228::Result<__S::Ok, __S::Error>
+            where
+                __S: _serde::Serializer,
+            {
+                let mut __serde_state = _serde::Serializer::serialize_struct(
+                    __serializer,
+                    "Customer",
+                    false as usize + 1 + 1 + 1 + 1,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "id",
+                    &self.id,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "email",
+                    &self.email,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "display_name",
+                    &self.display_name,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "vip",
+                    &self.vip,
+                )?;
+                _serde::ser::SerializeStruct::end(__serde_state)
+            }
+        }
+    };
+    #[doc(hidden)]
+    #[allow(
+        non_upper_case_globals,
+        unused_attributes,
+        unused_qualifications,
+        clippy::absolute_paths,
+    )]
+    const _: () = {
+        #[allow(unused_extern_crates, clippy::useless_attribute)]
+        extern crate serde as _serde;
+        #[automatically_derived]
+        impl<'de> _serde::Deserialize<'de> for Customer {
+            fn deserialize<__D>(
+                __deserializer: __D,
+            ) -> _serde::__private228::Result<Self, __D::Error>
+            where
+                __D: _serde::Deserializer<'de>,
+            {
+                #[allow(non_camel_case_types)]
+                #[doc(hidden)]
+                enum __Field {
+                    __field0,
+                    __field1,
+                    __field2,
+                    __field3,
+                    __ignore,
+                }
+                #[doc(hidden)]
+                struct __FieldVisitor;
+                #[automatically_derived]
+                impl<'de> _serde::de::Visitor<'de> for __FieldVisitor {
+                    type Value = __Field;
+                    fn expecting(
+                        &self,
+                        __formatter: &mut _serde::__private228::Formatter,
+                    ) -> _serde::__private228::fmt::Result {
+                        _serde::__private228::Formatter::write_str(
+                            __formatter,
+                            "field identifier",
+                        )
+                    }
+                    fn visit_u64<__E>(
+                        self,
+                        __value: u64,
+                    ) -> _serde::__private228::Result<Self::Value, __E>
+                    where
+                        __E: _serde::de::Error,
+                    {
+                        match __value {
+                            0u64 => _serde::__private228::Ok(__Field::__field0),
+                            1u64 => _serde::__private228::Ok(__Field::__field1),
+                            2u64 => _serde::__private228::Ok(__Field::__field2),
+                            3u64 => _serde::__private228::Ok(__Field::__field3),
+                            _ => _serde::__private228::Ok(__Field::__ignore),
+                        }
+                    }
+                    fn visit_str<__E>(
+                        self,
+                        __value: &str,
+                    ) -> _serde::__private228::Result<Self::Value, __E>
+                    where
+                        __E: _serde::de::Error,
+                    {
+                        match __value {
+                            "id" => _serde::__private228::Ok(__Field::__field0),
+                            "email" => _serde::__private228::Ok(__Field::__field1),
+                            "display_name" => _serde::__private228::Ok(__Field::__field2),
+                            "vip" => _serde::__private228::Ok(__Field::__field3),
+                            _ => _serde::__private228::Ok(__Field::__ignore),
+                        }
+                    }
+                    fn visit_bytes<__E>(
+                        self,
+                        __value: &[u8],
+                    ) -> _serde::__private228::Result<Self::Value, __E>
+                    where
+                        __E: _serde::de::Error,
+                    {
+                        match __value {
+                            b"id" => _serde::__private228::Ok(__Field::__field0),
+                            b"email" => _serde::__private228::Ok(__Field::__field1),
+                            b"display_name" => {
+                                _serde::__private228::Ok(__Field::__field2)
+                            }
+                            b"vip" => _serde::__private228::Ok(__Field::__field3),
+                            _ => _serde::__private228::Ok(__Field::__ignore),
+                        }
+                    }
+                }
+                #[automatically_derived]
+                impl<'de> _serde::Deserialize<'de> for __Field {
+                    #[inline]
+                    fn deserialize<__D>(
+                        __deserializer: __D,
+                    ) -> _serde::__private228::Result<Self, __D::Error>
+                    where
+                        __D: _serde::Deserializer<'de>,
+                    {
+                        _serde::Deserializer::deserialize_identifier(
+                            __deserializer,
+                            __FieldVisitor,
+                        )
+                    }
+                }
+                #[doc(hidden)]
+                struct __Visitor<'de> {
+                    marker: _serde::__private228::PhantomData<Customer>,
+                    lifetime: _serde::__private228::PhantomData<&'de ()>,
+                }
+                #[automatically_derived]
+                impl<'de> _serde::de::Visitor<'de> for __Visitor<'de> {
+                    type Value = Customer;
+                    fn expecting(
+                        &self,
+                        __formatter: &mut _serde::__private228::Formatter,
+                    ) -> _serde::__private228::fmt::Result {
+                        _serde::__private228::Formatter::write_str(
+                            __formatter,
+                            "struct Customer",
+                        )
+                    }
+                    #[inline]
+                    fn visit_seq<__A>(
+                        self,
+                        mut __seq: __A,
+                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
+                    where
+                        __A: _serde::de::SeqAccess<'de>,
+                    {
+                        let __field0 = match _serde::de::SeqAccess::next_element::<
+                            i64,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        0usize,
+                                        &"struct Customer with 4 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        let __field1 = match _serde::de::SeqAccess::next_element::<
+                            String,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        1usize,
+                                        &"struct Customer with 4 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        let __field2 = match _serde::de::SeqAccess::next_element::<
+                            String,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        2usize,
+                                        &"struct Customer with 4 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        let __field3 = match _serde::de::SeqAccess::next_element::<
+                            bool,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        3usize,
+                                        &"struct Customer with 4 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        _serde::__private228::Ok(Customer {
+                            id: __field0,
+                            email: __field1,
+                            display_name: __field2,
+                            vip: __field3,
+                        })
+                    }
+                    #[inline]
+                    fn visit_map<__A>(
+                        self,
+                        mut __map: __A,
+                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
+                    where
+                        __A: _serde::de::MapAccess<'de>,
+                    {
+                        let mut __field0: _serde::__private228::Option<i64> = _serde::__private228::None;
+                        let mut __field1: _serde::__private228::Option<String> = _serde::__private228::None;
+                        let mut __field2: _serde::__private228::Option<String> = _serde::__private228::None;
+                        let mut __field3: _serde::__private228::Option<bool> = _serde::__private228::None;
+                        while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
+                            __Field,
+                        >(&mut __map)? {
+                            match __key {
+                                __Field::__field0 => {
+                                    if _serde::__private228::Option::is_some(&__field0) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field("id"),
+                                        );
+                                    }
+                                    __field0 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<i64>(&mut __map)?,
+                                    );
+                                }
+                                __Field::__field1 => {
+                                    if _serde::__private228::Option::is_some(&__field1) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field("email"),
+                                        );
+                                    }
+                                    __field1 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<String>(&mut __map)?,
+                                    );
+                                }
+                                __Field::__field2 => {
+                                    if _serde::__private228::Option::is_some(&__field2) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field(
+                                                "display_name",
+                                            ),
+                                        );
+                                    }
+                                    __field2 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<String>(&mut __map)?,
+                                    );
+                                }
+                                __Field::__field3 => {
+                                    if _serde::__private228::Option::is_some(&__field3) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field("vip"),
+                                        );
+                                    }
+                                    __field3 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<bool>(&mut __map)?,
+                                    );
+                                }
+                                _ => {
+                                    let _ = _serde::de::MapAccess::next_value::<
+                                        _serde::de::IgnoredAny,
+                                    >(&mut __map)?;
+                                }
+                            }
+                        }
+                        let __field0 = match __field0 {
+                            _serde::__private228::Some(__field0) => __field0,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("id")?
+                            }
+                        };
+                        let __field1 = match __field1 {
+                            _serde::__private228::Some(__field1) => __field1,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("email")?
+                            }
+                        };
+                        let __field2 = match __field2 {
+                            _serde::__private228::Some(__field2) => __field2,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("display_name")?
+                            }
+                        };
+                        let __field3 = match __field3 {
+                            _serde::__private228::Some(__field3) => __field3,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("vip")?
+                            }
+                        };
+                        _serde::__private228::Ok(Customer {
+                            id: __field0,
+                            email: __field1,
+                            display_name: __field2,
+                            vip: __field3,
+                        })
+                    }
+                }
+                #[doc(hidden)]
+                const FIELDS: &'static [&'static str] = &[
+                    "id",
+                    "email",
+                    "display_name",
+                    "vip",
+                ];
+                _serde::Deserializer::deserialize_struct(
+                    __deserializer,
+                    "Customer",
+                    FIELDS,
+                    __Visitor {
+                        marker: _serde::__private228::PhantomData::<Customer>,
+                        lifetime: _serde::__private228::PhantomData,
+                    },
+                )
+            }
+        }
+    };
+    pub struct Agent {
+        pub id: i64,
+        pub handle: String,
+        pub team: String,
+    }
+    #[automatically_derived]
+    impl ::core::fmt::Debug for Agent {
+        #[inline]
+        fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+            ::core::fmt::Formatter::debug_struct_field3_finish(
+                f,
+                "Agent",
+                "id",
+                &self.id,
+                "handle",
+                &self.handle,
+                "team",
+                &&self.team,
+            )
+        }
+    }
+    #[automatically_derived]
+    impl ::core::clone::Clone for Agent {
+        #[inline]
+        fn clone(&self) -> Agent {
+            Agent {
+                id: ::core::clone::Clone::clone(&self.id),
+                handle: ::core::clone::Clone::clone(&self.handle),
+                team: ::core::clone::Clone::clone(&self.team),
+            }
+        }
+    }
+    #[automatically_derived]
+    impl ::core::marker::StructuralPartialEq for Agent {}
+    #[automatically_derived]
+    impl ::core::cmp::PartialEq for Agent {
+        #[inline]
+        fn eq(&self, other: &Agent) -> bool {
+            self.id == other.id && self.handle == other.handle && self.team == other.team
+        }
+    }
+    #[doc(hidden)]
+    #[allow(
+        non_upper_case_globals,
+        unused_attributes,
+        unused_qualifications,
+        clippy::absolute_paths,
+    )]
+    const _: () = {
+        #[allow(unused_extern_crates, clippy::useless_attribute)]
+        extern crate serde as _serde;
+        #[automatically_derived]
+        impl _serde::Serialize for Agent {
+            fn serialize<__S>(
+                &self,
+                __serializer: __S,
+            ) -> _serde::__private228::Result<__S::Ok, __S::Error>
+            where
+                __S: _serde::Serializer,
+            {
+                let mut __serde_state = _serde::Serializer::serialize_struct(
+                    __serializer,
+                    "Agent",
+                    false as usize + 1 + 1 + 1,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "id",
+                    &self.id,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "handle",
+                    &self.handle,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "team",
+                    &self.team,
+                )?;
+                _serde::ser::SerializeStruct::end(__serde_state)
+            }
+        }
+    };
+    #[doc(hidden)]
+    #[allow(
+        non_upper_case_globals,
+        unused_attributes,
+        unused_qualifications,
+        clippy::absolute_paths,
+    )]
+    const _: () = {
+        #[allow(unused_extern_crates, clippy::useless_attribute)]
+        extern crate serde as _serde;
+        #[automatically_derived]
+        impl<'de> _serde::Deserialize<'de> for Agent {
+            fn deserialize<__D>(
+                __deserializer: __D,
+            ) -> _serde::__private228::Result<Self, __D::Error>
+            where
+                __D: _serde::Deserializer<'de>,
+            {
+                #[allow(non_camel_case_types)]
+                #[doc(hidden)]
+                enum __Field {
+                    __field0,
+                    __field1,
+                    __field2,
+                    __ignore,
+                }
+                #[doc(hidden)]
+                struct __FieldVisitor;
+                #[automatically_derived]
+                impl<'de> _serde::de::Visitor<'de> for __FieldVisitor {
+                    type Value = __Field;
+                    fn expecting(
+                        &self,
+                        __formatter: &mut _serde::__private228::Formatter,
+                    ) -> _serde::__private228::fmt::Result {
+                        _serde::__private228::Formatter::write_str(
+                            __formatter,
+                            "field identifier",
+                        )
+                    }
+                    fn visit_u64<__E>(
+                        self,
+                        __value: u64,
+                    ) -> _serde::__private228::Result<Self::Value, __E>
+                    where
+                        __E: _serde::de::Error,
+                    {
+                        match __value {
+                            0u64 => _serde::__private228::Ok(__Field::__field0),
+                            1u64 => _serde::__private228::Ok(__Field::__field1),
+                            2u64 => _serde::__private228::Ok(__Field::__field2),
+                            _ => _serde::__private228::Ok(__Field::__ignore),
+                        }
+                    }
+                    fn visit_str<__E>(
+                        self,
+                        __value: &str,
+                    ) -> _serde::__private228::Result<Self::Value, __E>
+                    where
+                        __E: _serde::de::Error,
+                    {
+                        match __value {
+                            "id" => _serde::__private228::Ok(__Field::__field0),
+                            "handle" => _serde::__private228::Ok(__Field::__field1),
+                            "team" => _serde::__private228::Ok(__Field::__field2),
+                            _ => _serde::__private228::Ok(__Field::__ignore),
+                        }
+                    }
+                    fn visit_bytes<__E>(
+                        self,
+                        __value: &[u8],
+                    ) -> _serde::__private228::Result<Self::Value, __E>
+                    where
+                        __E: _serde::de::Error,
+                    {
+                        match __value {
+                            b"id" => _serde::__private228::Ok(__Field::__field0),
+                            b"handle" => _serde::__private228::Ok(__Field::__field1),
+                            b"team" => _serde::__private228::Ok(__Field::__field2),
+                            _ => _serde::__private228::Ok(__Field::__ignore),
+                        }
+                    }
+                }
+                #[automatically_derived]
+                impl<'de> _serde::Deserialize<'de> for __Field {
+                    #[inline]
+                    fn deserialize<__D>(
+                        __deserializer: __D,
+                    ) -> _serde::__private228::Result<Self, __D::Error>
+                    where
+                        __D: _serde::Deserializer<'de>,
+                    {
+                        _serde::Deserializer::deserialize_identifier(
+                            __deserializer,
+                            __FieldVisitor,
+                        )
+                    }
+                }
+                #[doc(hidden)]
+                struct __Visitor<'de> {
+                    marker: _serde::__private228::PhantomData<Agent>,
+                    lifetime: _serde::__private228::PhantomData<&'de ()>,
+                }
+                #[automatically_derived]
+                impl<'de> _serde::de::Visitor<'de> for __Visitor<'de> {
+                    type Value = Agent;
+                    fn expecting(
+                        &self,
+                        __formatter: &mut _serde::__private228::Formatter,
+                    ) -> _serde::__private228::fmt::Result {
+                        _serde::__private228::Formatter::write_str(
+                            __formatter,
+                            "struct Agent",
+                        )
+                    }
+                    #[inline]
+                    fn visit_seq<__A>(
+                        self,
+                        mut __seq: __A,
+                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
+                    where
+                        __A: _serde::de::SeqAccess<'de>,
+                    {
+                        let __field0 = match _serde::de::SeqAccess::next_element::<
+                            i64,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        0usize,
+                                        &"struct Agent with 3 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        let __field1 = match _serde::de::SeqAccess::next_element::<
+                            String,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        1usize,
+                                        &"struct Agent with 3 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        let __field2 = match _serde::de::SeqAccess::next_element::<
+                            String,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        2usize,
+                                        &"struct Agent with 3 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        _serde::__private228::Ok(Agent {
+                            id: __field0,
+                            handle: __field1,
+                            team: __field2,
+                        })
+                    }
+                    #[inline]
+                    fn visit_map<__A>(
+                        self,
+                        mut __map: __A,
+                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
+                    where
+                        __A: _serde::de::MapAccess<'de>,
+                    {
+                        let mut __field0: _serde::__private228::Option<i64> = _serde::__private228::None;
+                        let mut __field1: _serde::__private228::Option<String> = _serde::__private228::None;
+                        let mut __field2: _serde::__private228::Option<String> = _serde::__private228::None;
+                        while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
+                            __Field,
+                        >(&mut __map)? {
+                            match __key {
+                                __Field::__field0 => {
+                                    if _serde::__private228::Option::is_some(&__field0) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field("id"),
+                                        );
+                                    }
+                                    __field0 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<i64>(&mut __map)?,
+                                    );
+                                }
+                                __Field::__field1 => {
+                                    if _serde::__private228::Option::is_some(&__field1) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field("handle"),
+                                        );
+                                    }
+                                    __field1 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<String>(&mut __map)?,
+                                    );
+                                }
+                                __Field::__field2 => {
+                                    if _serde::__private228::Option::is_some(&__field2) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field("team"),
+                                        );
+                                    }
+                                    __field2 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<String>(&mut __map)?,
+                                    );
+                                }
+                                _ => {
+                                    let _ = _serde::de::MapAccess::next_value::<
+                                        _serde::de::IgnoredAny,
+                                    >(&mut __map)?;
+                                }
+                            }
+                        }
+                        let __field0 = match __field0 {
+                            _serde::__private228::Some(__field0) => __field0,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("id")?
+                            }
+                        };
+                        let __field1 = match __field1 {
+                            _serde::__private228::Some(__field1) => __field1,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("handle")?
+                            }
+                        };
+                        let __field2 = match __field2 {
+                            _serde::__private228::Some(__field2) => __field2,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("team")?
+                            }
+                        };
+                        _serde::__private228::Ok(Agent {
+                            id: __field0,
+                            handle: __field1,
+                            team: __field2,
+                        })
+                    }
+                }
+                #[doc(hidden)]
+                const FIELDS: &'static [&'static str] = &["id", "handle", "team"];
+                _serde::Deserializer::deserialize_struct(
+                    __deserializer,
+                    "Agent",
+                    FIELDS,
+                    __Visitor {
+                        marker: _serde::__private228::PhantomData::<Agent>,
+                        lifetime: _serde::__private228::PhantomData,
+                    },
+                )
+            }
+        }
+    };
+    pub struct Ticket {
+        pub id: i64,
+        pub customer_id: i64,
+        pub agent_id: i64,
+        pub subject: String,
+        pub status: String,
+        pub priority: i64,
+    }
+    #[automatically_derived]
+    impl ::core::fmt::Debug for Ticket {
+        #[inline]
+        fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+            let names: &'static _ = &[
+                "id",
+                "customer_id",
+                "agent_id",
+                "subject",
+                "status",
+                "priority",
+            ];
+            let values: &[&dyn ::core::fmt::Debug] = &[
+                &self.id,
+                &self.customer_id,
+                &self.agent_id,
+                &self.subject,
+                &self.status,
+                &&self.priority,
+            ];
+            ::core::fmt::Formatter::debug_struct_fields_finish(
+                f,
+                "Ticket",
+                names,
+                values,
+            )
+        }
+    }
+    #[automatically_derived]
+    impl ::core::clone::Clone for Ticket {
+        #[inline]
+        fn clone(&self) -> Ticket {
+            Ticket {
+                id: ::core::clone::Clone::clone(&self.id),
+                customer_id: ::core::clone::Clone::clone(&self.customer_id),
+                agent_id: ::core::clone::Clone::clone(&self.agent_id),
+                subject: ::core::clone::Clone::clone(&self.subject),
+                status: ::core::clone::Clone::clone(&self.status),
+                priority: ::core::clone::Clone::clone(&self.priority),
+            }
+        }
+    }
+    #[automatically_derived]
+    impl ::core::marker::StructuralPartialEq for Ticket {}
+    #[automatically_derived]
+    impl ::core::cmp::PartialEq for Ticket {
+        #[inline]
+        fn eq(&self, other: &Ticket) -> bool {
+            self.id == other.id && self.customer_id == other.customer_id
+                && self.agent_id == other.agent_id && self.priority == other.priority
+                && self.subject == other.subject && self.status == other.status
+        }
+    }
+    #[doc(hidden)]
+    #[allow(
+        non_upper_case_globals,
+        unused_attributes,
+        unused_qualifications,
+        clippy::absolute_paths,
+    )]
+    const _: () = {
+        #[allow(unused_extern_crates, clippy::useless_attribute)]
+        extern crate serde as _serde;
+        #[automatically_derived]
+        impl _serde::Serialize for Ticket {
+            fn serialize<__S>(
+                &self,
+                __serializer: __S,
+            ) -> _serde::__private228::Result<__S::Ok, __S::Error>
+            where
+                __S: _serde::Serializer,
+            {
+                let mut __serde_state = _serde::Serializer::serialize_struct(
+                    __serializer,
+                    "Ticket",
+                    false as usize + 1 + 1 + 1 + 1 + 1 + 1,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "id",
+                    &self.id,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "customer_id",
+                    &self.customer_id,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "agent_id",
+                    &self.agent_id,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "subject",
+                    &self.subject,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "status",
+                    &self.status,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "priority",
+                    &self.priority,
+                )?;
+                _serde::ser::SerializeStruct::end(__serde_state)
+            }
+        }
+    };
+    #[doc(hidden)]
+    #[allow(
+        non_upper_case_globals,
+        unused_attributes,
+        unused_qualifications,
+        clippy::absolute_paths,
+    )]
+    const _: () = {
+        #[allow(unused_extern_crates, clippy::useless_attribute)]
+        extern crate serde as _serde;
+        #[automatically_derived]
+        impl<'de> _serde::Deserialize<'de> for Ticket {
+            fn deserialize<__D>(
+                __deserializer: __D,
+            ) -> _serde::__private228::Result<Self, __D::Error>
+            where
+                __D: _serde::Deserializer<'de>,
+            {
+                #[allow(non_camel_case_types)]
+                #[doc(hidden)]
+                enum __Field {
+                    __field0,
+                    __field1,
+                    __field2,
+                    __field3,
+                    __field4,
+                    __field5,
+                    __ignore,
+                }
+                #[doc(hidden)]
+                struct __FieldVisitor;
+                #[automatically_derived]
+                impl<'de> _serde::de::Visitor<'de> for __FieldVisitor {
+                    type Value = __Field;
+                    fn expecting(
+                        &self,
+                        __formatter: &mut _serde::__private228::Formatter,
+                    ) -> _serde::__private228::fmt::Result {
+                        _serde::__private228::Formatter::write_str(
+                            __formatter,
+                            "field identifier",
+                        )
+                    }
+                    fn visit_u64<__E>(
+                        self,
+                        __value: u64,
+                    ) -> _serde::__private228::Result<Self::Value, __E>
+                    where
+                        __E: _serde::de::Error,
+                    {
+                        match __value {
+                            0u64 => _serde::__private228::Ok(__Field::__field0),
+                            1u64 => _serde::__private228::Ok(__Field::__field1),
+                            2u64 => _serde::__private228::Ok(__Field::__field2),
+                            3u64 => _serde::__private228::Ok(__Field::__field3),
+                            4u64 => _serde::__private228::Ok(__Field::__field4),
+                            5u64 => _serde::__private228::Ok(__Field::__field5),
+                            _ => _serde::__private228::Ok(__Field::__ignore),
+                        }
+                    }
+                    fn visit_str<__E>(
+                        self,
+                        __value: &str,
+                    ) -> _serde::__private228::Result<Self::Value, __E>
+                    where
+                        __E: _serde::de::Error,
+                    {
+                        match __value {
+                            "id" => _serde::__private228::Ok(__Field::__field0),
+                            "customer_id" => _serde::__private228::Ok(__Field::__field1),
+                            "agent_id" => _serde::__private228::Ok(__Field::__field2),
+                            "subject" => _serde::__private228::Ok(__Field::__field3),
+                            "status" => _serde::__private228::Ok(__Field::__field4),
+                            "priority" => _serde::__private228::Ok(__Field::__field5),
+                            _ => _serde::__private228::Ok(__Field::__ignore),
+                        }
+                    }
+                    fn visit_bytes<__E>(
+                        self,
+                        __value: &[u8],
+                    ) -> _serde::__private228::Result<Self::Value, __E>
+                    where
+                        __E: _serde::de::Error,
+                    {
+                        match __value {
+                            b"id" => _serde::__private228::Ok(__Field::__field0),
+                            b"customer_id" => _serde::__private228::Ok(__Field::__field1),
+                            b"agent_id" => _serde::__private228::Ok(__Field::__field2),
+                            b"subject" => _serde::__private228::Ok(__Field::__field3),
+                            b"status" => _serde::__private228::Ok(__Field::__field4),
+                            b"priority" => _serde::__private228::Ok(__Field::__field5),
+                            _ => _serde::__private228::Ok(__Field::__ignore),
+                        }
+                    }
+                }
+                #[automatically_derived]
+                impl<'de> _serde::Deserialize<'de> for __Field {
+                    #[inline]
+                    fn deserialize<__D>(
+                        __deserializer: __D,
+                    ) -> _serde::__private228::Result<Self, __D::Error>
+                    where
+                        __D: _serde::Deserializer<'de>,
+                    {
+                        _serde::Deserializer::deserialize_identifier(
+                            __deserializer,
+                            __FieldVisitor,
+                        )
+                    }
+                }
+                #[doc(hidden)]
+                struct __Visitor<'de> {
+                    marker: _serde::__private228::PhantomData<Ticket>,
+                    lifetime: _serde::__private228::PhantomData<&'de ()>,
+                }
+                #[automatically_derived]
+                impl<'de> _serde::de::Visitor<'de> for __Visitor<'de> {
+                    type Value = Ticket;
+                    fn expecting(
+                        &self,
+                        __formatter: &mut _serde::__private228::Formatter,
+                    ) -> _serde::__private228::fmt::Result {
+                        _serde::__private228::Formatter::write_str(
+                            __formatter,
+                            "struct Ticket",
+                        )
+                    }
+                    #[inline]
+                    fn visit_seq<__A>(
+                        self,
+                        mut __seq: __A,
+                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
+                    where
+                        __A: _serde::de::SeqAccess<'de>,
+                    {
+                        let __field0 = match _serde::de::SeqAccess::next_element::<
+                            i64,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        0usize,
+                                        &"struct Ticket with 6 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        let __field1 = match _serde::de::SeqAccess::next_element::<
+                            i64,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        1usize,
+                                        &"struct Ticket with 6 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        let __field2 = match _serde::de::SeqAccess::next_element::<
+                            i64,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        2usize,
+                                        &"struct Ticket with 6 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        let __field3 = match _serde::de::SeqAccess::next_element::<
+                            String,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        3usize,
+                                        &"struct Ticket with 6 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        let __field4 = match _serde::de::SeqAccess::next_element::<
+                            String,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        4usize,
+                                        &"struct Ticket with 6 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        let __field5 = match _serde::de::SeqAccess::next_element::<
+                            i64,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        5usize,
+                                        &"struct Ticket with 6 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        _serde::__private228::Ok(Ticket {
+                            id: __field0,
+                            customer_id: __field1,
+                            agent_id: __field2,
+                            subject: __field3,
+                            status: __field4,
+                            priority: __field5,
+                        })
+                    }
+                    #[inline]
+                    fn visit_map<__A>(
+                        self,
+                        mut __map: __A,
+                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
+                    where
+                        __A: _serde::de::MapAccess<'de>,
+                    {
+                        let mut __field0: _serde::__private228::Option<i64> = _serde::__private228::None;
+                        let mut __field1: _serde::__private228::Option<i64> = _serde::__private228::None;
+                        let mut __field2: _serde::__private228::Option<i64> = _serde::__private228::None;
+                        let mut __field3: _serde::__private228::Option<String> = _serde::__private228::None;
+                        let mut __field4: _serde::__private228::Option<String> = _serde::__private228::None;
+                        let mut __field5: _serde::__private228::Option<i64> = _serde::__private228::None;
+                        while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
+                            __Field,
+                        >(&mut __map)? {
+                            match __key {
+                                __Field::__field0 => {
+                                    if _serde::__private228::Option::is_some(&__field0) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field("id"),
+                                        );
+                                    }
+                                    __field0 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<i64>(&mut __map)?,
+                                    );
+                                }
+                                __Field::__field1 => {
+                                    if _serde::__private228::Option::is_some(&__field1) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field(
+                                                "customer_id",
+                                            ),
+                                        );
+                                    }
+                                    __field1 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<i64>(&mut __map)?,
+                                    );
+                                }
+                                __Field::__field2 => {
+                                    if _serde::__private228::Option::is_some(&__field2) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field(
+                                                "agent_id",
+                                            ),
+                                        );
+                                    }
+                                    __field2 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<i64>(&mut __map)?,
+                                    );
+                                }
+                                __Field::__field3 => {
+                                    if _serde::__private228::Option::is_some(&__field3) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field(
+                                                "subject",
+                                            ),
+                                        );
+                                    }
+                                    __field3 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<String>(&mut __map)?,
+                                    );
+                                }
+                                __Field::__field4 => {
+                                    if _serde::__private228::Option::is_some(&__field4) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field("status"),
+                                        );
+                                    }
+                                    __field4 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<String>(&mut __map)?,
+                                    );
+                                }
+                                __Field::__field5 => {
+                                    if _serde::__private228::Option::is_some(&__field5) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field(
+                                                "priority",
+                                            ),
+                                        );
+                                    }
+                                    __field5 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<i64>(&mut __map)?,
+                                    );
+                                }
+                                _ => {
+                                    let _ = _serde::de::MapAccess::next_value::<
+                                        _serde::de::IgnoredAny,
+                                    >(&mut __map)?;
+                                }
+                            }
+                        }
+                        let __field0 = match __field0 {
+                            _serde::__private228::Some(__field0) => __field0,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("id")?
+                            }
+                        };
+                        let __field1 = match __field1 {
+                            _serde::__private228::Some(__field1) => __field1,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("customer_id")?
+                            }
+                        };
+                        let __field2 = match __field2 {
+                            _serde::__private228::Some(__field2) => __field2,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("agent_id")?
+                            }
+                        };
+                        let __field3 = match __field3 {
+                            _serde::__private228::Some(__field3) => __field3,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("subject")?
+                            }
+                        };
+                        let __field4 = match __field4 {
+                            _serde::__private228::Some(__field4) => __field4,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("status")?
+                            }
+                        };
+                        let __field5 = match __field5 {
+                            _serde::__private228::Some(__field5) => __field5,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("priority")?
+                            }
+                        };
+                        _serde::__private228::Ok(Ticket {
+                            id: __field0,
+                            customer_id: __field1,
+                            agent_id: __field2,
+                            subject: __field3,
+                            status: __field4,
+                            priority: __field5,
+                        })
+                    }
+                }
+                #[doc(hidden)]
+                const FIELDS: &'static [&'static str] = &[
+                    "id",
+                    "customer_id",
+                    "agent_id",
+                    "subject",
+                    "status",
+                    "priority",
+                ];
+                _serde::Deserializer::deserialize_struct(
+                    __deserializer,
+                    "Ticket",
+                    FIELDS,
+                    __Visitor {
+                        marker: _serde::__private228::PhantomData::<Ticket>,
+                        lifetime: _serde::__private228::PhantomData,
+                    },
+                )
+            }
+        }
+    };
+    pub struct TicketMessage {
+        pub id: i64,
+        pub ticket_id: i64,
+        pub sender: String,
+        pub body: String,
+        pub created_at_epoch: i64,
+    }
+    #[automatically_derived]
+    impl ::core::fmt::Debug for TicketMessage {
+        #[inline]
+        fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+            ::core::fmt::Formatter::debug_struct_field5_finish(
+                f,
+                "TicketMessage",
+                "id",
+                &self.id,
+                "ticket_id",
+                &self.ticket_id,
+                "sender",
+                &self.sender,
+                "body",
+                &self.body,
+                "created_at_epoch",
+                &&self.created_at_epoch,
+            )
+        }
+    }
+    #[automatically_derived]
+    impl ::core::clone::Clone for TicketMessage {
+        #[inline]
+        fn clone(&self) -> TicketMessage {
+            TicketMessage {
+                id: ::core::clone::Clone::clone(&self.id),
+                ticket_id: ::core::clone::Clone::clone(&self.ticket_id),
+                sender: ::core::clone::Clone::clone(&self.sender),
+                body: ::core::clone::Clone::clone(&self.body),
+                created_at_epoch: ::core::clone::Clone::clone(&self.created_at_epoch),
+            }
+        }
+    }
+    #[automatically_derived]
+    impl ::core::marker::StructuralPartialEq for TicketMessage {}
+    #[automatically_derived]
+    impl ::core::cmp::PartialEq for TicketMessage {
+        #[inline]
+        fn eq(&self, other: &TicketMessage) -> bool {
+            self.id == other.id && self.ticket_id == other.ticket_id
+                && self.created_at_epoch == other.created_at_epoch
+                && self.sender == other.sender && self.body == other.body
+        }
+    }
+    #[doc(hidden)]
+    #[allow(
+        non_upper_case_globals,
+        unused_attributes,
+        unused_qualifications,
+        clippy::absolute_paths,
+    )]
+    const _: () = {
+        #[allow(unused_extern_crates, clippy::useless_attribute)]
+        extern crate serde as _serde;
+        #[automatically_derived]
+        impl _serde::Serialize for TicketMessage {
+            fn serialize<__S>(
+                &self,
+                __serializer: __S,
+            ) -> _serde::__private228::Result<__S::Ok, __S::Error>
+            where
+                __S: _serde::Serializer,
+            {
+                let mut __serde_state = _serde::Serializer::serialize_struct(
+                    __serializer,
+                    "TicketMessage",
+                    false as usize + 1 + 1 + 1 + 1 + 1,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "id",
+                    &self.id,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "ticket_id",
+                    &self.ticket_id,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "sender",
+                    &self.sender,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "body",
+                    &self.body,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "created_at_epoch",
+                    &self.created_at_epoch,
+                )?;
+                _serde::ser::SerializeStruct::end(__serde_state)
+            }
+        }
+    };
+    #[doc(hidden)]
+    #[allow(
+        non_upper_case_globals,
+        unused_attributes,
+        unused_qualifications,
+        clippy::absolute_paths,
+    )]
+    const _: () = {
+        #[allow(unused_extern_crates, clippy::useless_attribute)]
+        extern crate serde as _serde;
+        #[automatically_derived]
+        impl<'de> _serde::Deserialize<'de> for TicketMessage {
+            fn deserialize<__D>(
+                __deserializer: __D,
+            ) -> _serde::__private228::Result<Self, __D::Error>
+            where
+                __D: _serde::Deserializer<'de>,
+            {
+                #[allow(non_camel_case_types)]
+                #[doc(hidden)]
+                enum __Field {
+                    __field0,
+                    __field1,
+                    __field2,
+                    __field3,
+                    __field4,
+                    __ignore,
+                }
+                #[doc(hidden)]
+                struct __FieldVisitor;
+                #[automatically_derived]
+                impl<'de> _serde::de::Visitor<'de> for __FieldVisitor {
+                    type Value = __Field;
+                    fn expecting(
+                        &self,
+                        __formatter: &mut _serde::__private228::Formatter,
+                    ) -> _serde::__private228::fmt::Result {
+                        _serde::__private228::Formatter::write_str(
+                            __formatter,
+                            "field identifier",
+                        )
+                    }
+                    fn visit_u64<__E>(
+                        self,
+                        __value: u64,
+                    ) -> _serde::__private228::Result<Self::Value, __E>
+                    where
+                        __E: _serde::de::Error,
+                    {
+                        match __value {
+                            0u64 => _serde::__private228::Ok(__Field::__field0),
+                            1u64 => _serde::__private228::Ok(__Field::__field1),
+                            2u64 => _serde::__private228::Ok(__Field::__field2),
+                            3u64 => _serde::__private228::Ok(__Field::__field3),
+                            4u64 => _serde::__private228::Ok(__Field::__field4),
+                            _ => _serde::__private228::Ok(__Field::__ignore),
+                        }
+                    }
+                    fn visit_str<__E>(
+                        self,
+                        __value: &str,
+                    ) -> _serde::__private228::Result<Self::Value, __E>
+                    where
+                        __E: _serde::de::Error,
+                    {
+                        match __value {
+                            "id" => _serde::__private228::Ok(__Field::__field0),
+                            "ticket_id" => _serde::__private228::Ok(__Field::__field1),
+                            "sender" => _serde::__private228::Ok(__Field::__field2),
+                            "body" => _serde::__private228::Ok(__Field::__field3),
+                            "created_at_epoch" => {
+                                _serde::__private228::Ok(__Field::__field4)
+                            }
+                            _ => _serde::__private228::Ok(__Field::__ignore),
+                        }
+                    }
+                    fn visit_bytes<__E>(
+                        self,
+                        __value: &[u8],
+                    ) -> _serde::__private228::Result<Self::Value, __E>
+                    where
+                        __E: _serde::de::Error,
+                    {
+                        match __value {
+                            b"id" => _serde::__private228::Ok(__Field::__field0),
+                            b"ticket_id" => _serde::__private228::Ok(__Field::__field1),
+                            b"sender" => _serde::__private228::Ok(__Field::__field2),
+                            b"body" => _serde::__private228::Ok(__Field::__field3),
+                            b"created_at_epoch" => {
+                                _serde::__private228::Ok(__Field::__field4)
+                            }
+                            _ => _serde::__private228::Ok(__Field::__ignore),
+                        }
+                    }
+                }
+                #[automatically_derived]
+                impl<'de> _serde::Deserialize<'de> for __Field {
+                    #[inline]
+                    fn deserialize<__D>(
+                        __deserializer: __D,
+                    ) -> _serde::__private228::Result<Self, __D::Error>
+                    where
+                        __D: _serde::Deserializer<'de>,
+                    {
+                        _serde::Deserializer::deserialize_identifier(
+                            __deserializer,
+                            __FieldVisitor,
+                        )
+                    }
+                }
+                #[doc(hidden)]
+                struct __Visitor<'de> {
+                    marker: _serde::__private228::PhantomData<TicketMessage>,
+                    lifetime: _serde::__private228::PhantomData<&'de ()>,
+                }
+                #[automatically_derived]
+                impl<'de> _serde::de::Visitor<'de> for __Visitor<'de> {
+                    type Value = TicketMessage;
+                    fn expecting(
+                        &self,
+                        __formatter: &mut _serde::__private228::Formatter,
+                    ) -> _serde::__private228::fmt::Result {
+                        _serde::__private228::Formatter::write_str(
+                            __formatter,
+                            "struct TicketMessage",
+                        )
+                    }
+                    #[inline]
+                    fn visit_seq<__A>(
+                        self,
+                        mut __seq: __A,
+                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
+                    where
+                        __A: _serde::de::SeqAccess<'de>,
+                    {
+                        let __field0 = match _serde::de::SeqAccess::next_element::<
+                            i64,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        0usize,
+                                        &"struct TicketMessage with 5 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        let __field1 = match _serde::de::SeqAccess::next_element::<
+                            i64,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        1usize,
+                                        &"struct TicketMessage with 5 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        let __field2 = match _serde::de::SeqAccess::next_element::<
+                            String,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        2usize,
+                                        &"struct TicketMessage with 5 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        let __field3 = match _serde::de::SeqAccess::next_element::<
+                            String,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        3usize,
+                                        &"struct TicketMessage with 5 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        let __field4 = match _serde::de::SeqAccess::next_element::<
+                            i64,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        4usize,
+                                        &"struct TicketMessage with 5 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        _serde::__private228::Ok(TicketMessage {
+                            id: __field0,
+                            ticket_id: __field1,
+                            sender: __field2,
+                            body: __field3,
+                            created_at_epoch: __field4,
+                        })
+                    }
+                    #[inline]
+                    fn visit_map<__A>(
+                        self,
+                        mut __map: __A,
+                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
+                    where
+                        __A: _serde::de::MapAccess<'de>,
+                    {
+                        let mut __field0: _serde::__private228::Option<i64> = _serde::__private228::None;
+                        let mut __field1: _serde::__private228::Option<i64> = _serde::__private228::None;
+                        let mut __field2: _serde::__private228::Option<String> = _serde::__private228::None;
+                        let mut __field3: _serde::__private228::Option<String> = _serde::__private228::None;
+                        let mut __field4: _serde::__private228::Option<i64> = _serde::__private228::None;
+                        while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
+                            __Field,
+                        >(&mut __map)? {
+                            match __key {
+                                __Field::__field0 => {
+                                    if _serde::__private228::Option::is_some(&__field0) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field("id"),
+                                        );
+                                    }
+                                    __field0 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<i64>(&mut __map)?,
+                                    );
+                                }
+                                __Field::__field1 => {
+                                    if _serde::__private228::Option::is_some(&__field1) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field(
+                                                "ticket_id",
+                                            ),
+                                        );
+                                    }
+                                    __field1 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<i64>(&mut __map)?,
+                                    );
+                                }
+                                __Field::__field2 => {
+                                    if _serde::__private228::Option::is_some(&__field2) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field("sender"),
+                                        );
+                                    }
+                                    __field2 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<String>(&mut __map)?,
+                                    );
+                                }
+                                __Field::__field3 => {
+                                    if _serde::__private228::Option::is_some(&__field3) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field("body"),
+                                        );
+                                    }
+                                    __field3 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<String>(&mut __map)?,
+                                    );
+                                }
+                                __Field::__field4 => {
+                                    if _serde::__private228::Option::is_some(&__field4) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field(
+                                                "created_at_epoch",
+                                            ),
+                                        );
+                                    }
+                                    __field4 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<i64>(&mut __map)?,
+                                    );
+                                }
+                                _ => {
+                                    let _ = _serde::de::MapAccess::next_value::<
+                                        _serde::de::IgnoredAny,
+                                    >(&mut __map)?;
+                                }
+                            }
+                        }
+                        let __field0 = match __field0 {
+                            _serde::__private228::Some(__field0) => __field0,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("id")?
+                            }
+                        };
+                        let __field1 = match __field1 {
+                            _serde::__private228::Some(__field1) => __field1,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("ticket_id")?
+                            }
+                        };
+                        let __field2 = match __field2 {
+                            _serde::__private228::Some(__field2) => __field2,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("sender")?
+                            }
+                        };
+                        let __field3 = match __field3 {
+                            _serde::__private228::Some(__field3) => __field3,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("body")?
+                            }
+                        };
+                        let __field4 = match __field4 {
+                            _serde::__private228::Some(__field4) => __field4,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("created_at_epoch")?
+                            }
+                        };
+                        _serde::__private228::Ok(TicketMessage {
+                            id: __field0,
+                            ticket_id: __field1,
+                            sender: __field2,
+                            body: __field3,
+                            created_at_epoch: __field4,
+                        })
+                    }
+                }
+                #[doc(hidden)]
+                const FIELDS: &'static [&'static str] = &[
+                    "id",
+                    "ticket_id",
+                    "sender",
+                    "body",
+                    "created_at_epoch",
+                ];
+                _serde::Deserializer::deserialize_struct(
+                    __deserializer,
+                    "TicketMessage",
+                    FIELDS,
+                    __Visitor {
+                        marker: _serde::__private228::PhantomData::<TicketMessage>,
+                        lifetime: _serde::__private228::PhantomData,
+                    },
+                )
+            }
+        }
+    };
+    impl Customer {
+        pub fn to_json_pretty(&self) -> ::serde_json::Result<String> {
+            ::serde_json::to_string_pretty(self)
+        }
+        pub fn from_json(input: &str) -> ::serde_json::Result<Self> {
+            ::serde_json::from_str(input)
+        }
+    }
+    impl Agent {
+        pub fn to_json_pretty(&self) -> ::serde_json::Result<String> {
+            ::serde_json::to_string_pretty(self)
+        }
+        pub fn from_json(input: &str) -> ::serde_json::Result<Self> {
+            ::serde_json::from_str(input)
+        }
+    }
+    impl Ticket {
+        pub fn to_json_pretty(&self) -> ::serde_json::Result<String> {
+            ::serde_json::to_string_pretty(self)
+        }
+        pub fn from_json(input: &str) -> ::serde_json::Result<Self> {
+            ::serde_json::from_str(input)
+        }
+    }
+    impl TicketMessage {
+        pub fn to_json_pretty(&self) -> ::serde_json::Result<String> {
+            ::serde_json::to_string_pretty(self)
+        }
+        pub fn from_json(input: &str) -> ::serde_json::Result<Self> {
+            ::serde_json::from_str(input)
+        }
+    }
+    impl Customer {
+        pub fn to_tinyproto_bytes(&self) -> Vec<u8> {
+            let mut out = Vec::new();
+            __tinyproto_write_field(&mut out, 1u8, &self.id.to_le_bytes());
+            __tinyproto_write_field(&mut out, 2u8, self.email.as_bytes());
+            __tinyproto_write_field(&mut out, 3u8, self.display_name.as_bytes());
+            __tinyproto_write_field(&mut out, 4u8, &[self.vip as u8]);
+            out
+        }
+        pub fn from_tinyproto_bytes(input: &[u8]) -> Result<Self, String> {
+            let mut id: Option<i64> = None;
+            let mut email: Option<String> = None;
+            let mut display_name: Option<String> = None;
+            let mut vip: Option<bool> = None;
+            let mut pos = 0usize;
+            while pos < input.len() {
+                let (tag, value, next) = __tinyproto_read_field(input, pos)?;
+                pos = next;
+                match tag {
+                    1u8 => {
+                        if value.len() != 8 {
+                            return Err(
+                                ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("field {0} expected 8 bytes", "id"),
+                                    )
+                                }),
+                            );
+                        }
+                        let mut a = [0u8; 8];
+                        a.copy_from_slice(value);
+                        id = Some(i64::from_le_bytes(a));
+                    }
+                    2u8 => {
+                        email = Some(
+                            String::from_utf8(value.to_vec())
+                                .map_err(|e| ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("field {0} is not UTF-8: {1}", "email", e),
+                                    )
+                                }))?,
+                        );
+                    }
+                    3u8 => {
+                        display_name = Some(
+                            String::from_utf8(value.to_vec())
+                                .map_err(|e| ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!(
+                                            "field {0} is not UTF-8: {1}",
+                                            "display_name",
+                                            e,
+                                        ),
+                                    )
+                                }))?,
+                        );
+                    }
+                    4u8 => {
+                        if value.len() != 1 {
+                            return Err(
+                                ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("field {0} expected 1 byte", "vip"),
+                                    )
+                                }),
+                            );
+                        }
+                        vip = Some(value[0] != 0);
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Self {
+                id: id
+                    .ok_or_else(|| ::alloc::__export::must_use({
+                        ::alloc::fmt::format(format_args!("missing field {0}", "id"))
+                    }))?,
+                email: email
+                    .ok_or_else(|| ::alloc::__export::must_use({
+                        ::alloc::fmt::format(format_args!("missing field {0}", "email"))
+                    }))?,
+                display_name: display_name
+                    .ok_or_else(|| ::alloc::__export::must_use({
+                        ::alloc::fmt::format(
+                            format_args!("missing field {0}", "display_name"),
+                        )
+                    }))?,
+                vip: vip
+                    .ok_or_else(|| ::alloc::__export::must_use({
+                        ::alloc::fmt::format(format_args!("missing field {0}", "vip"))
+                    }))?,
+            })
+        }
+    }
+    impl Agent {
+        pub fn to_tinyproto_bytes(&self) -> Vec<u8> {
+            let mut out = Vec::new();
+            __tinyproto_write_field(&mut out, 1u8, &self.id.to_le_bytes());
+            __tinyproto_write_field(&mut out, 2u8, self.handle.as_bytes());
+            __tinyproto_write_field(&mut out, 3u8, self.team.as_bytes());
+            out
+        }
+        pub fn from_tinyproto_bytes(input: &[u8]) -> Result<Self, String> {
+            let mut id: Option<i64> = None;
+            let mut handle: Option<String> = None;
+            let mut team: Option<String> = None;
+            let mut pos = 0usize;
+            while pos < input.len() {
+                let (tag, value, next) = __tinyproto_read_field(input, pos)?;
+                pos = next;
+                match tag {
+                    1u8 => {
+                        if value.len() != 8 {
+                            return Err(
+                                ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("field {0} expected 8 bytes", "id"),
+                                    )
+                                }),
+                            );
+                        }
+                        let mut a = [0u8; 8];
+                        a.copy_from_slice(value);
+                        id = Some(i64::from_le_bytes(a));
+                    }
+                    2u8 => {
+                        handle = Some(
+                            String::from_utf8(value.to_vec())
+                                .map_err(|e| ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("field {0} is not UTF-8: {1}", "handle", e),
+                                    )
+                                }))?,
+                        );
+                    }
+                    3u8 => {
+                        team = Some(
+                            String::from_utf8(value.to_vec())
+                                .map_err(|e| ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("field {0} is not UTF-8: {1}", "team", e),
+                                    )
+                                }))?,
+                        );
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Self {
+                id: id
+                    .ok_or_else(|| ::alloc::__export::must_use({
+                        ::alloc::fmt::format(format_args!("missing field {0}", "id"))
+                    }))?,
+                handle: handle
+                    .ok_or_else(|| ::alloc::__export::must_use({
+                        ::alloc::fmt::format(format_args!("missing field {0}", "handle"))
+                    }))?,
+                team: team
+                    .ok_or_else(|| ::alloc::__export::must_use({
+                        ::alloc::fmt::format(format_args!("missing field {0}", "team"))
+                    }))?,
+            })
+        }
+    }
+    impl Ticket {
+        pub fn to_tinyproto_bytes(&self) -> Vec<u8> {
+            let mut out = Vec::new();
+            __tinyproto_write_field(&mut out, 1u8, &self.id.to_le_bytes());
+            __tinyproto_write_field(&mut out, 2u8, &self.customer_id.to_le_bytes());
+            __tinyproto_write_field(&mut out, 3u8, &self.agent_id.to_le_bytes());
+            __tinyproto_write_field(&mut out, 4u8, self.subject.as_bytes());
+            __tinyproto_write_field(&mut out, 5u8, self.status.as_bytes());
+            __tinyproto_write_field(&mut out, 6u8, &self.priority.to_le_bytes());
+            out
+        }
+        pub fn from_tinyproto_bytes(input: &[u8]) -> Result<Self, String> {
+            let mut id: Option<i64> = None;
+            let mut customer_id: Option<i64> = None;
+            let mut agent_id: Option<i64> = None;
+            let mut subject: Option<String> = None;
+            let mut status: Option<String> = None;
+            let mut priority: Option<i64> = None;
+            let mut pos = 0usize;
+            while pos < input.len() {
+                let (tag, value, next) = __tinyproto_read_field(input, pos)?;
+                pos = next;
+                match tag {
+                    1u8 => {
+                        if value.len() != 8 {
+                            return Err(
+                                ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("field {0} expected 8 bytes", "id"),
+                                    )
+                                }),
+                            );
+                        }
+                        let mut a = [0u8; 8];
+                        a.copy_from_slice(value);
+                        id = Some(i64::from_le_bytes(a));
+                    }
+                    2u8 => {
+                        if value.len() != 8 {
+                            return Err(
+                                ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("field {0} expected 8 bytes", "customer_id"),
+                                    )
+                                }),
+                            );
+                        }
+                        let mut a = [0u8; 8];
+                        a.copy_from_slice(value);
+                        customer_id = Some(i64::from_le_bytes(a));
+                    }
+                    3u8 => {
+                        if value.len() != 8 {
+                            return Err(
+                                ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("field {0} expected 8 bytes", "agent_id"),
+                                    )
+                                }),
+                            );
+                        }
+                        let mut a = [0u8; 8];
+                        a.copy_from_slice(value);
+                        agent_id = Some(i64::from_le_bytes(a));
+                    }
+                    4u8 => {
+                        subject = Some(
+                            String::from_utf8(value.to_vec())
+                                .map_err(|e| ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("field {0} is not UTF-8: {1}", "subject", e),
+                                    )
+                                }))?,
+                        );
+                    }
+                    5u8 => {
+                        status = Some(
+                            String::from_utf8(value.to_vec())
+                                .map_err(|e| ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("field {0} is not UTF-8: {1}", "status", e),
+                                    )
+                                }))?,
+                        );
+                    }
+                    6u8 => {
+                        if value.len() != 8 {
+                            return Err(
+                                ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("field {0} expected 8 bytes", "priority"),
+                                    )
+                                }),
+                            );
+                        }
+                        let mut a = [0u8; 8];
+                        a.copy_from_slice(value);
+                        priority = Some(i64::from_le_bytes(a));
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Self {
+                id: id
+                    .ok_or_else(|| ::alloc::__export::must_use({
+                        ::alloc::fmt::format(format_args!("missing field {0}", "id"))
+                    }))?,
+                customer_id: customer_id
+                    .ok_or_else(|| ::alloc::__export::must_use({
+                        ::alloc::fmt::format(
+                            format_args!("missing field {0}", "customer_id"),
+                        )
+                    }))?,
+                agent_id: agent_id
+                    .ok_or_else(|| ::alloc::__export::must_use({
+                        ::alloc::fmt::format(
+                            format_args!("missing field {0}", "agent_id"),
+                        )
+                    }))?,
+                subject: subject
+                    .ok_or_else(|| ::alloc::__export::must_use({
+                        ::alloc::fmt::format(
+                            format_args!("missing field {0}", "subject"),
+                        )
+                    }))?,
+                status: status
+                    .ok_or_else(|| ::alloc::__export::must_use({
+                        ::alloc::fmt::format(format_args!("missing field {0}", "status"))
+                    }))?,
+                priority: priority
+                    .ok_or_else(|| ::alloc::__export::must_use({
+                        ::alloc::fmt::format(
+                            format_args!("missing field {0}", "priority"),
+                        )
+                    }))?,
+            })
+        }
+    }
+    impl TicketMessage {
+        pub fn to_tinyproto_bytes(&self) -> Vec<u8> {
+            let mut out = Vec::new();
+            __tinyproto_write_field(&mut out, 1u8, &self.id.to_le_bytes());
+            __tinyproto_write_field(&mut out, 2u8, &self.ticket_id.to_le_bytes());
+            __tinyproto_write_field(&mut out, 3u8, self.sender.as_bytes());
+            __tinyproto_write_field(&mut out, 4u8, self.body.as_bytes());
+            __tinyproto_write_field(&mut out, 5u8, &self.created_at_epoch.to_le_bytes());
+            out
+        }
+        pub fn from_tinyproto_bytes(input: &[u8]) -> Result<Self, String> {
+            let mut id: Option<i64> = None;
+            let mut ticket_id: Option<i64> = None;
+            let mut sender: Option<String> = None;
+            let mut body: Option<String> = None;
+            let mut created_at_epoch: Option<i64> = None;
+            let mut pos = 0usize;
+            while pos < input.len() {
+                let (tag, value, next) = __tinyproto_read_field(input, pos)?;
+                pos = next;
+                match tag {
+                    1u8 => {
+                        if value.len() != 8 {
+                            return Err(
+                                ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("field {0} expected 8 bytes", "id"),
+                                    )
+                                }),
+                            );
+                        }
+                        let mut a = [0u8; 8];
+                        a.copy_from_slice(value);
+                        id = Some(i64::from_le_bytes(a));
+                    }
+                    2u8 => {
+                        if value.len() != 8 {
+                            return Err(
+                                ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("field {0} expected 8 bytes", "ticket_id"),
+                                    )
+                                }),
+                            );
+                        }
+                        let mut a = [0u8; 8];
+                        a.copy_from_slice(value);
+                        ticket_id = Some(i64::from_le_bytes(a));
+                    }
+                    3u8 => {
+                        sender = Some(
+                            String::from_utf8(value.to_vec())
+                                .map_err(|e| ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("field {0} is not UTF-8: {1}", "sender", e),
+                                    )
+                                }))?,
+                        );
+                    }
+                    4u8 => {
+                        body = Some(
+                            String::from_utf8(value.to_vec())
+                                .map_err(|e| ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("field {0} is not UTF-8: {1}", "body", e),
+                                    )
+                                }))?,
+                        );
+                    }
+                    5u8 => {
+                        if value.len() != 8 {
+                            return Err(
+                                ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!(
+                                            "field {0} expected 8 bytes",
+                                            "created_at_epoch",
+                                        ),
+                                    )
+                                }),
+                            );
+                        }
+                        let mut a = [0u8; 8];
+                        a.copy_from_slice(value);
+                        created_at_epoch = Some(i64::from_le_bytes(a));
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Self {
+                id: id
+                    .ok_or_else(|| ::alloc::__export::must_use({
+                        ::alloc::fmt::format(format_args!("missing field {0}", "id"))
+                    }))?,
+                ticket_id: ticket_id
+                    .ok_or_else(|| ::alloc::__export::must_use({
+                        ::alloc::fmt::format(
+                            format_args!("missing field {0}", "ticket_id"),
+                        )
+                    }))?,
+                sender: sender
+                    .ok_or_else(|| ::alloc::__export::must_use({
+                        ::alloc::fmt::format(format_args!("missing field {0}", "sender"))
+                    }))?,
+                body: body
+                    .ok_or_else(|| ::alloc::__export::must_use({
+                        ::alloc::fmt::format(format_args!("missing field {0}", "body"))
+                    }))?,
+                created_at_epoch: created_at_epoch
+                    .ok_or_else(|| ::alloc::__export::must_use({
+                        ::alloc::fmt::format(
+                            format_args!("missing field {0}", "created_at_epoch"),
+                        )
+                    }))?,
+            })
+        }
+    }
+    fn __tinyproto_write_field(out: &mut Vec<u8>, tag: u8, value: &[u8]) {
+        out.push(tag);
+        out.extend_from_slice(&(value.len() as u32).to_le_bytes());
+        out.extend_from_slice(value);
+    }
+    fn __tinyproto_read_field(
+        input: &[u8],
+        pos: usize,
+    ) -> Result<(u8, &[u8], usize), String> {
+        if pos + 5 > input.len() {
+            return Err("truncated TinyProto field header".to_string());
+        }
+        let tag = input[pos];
+        let mut len_bytes = [0u8; 4];
+        len_bytes.copy_from_slice(&input[pos + 1..pos + 5]);
+        let len = u32::from_le_bytes(len_bytes) as usize;
+        let start = pos + 5;
+        let end = start + len;
+        if end > input.len() {
+            return Err("truncated TinyProto field body".to_string());
+        }
+        Ok((tag, &input[start..end], end))
+    }
+    pub mod dao {
+        use super::*;
+        pub fn create_tables(conn: &::rusqlite::Connection) -> ::rusqlite::Result<()> {
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS customers (id INTEGER NOT NULL PRIMARY KEY, email TEXT NOT NULL, display_name TEXT NOT NULL, vip INTEGER NOT NULL);",
+                [],
+            )?;
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS agents (id INTEGER NOT NULL PRIMARY KEY, handle TEXT NOT NULL, team TEXT NOT NULL);",
+                [],
+            )?;
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS tickets (id INTEGER NOT NULL PRIMARY KEY, customer_id INTEGER NOT NULL, agent_id INTEGER NOT NULL, subject TEXT NOT NULL, status TEXT NOT NULL, priority INTEGER NOT NULL);",
+                [],
+            )?;
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS ticket_messages (id INTEGER NOT NULL PRIMARY KEY, ticket_id INTEGER NOT NULL, sender TEXT NOT NULL, body TEXT NOT NULL, created_at_epoch INTEGER NOT NULL);",
+                [],
+            )?;
+            Ok(())
+        }
+        fn map_customer_row(row: &::rusqlite::Row<'_>) -> ::rusqlite::Result<Customer> {
+            Ok(Customer {
+                id: row.get(0usize)?,
+                email: row.get(1usize)?,
+                display_name: row.get(2usize)?,
+                vip: row.get(3usize)?,
+            })
+        }
+        pub fn insert_customer(
+            conn: &::rusqlite::Connection,
+            value: &Customer,
+        ) -> ::rusqlite::Result<usize> {
+            conn.execute(
+                "INSERT OR REPLACE INTO customers (id, email, display_name, vip) VALUES (?1, ?2, ?3, ?4)",
+                &[
+                    &&value.id as &dyn ::rusqlite::ToSql,
+                    &&value.email as &dyn ::rusqlite::ToSql,
+                    &&value.display_name as &dyn ::rusqlite::ToSql,
+                    &&value.vip as &dyn ::rusqlite::ToSql,
+                ] as &[&dyn ::rusqlite::ToSql],
+            )
+        }
+        pub fn get_customer_by_id(
+            conn: &::rusqlite::Connection,
+            id: i64,
+        ) -> ::rusqlite::Result<Option<Customer>> {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, email, display_name, vip FROM customers WHERE id = ?1",
+                )?;
+            let mut rows = stmt
+                .query(&[&id as &dyn ::rusqlite::ToSql] as &[&dyn ::rusqlite::ToSql])?;
+            if let Some(row) = rows.next()? {
+                Ok(Some(map_customer_row(row)?))
+            } else {
+                Ok(None)
+            }
+        }
+        pub fn list_customers(
+            conn: &::rusqlite::Connection,
+        ) -> ::rusqlite::Result<Vec<Customer>> {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, email, display_name, vip FROM customers ORDER BY id",
+                )?;
+            let rows = stmt.query_map([], |row| map_customer_row(row))?;
+            rows.collect()
+        }
+        fn map_agent_row(row: &::rusqlite::Row<'_>) -> ::rusqlite::Result<Agent> {
+            Ok(Agent {
+                id: row.get(0usize)?,
+                handle: row.get(1usize)?,
+                team: row.get(2usize)?,
+            })
+        }
+        pub fn insert_agent(
+            conn: &::rusqlite::Connection,
+            value: &Agent,
+        ) -> ::rusqlite::Result<usize> {
+            conn.execute(
+                "INSERT OR REPLACE INTO agents (id, handle, team) VALUES (?1, ?2, ?3)",
+                &[
+                    &&value.id as &dyn ::rusqlite::ToSql,
+                    &&value.handle as &dyn ::rusqlite::ToSql,
+                    &&value.team as &dyn ::rusqlite::ToSql,
+                ] as &[&dyn ::rusqlite::ToSql],
+            )
+        }
+        pub fn get_agent_by_id(
+            conn: &::rusqlite::Connection,
+            id: i64,
+        ) -> ::rusqlite::Result<Option<Agent>> {
+            let mut stmt = conn
+                .prepare("SELECT id, handle, team FROM agents WHERE id = ?1")?;
+            let mut rows = stmt
+                .query(&[&id as &dyn ::rusqlite::ToSql] as &[&dyn ::rusqlite::ToSql])?;
+            if let Some(row) = rows.next()? {
+                Ok(Some(map_agent_row(row)?))
+            } else {
+                Ok(None)
+            }
+        }
+        pub fn list_agents(
+            conn: &::rusqlite::Connection,
+        ) -> ::rusqlite::Result<Vec<Agent>> {
+            let mut stmt = conn
+                .prepare("SELECT id, handle, team FROM agents ORDER BY id")?;
+            let rows = stmt.query_map([], |row| map_agent_row(row))?;
+            rows.collect()
+        }
+        fn map_ticket_row(row: &::rusqlite::Row<'_>) -> ::rusqlite::Result<Ticket> {
+            Ok(Ticket {
+                id: row.get(0usize)?,
+                customer_id: row.get(1usize)?,
+                agent_id: row.get(2usize)?,
+                subject: row.get(3usize)?,
+                status: row.get(4usize)?,
+                priority: row.get(5usize)?,
+            })
+        }
+        pub fn insert_ticket(
+            conn: &::rusqlite::Connection,
+            value: &Ticket,
+        ) -> ::rusqlite::Result<usize> {
+            conn.execute(
+                "INSERT OR REPLACE INTO tickets (id, customer_id, agent_id, subject, status, priority) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                &[
+                    &&value.id as &dyn ::rusqlite::ToSql,
+                    &&value.customer_id as &dyn ::rusqlite::ToSql,
+                    &&value.agent_id as &dyn ::rusqlite::ToSql,
+                    &&value.subject as &dyn ::rusqlite::ToSql,
+                    &&value.status as &dyn ::rusqlite::ToSql,
+                    &&value.priority as &dyn ::rusqlite::ToSql,
+                ] as &[&dyn ::rusqlite::ToSql],
+            )
+        }
+        pub fn get_ticket_by_id(
+            conn: &::rusqlite::Connection,
+            id: i64,
+        ) -> ::rusqlite::Result<Option<Ticket>> {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, customer_id, agent_id, subject, status, priority FROM tickets WHERE id = ?1",
+                )?;
+            let mut rows = stmt
+                .query(&[&id as &dyn ::rusqlite::ToSql] as &[&dyn ::rusqlite::ToSql])?;
+            if let Some(row) = rows.next()? {
+                Ok(Some(map_ticket_row(row)?))
+            } else {
+                Ok(None)
+            }
+        }
+        pub fn list_tickets(
+            conn: &::rusqlite::Connection,
+        ) -> ::rusqlite::Result<Vec<Ticket>> {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, customer_id, agent_id, subject, status, priority FROM tickets ORDER BY id",
+                )?;
+            let rows = stmt.query_map([], |row| map_ticket_row(row))?;
+            rows.collect()
+        }
+        fn map_ticket_message_row(
+            row: &::rusqlite::Row<'_>,
+        ) -> ::rusqlite::Result<TicketMessage> {
+            Ok(TicketMessage {
+                id: row.get(0usize)?,
+                ticket_id: row.get(1usize)?,
+                sender: row.get(2usize)?,
+                body: row.get(3usize)?,
+                created_at_epoch: row.get(4usize)?,
+            })
+        }
+        pub fn insert_ticket_message(
+            conn: &::rusqlite::Connection,
+            value: &TicketMessage,
+        ) -> ::rusqlite::Result<usize> {
+            conn.execute(
+                "INSERT OR REPLACE INTO ticket_messages (id, ticket_id, sender, body, created_at_epoch) VALUES (?1, ?2, ?3, ?4, ?5)",
+                &[
+                    &&value.id as &dyn ::rusqlite::ToSql,
+                    &&value.ticket_id as &dyn ::rusqlite::ToSql,
+                    &&value.sender as &dyn ::rusqlite::ToSql,
+                    &&value.body as &dyn ::rusqlite::ToSql,
+                    &&value.created_at_epoch as &dyn ::rusqlite::ToSql,
+                ] as &[&dyn ::rusqlite::ToSql],
+            )
+        }
+        pub fn get_ticket_message_by_id(
+            conn: &::rusqlite::Connection,
+            id: i64,
+        ) -> ::rusqlite::Result<Option<TicketMessage>> {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, ticket_id, sender, body, created_at_epoch FROM ticket_messages WHERE id = ?1",
+                )?;
+            let mut rows = stmt
+                .query(&[&id as &dyn ::rusqlite::ToSql] as &[&dyn ::rusqlite::ToSql])?;
+            if let Some(row) = rows.next()? {
+                Ok(Some(map_ticket_message_row(row)?))
+            } else {
+                Ok(None)
+            }
+        }
+        pub fn list_ticket_messages(
+            conn: &::rusqlite::Connection,
+        ) -> ::rusqlite::Result<Vec<TicketMessage>> {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, ticket_id, sender, body, created_at_epoch FROM ticket_messages ORDER BY id",
+                )?;
+            let rows = stmt.query_map([], |row| map_ticket_message_row(row))?;
+            rows.collect()
+        }
+    }
+}
+use generated_domain::{dao, Agent, Customer, Ticket, TicketMessage};
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let conn = Connection::open_in_memory()?;
+    dao::create_tables(&conn)?;
+    let customer = Customer {
+        id: 1,
+        email: "ada@example.com".to_string(),
+        display_name: "Ada Lovelace".to_string(),
+        vip: true,
+    };
+    let agent = Agent {
+        id: 10,
+        handle: "grace".to_string(),
+        team: "Compiler Support".to_string(),
+    };
+    let ticket = Ticket {
+        id: 100,
+        customer_id: customer.id,
+        agent_id: agent.id,
+        subject: "Procedural macro generated too much useful code".to_string(),
+        status: "open".to_string(),
+        priority: 1,
+    };
+    let message = TicketMessage {
+        id: 1000,
+        ticket_id: ticket.id,
+        sender: "customer".to_string(),
+        body: "Can one XML file really generate structs, SQL DAOs, JSON, and binary codecs?"
+            .to_string(),
+        created_at_epoch: 1_725_000_000,
+    };
+    dao::insert_customer(&conn, &customer)?;
+    dao::insert_agent(&conn, &agent)?;
+    dao::insert_ticket(&conn, &ticket)?;
+    dao::insert_ticket_message(&conn, &message)?;
+    let loaded_customer = dao::get_customer_by_id(&conn, 1)?.expect("customer exists");
+    {
+        ::std::io::_print(format_args!("Loaded from SQLite: {0:#?}\n", loaded_customer));
+    };
+    let all_tickets = dao::list_tickets(&conn)?;
+    {
+        ::std::io::_print(format_args!("Tickets in SQLite: {0:#?}\n", all_tickets));
+    };
+    let json = ticket.to_json_pretty()?;
+    {
+        ::std::io::_print(format_args!("Ticket as JSON:\n{0}\n", json));
+    };
+    let ticket_from_json = Ticket::from_json(&json)?;
+    match (&ticket, &ticket_from_json) {
+        (left_val, right_val) => {
+            if !(*left_val == *right_val) {
+                let kind = ::core::panicking::AssertKind::Eq;
+                ::core::panicking::assert_failed(
+                    kind,
+                    &*left_val,
+                    &*right_val,
+                    ::core::option::Option::None,
+                );
+            }
+        }
+    };
+    let wire = message.to_tinyproto_bytes();
+    {
+        ::std::io::_print(
+            format_args!("TicketMessage as TinyProto bytes: {0} bytes\n", wire.len()),
+        );
+    };
+    let message_from_wire = TicketMessage::from_tinyproto_bytes(&wire)?;
+    match (&message, &message_from_wire) {
+        (left_val, right_val) => {
+            if !(*left_val == *right_val) {
+                let kind = ::core::panicking::AssertKind::Eq;
+                ::core::panicking::assert_failed(
+                    kind,
+                    &*left_val,
+                    &*right_val,
+                    ::core::option::Option::None,
+                );
+            }
+        }
+    };
+    {
+        ::std::io::_print(
+            format_args!(
+                "Schema path embedded by macro: {0}\n",
+                generated_domain::XML_SCHEMA_PATH,
+            ),
+        );
+    };
+    {
+        ::std::io::_print(
+            format_args!(
+                "Demo complete: all generated layers round-tripped successfully.\n",
+            ),
+        );
+    };
+    Ok(())
+}

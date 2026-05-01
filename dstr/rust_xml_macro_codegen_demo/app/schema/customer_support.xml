@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<application name="SupportDesk" module="generated_domain">
+  <entity name="Customer" table="customers">
+    <field name="id" type="i64" primaryKey="true" />
+    <field name="email" type="String" />
+    <field name="display_name" type="String" />
+    <field name="vip" type="bool" />
+  </entity>
+
+  <entity name="Agent" table="agents">
+    <field name="id" type="i64" primaryKey="true" />
+    <field name="handle" type="String" />
+    <field name="team" type="String" />
+  </entity>
+
+  <entity name="Ticket" table="tickets">
+    <field name="id" type="i64" primaryKey="true" />
+    <field name="customer_id" type="i64" />
+    <field name="agent_id" type="i64" />
+    <field name="subject" type="String" />
+    <field name="status" type="String" />
+    <field name="priority" type="i64" />
+  </entity>
+
+  <entity name="TicketMessage" table="ticket_messages">
+    <field name="id" type="i64" primaryKey="true" />
+    <field name="ticket_id" type="i64" />
+    <field name="sender" type="String" />
+    <field name="body" type="String" />
+    <field name="created_at_epoch" type="i64" />
+  </entity>
+</application>
