@@ -1779,6 +1779,9 @@ document.getElementById('fileLoader').addEventListener('change', function(event)
             if (loadedEditorDiv) {
                 // Found an editor div, load its innerHTML
                 editor.innerHTML = loadedEditorDiv.innerHTML;
+                if (typeof hydrateEmbeddedVideoSources === 'function') {
+                    hydrateEmbeddedVideoSources(editor);
+                }
                 setStatus("Loaded editor content from HTML file.");
                 return;
             }
@@ -2679,7 +2682,9 @@ function setWriteToClipboardWhileSaving(trueOrFalse)
 }
 
 function saveInnerHtmlLocally() {
-    const editorContent = document.getElementById('editor').outerHTML;
+    const editorClone = document.getElementById('editor').cloneNode(true);
+    materializeEmbeddedVideoSources(editorClone);
+    const editorContent = editorClone.outerHTML;
 
     // Choose your desired filename programmatically
     const filename = generateFileName(); // Your custom function or static name
@@ -2718,6 +2723,78 @@ function saveInnerHtmlLocally() {
         alert(`Inner html content copied to text clipboard (${combinedContent.length} chars).`);
     }
 }
+
+function materializeEmbeddedVideoSources(root) {
+    root.querySelectorAll('video[data-spectral-video-src]').forEach(video => {
+        video.setAttribute('src', normalizeVideoDataUrl(video.getAttribute('data-spectral-video-src')));
+        video.removeAttribute('data-spectral-video-src');
+    });
+}
+
+function getDataUrlSafeVideoMimeType(mimeType) {
+    const containerType = (mimeType || 'video/webm').split(';')[0].trim();
+    return containerType || 'video/webm';
+}
+
+function normalizeVideoDataUrl(dataURL) {
+    if (typeof dataURL !== 'string' || !dataURL.startsWith('data:video/')) {
+        return dataURL;
+    }
+
+    const base64Marker = ';base64,';
+    const base64MarkerIndex = dataURL.indexOf(base64Marker);
+    if (base64MarkerIndex === -1) {
+        return dataURL;
+    }
+
+    const firstCommaIndex = dataURL.indexOf(',');
+    if (firstCommaIndex === base64MarkerIndex + base64Marker.length - 1) {
+        return dataURL;
+    }
+
+    const mimeMatch = dataURL.match(/^data:(video\/[^;,]+)/);
+    if (!mimeMatch) {
+        return dataURL;
+    }
+
+    return `data:${mimeMatch[1]}${dataURL.slice(base64MarkerIndex)}`;
+}
+
+function dataUrlToBlob(dataURL) {
+    dataURL = normalizeVideoDataUrl(dataURL);
+    const parts = dataURL.split(',');
+    if (parts.length < 2) return null;
+
+    const header = parts[0];
+    const data = parts.slice(1).join(',');
+    const mimeMatch = header.match(/^data:([^;,]+)/);
+    const mimeType = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+    const isBase64 = /;base64/i.test(header);
+    const binary = isBase64 ? atob(data) : decodeURIComponent(data);
+    const bytes = new Uint8Array(binary.length);
+
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+
+    return new Blob([bytes], { type: mimeType });
+}
+
+function hydrateEmbeddedVideoSources(root = document) {
+    root.querySelectorAll('video[src^="data:video/"]').forEach(video => {
+        const dataURL = normalizeVideoDataUrl(video.getAttribute('src'));
+        const blob = dataUrlToBlob(dataURL);
+        if (!blob || blob.size === 0) return;
+
+        video.setAttribute('data-spectral-video-src', dataURL);
+        video.src = URL.createObjectURL(blob);
+        video.load();
+    });
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+    hydrateEmbeddedVideoSources(document);
+});
 document.addEventListener('keydown', function(event) {
     
     if(event.ctrlKey && !event.altKey) {
@@ -2770,6 +2847,9 @@ document.addEventListener('keydown', function(event) {
         if (event.key.toLowerCase() === 'm') {
           event.preventDefault();
           matchAndHighlightBrackets(); 
+        } else if (event.key.toLowerCase() === 'l') {
+            event.preventDefault();
+            startVideoRecording();
         } else if (event.key === 'p') {
             event.preventDefault();
             showImageScalingPopup();
@@ -3534,7 +3614,7 @@ function startRecording() {
         };
 
         mediaRecorder.start();
-        showStopRecordingButton();
+        showStopRecordingButton('stopRecording', '⏹️ Stop');
         
     }).catch(err => {
         alert("Microphone access denied or unavailable.");
@@ -3542,8 +3622,13 @@ function startRecording() {
     });
 }
 
-function showStopRecordingButton() {
-   const popup = document.getElementById('stopRecordingPopup');
+function showStopRecordingButton(stopFunctionName = 'stopRecording', label = '⏹️ Stop') {
+    const popup = document.getElementById('stopRecordingPopup');
+    const stopBtn = document.getElementById('stopBtn');
+    if (stopBtn) {
+        stopBtn.textContent = label;
+        stopBtn.setAttribute('onclick', stopFunctionName + '()');
+    }
     popup.style.display = 'block';
 }
 function hideStopRecordingButton() {
@@ -3570,6 +3655,151 @@ function insertNodeAtCursor(node) {
 }
 
 /// End of Audio recording
+
+//// Video recording ///
+
+let videoMediaRecorder;
+let videoChunks = [];
+let videoStream = null;
+let videoRecordingStartedAt = 0;
+
+function getSupportedVideoMimeType(preferredMimeType = '') {
+    if (preferredMimeType) return preferredMimeType;
+
+    const types = [
+        'video/webm;codecs=vp8,opus',
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=opus',
+        'video/webm',
+        'video/mp4'
+    ];
+
+    if (typeof MediaRecorder === 'undefined' || !MediaRecorder.isTypeSupported) {
+        return '';
+    }
+
+    return types.find(type => MediaRecorder.isTypeSupported(type)) || '';
+}
+
+function startVideoRecording(options = {}) {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("Camera recording is not supported by this browser or page context.");
+        return;
+    }
+
+    const constraints = options.constraints || {
+        video: true,
+        audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+        }
+    };
+
+    navigator.mediaDevices.getUserMedia(constraints).then(stream => {
+        videoStream = stream;
+        videoChunks = [];
+        videoRecordingStartedAt = Date.now();
+        const audioTrackCount = stream.getAudioTracks().length;
+        const videoTrackCount = stream.getVideoTracks().length;
+
+        const requestedMimeType = options.mimeType || '';
+        const selectedMimeType = requestedMimeType || getSupportedVideoMimeType();
+        const mimeType = selectedMimeType && MediaRecorder.isTypeSupported(selectedMimeType) ? selectedMimeType : '';
+        const recorderOptions = mimeType ? { mimeType } : undefined;
+        videoMediaRecorder = new MediaRecorder(stream, recorderOptions);
+
+        videoMediaRecorder.ondataavailable = e => {
+            if (e.data.size > 0) {
+                videoChunks.push(e.data);
+                setStatus(`Video chunk received: ${Math.round(e.data.size / 1024)} KB.`);
+            }
+        };
+
+        videoMediaRecorder.onerror = e => {
+            console.error('Video recorder error:', e.error || e);
+            setStatus("Video recorder error: " + ((e.error && e.error.message) || e.type || e));
+        };
+
+        videoMediaRecorder.onstop = () => {
+            const recordedType = videoMediaRecorder.mimeType || mimeType || 'video/webm';
+            const videoBlob = new Blob(videoChunks, { type: recordedType });
+            const persistedVideoBlob = new Blob(videoChunks, { type: getDataUrlSafeVideoMimeType(recordedType) });
+            const elapsedSeconds = Math.max(0, Math.round((Date.now() - videoRecordingStartedAt) / 1000));
+
+            if (videoBlob.size === 0) {
+                videoChunks = [];
+                stopVideoStreamTracks();
+                hideStopRecordingButton();
+                setStatus(`Video recording produced no data after ${elapsedSeconds}s. Recorder MIME was '${recordedType || 'browser default'}'.`);
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const dataURL = normalizeVideoDataUrl(reader.result);
+                const objectURL = URL.createObjectURL(videoBlob);
+                const video = document.createElement('video');
+                video.controls = true;
+                video.preload = 'metadata';
+                video.muted = false;
+                video.volume = 1;
+                video.src = objectURL;
+                video.setAttribute('data-spectral-video-src', dataURL);
+                video.setAttribute('data-spectral-video-type', recordedType);
+                video.setAttribute('data-spectral-audio-tracks', String(audioTrackCount));
+                video.setAttribute('style', 'max-width: 100%; width: 360px; height: auto; display: inline-block; background: #000;');
+                video.addEventListener('loadedmetadata', () => {
+                    const duration = Number.isFinite(video.duration) ? `${Math.round(video.duration)}s` : 'unknown duration';
+                    setStatus(`Video metadata loaded (${duration}).`);
+                }, { once: true });
+                video.addEventListener('error', () => setStatus('Inserted video failed to load: ' + (video.error ? video.error.code : 'unknown error')), { once: true });
+
+                insertNodeAtCursor(video);
+                video.load();
+
+                videoChunks = [];
+                stopVideoStreamTracks();
+                hideStopRecordingButton();
+                setStatus(`Video recording inserted (${Math.round(videoBlob.size / 1024)} KB, ${elapsedSeconds}s).`);
+            };
+
+            reader.readAsDataURL(persistedVideoBlob);
+        };
+
+        // Timeslicing makes browsers flush data while recording instead of only at stop.
+        videoMediaRecorder.start(1000);
+        showStopRecordingButton('stopVideoRecording', '⏹️ Stop Video');
+        setStatus(`Video recording started. Tracks: ${videoTrackCount} video, ${audioTrackCount} audio. Recorder MIME: '${videoMediaRecorder.mimeType || 'browser default'}'.`);
+    }).catch(err => {
+        alert("Camera/microphone access denied or unavailable.");
+        console.error(err);
+        stopVideoStreamTracks();
+    });
+}
+
+function stopVideoStreamTracks() {
+    if (videoStream) {
+        videoStream.getTracks().forEach(track => track.stop());
+        videoStream = null;
+    }
+}
+
+function stopVideoRecording() {
+    if (videoMediaRecorder && videoMediaRecorder.state !== 'inactive') {
+        try {
+            videoMediaRecorder.requestData();
+        } catch (err) {
+            console.warn('Could not request final video data chunk:', err);
+        }
+        videoMediaRecorder.stop();
+    } else {
+        stopVideoStreamTracks();
+        hideStopRecordingButton();
+    }
+}
+
+/// End of Video recording
 document.getElementById('editorBgColor').addEventListener('input', function(event) {
     const editor = document.getElementById('editor');
     editor.style.backgroundColor = event.target.value;
@@ -6045,11 +6275,14 @@ function insertDownloadLinkAtSavedRange() {
                 return;
             }
 
+            const range = savedEditorRange.cloneRange();
+            const selectedText = range.toString().trim();
+            link.textContent = selectedText || `📎${fileName}`;
+
             const fragment = document.createDocumentFragment();
             fragment.appendChild(link);
             fragment.appendChild(document.createTextNode(' ')); // optional spacing
 
-            const range = savedEditorRange.cloneRange();
             range.deleteContents();
             range.insertNode(fragment);
             setStatus(`Inserted download link for ${fileName}`);
@@ -6360,11 +6593,14 @@ function insertDownloadLinkAtSavedRange() {
                 return;
             }
 
+            const range = savedEditorRange.cloneRange();
+            const selectedText = range.toString().trim();
+            link.textContent = selectedText || `📎${fileName}`;
+
             const fragment = document.createDocumentFragment();
             fragment.appendChild(link);
             fragment.appendChild(document.createTextNode(' ')); // optional spacing
 
-            const range = savedEditorRange.cloneRange();
             range.deleteContents();
             range.insertNode(fragment);
             setStatus(`Inserted download link for ${fileName}`);
@@ -6788,135 +7024,175 @@ function insertDownloadLinkAtSavedRange() {
     alert(`Markdown copied to clipboard (${md.length} chars).`);
   };
 
+  function buildEditorSvgMarkup() {
+    const svgs = Array.from(document.querySelectorAll('#editor svg'));
+    if (!svgs.length) return { markup: '', count: 0 };
+
+    const parseLen = (v) => {
+      if (v == null) return null;
+      const n = parseFloat(String(v));
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const cloneAndTrimSvg = (svg) => {
+      const clone = svg.cloneNode(true);
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      const isRenderable = (el) => {
+        if (!(el instanceof SVGGraphicsElement)) return false;
+        const tag = (el.tagName || '').toLowerCase();
+        if (tag === 'svg' || tag === 'defs' || tag === 'clippath' || tag === 'mask' || tag === 'marker' || tag === 'pattern') return false;
+        return true;
+      };
+
+      // Compute bounds from rendered client rects, then map back to SVG user units.
+      // This is more robust for nested transforms/groups (e.g., Graphviz output).
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      let found = false;
+      const elements = svg.querySelectorAll('*');
+      const screenCTM = svg.getScreenCTM();
+      const inv = screenCTM ? screenCTM.inverse() : null;
+      const toSvgPoint = (cx, cy) => {
+        const p = svg.createSVGPoint();
+        p.x = cx;
+        p.y = cy;
+        return p.matrixTransform(inv);
+      };
+
+      if (inv) {
+        elements.forEach(el => {
+          if (!isRenderable(el)) return;
+
+          const r = el.getBoundingClientRect();
+          if (!r || (!r.width && !r.height)) return;
+
+          const p1 = toSvgPoint(r.left, r.top);
+          const p2 = toSvgPoint(r.right, r.top);
+          const p3 = toSvgPoint(r.left, r.bottom);
+          const p4 = toSvgPoint(r.right, r.bottom);
+          const xs = [p1.x, p2.x, p3.x, p4.x];
+          const ys = [p1.y, p2.y, p3.y, p4.y];
+
+          found = true;
+          minX = Math.min(minX, ...xs);
+          minY = Math.min(minY, ...ys);
+          maxX = Math.max(maxX, ...xs);
+          maxY = Math.max(maxY, ...ys);
+        });
+      }
+
+      let w = null;
+      let h = null;
+      if (found && isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY) && maxX > minX && maxY > minY) {
+        const pad = 2;
+        const x = minX - pad;
+        const y = minY - pad;
+        w = (maxX - minX) + pad * 2;
+        h = (maxY - minY) + pad * 2;
+        clone.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+        clone.setAttribute('width', String(Math.ceil(w)));
+        clone.setAttribute('height', String(Math.ceil(h)));
+      } else {
+        w = parseLen(clone.getAttribute('width'));
+        h = parseLen(clone.getAttribute('height'));
+        if ((w == null || h == null) && clone.hasAttribute('viewBox')) {
+          const vb = clone.getAttribute('viewBox').trim().split(/\s+|,/).map(Number);
+          if (vb.length === 4) {
+            w = w ?? vb[2];
+            h = h ?? vb[3];
+          }
+        }
+      }
+
+      return { clone, width: w, height: h, found };
+    };
+
+    let markup = '';
+    if (svgs.length === 1) {
+      const { clone } = cloneAndTrimSvg(svgs[0]);
+      markup = clone.outerHTML;
+    } else {
+      const combined = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      combined.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+      let yOffset = 0;
+      let maxW = 0;
+      const gap = 0;
+
+      svgs.forEach(svg => {
+        const { clone, width, height } = cloneAndTrimSvg(svg);
+        const w = Number.isFinite(width) ? width : parseLen(svg.getAttribute('width')) || 0;
+        const h = Number.isFinite(height) ? height : parseLen(svg.getAttribute('height')) || 0;
+
+        clone.setAttribute('x', '0');
+        clone.setAttribute('y', String(yOffset));
+        if (w) clone.setAttribute('width', String(Math.ceil(w)));
+        if (h) clone.setAttribute('height', String(Math.ceil(h)));
+
+        combined.appendChild(clone);
+        maxW = Math.max(maxW, w || 0);
+        yOffset += (h || 0) + gap;
+      });
+
+      combined.setAttribute('width', String(Math.ceil(maxW)));
+      combined.setAttribute('height', String(Math.ceil(Math.max(0, yOffset - gap))));
+      combined.setAttribute('viewBox', `0 0 ${Math.ceil(maxW)} ${Math.ceil(Math.max(0, yOffset - gap))}`);
+      markup = combined.outerHTML;
+    }
+
+    markup = markup
+      .replace(/\u00A0/g, ' ')
+      .replace(/&nbsp;/g, ' ');
+
+    return { markup, count: svgs.length };
+  }
+
+  function generateSvgFileName() {
+    const htmlName = generateFileName();
+    return htmlName.replace(/\.html?$/i, '.svg');
+  }
+
   // Copy inline SVG(s) in the editor to clipboard as SVG markup.
   // If multiple SVGs exist, stack them vertically into a single combined SVG.
   // If possible, trim each exported SVG viewBox to tightly enclose remaining graphics.
   window.svg2clipboard = async function svg2clipboard() {
     try {
-      const svgs = Array.from(document.querySelectorAll('#editor svg'));
-      if (!svgs.length) {
+      const { markup, count } = buildEditorSvgMarkup();
+      if (!markup) {
         setStatus('No inline SVG found to copy.');
         return;
       }
-
-      const parseLen = (v) => {
-        if (v == null) return null;
-        const n = parseFloat(String(v));
-        return Number.isFinite(n) ? n : null;
-      };
-
-      const cloneAndTrimSvg = (svg) => {
-        const clone = svg.cloneNode(true);
-        const isRenderable = (el) => {
-          if (!(el instanceof SVGGraphicsElement)) return false;
-          const tag = (el.tagName || '').toLowerCase();
-          if (tag === 'svg' || tag === 'defs' || tag === 'clippath' || tag === 'mask' || tag === 'marker' || tag === 'pattern') return false;
-          return true;
-        };
-
-        // Compute bounds from rendered client rects, then map back to SVG user units.
-        // This is more robust for nested transforms/groups (e.g., Graphviz output).
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        let found = false;
-        const elements = svg.querySelectorAll('*');
-        const screenCTM = svg.getScreenCTM();
-        const inv = screenCTM ? screenCTM.inverse() : null;
-        const toSvgPoint = (cx, cy) => {
-          const p = svg.createSVGPoint();
-          p.x = cx;
-          p.y = cy;
-          return p.matrixTransform(inv);
-        };
-
-        if (inv) {
-          elements.forEach(el => {
-            if (!isRenderable(el)) return;
-
-            const r = el.getBoundingClientRect();
-            if (!r || (!r.width && !r.height)) return;
-
-            const p1 = toSvgPoint(r.left, r.top);
-            const p2 = toSvgPoint(r.right, r.top);
-            const p3 = toSvgPoint(r.left, r.bottom);
-            const p4 = toSvgPoint(r.right, r.bottom);
-            const xs = [p1.x, p2.x, p3.x, p4.x];
-            const ys = [p1.y, p2.y, p3.y, p4.y];
-
-            found = true;
-            minX = Math.min(minX, ...xs);
-            minY = Math.min(minY, ...ys);
-            maxX = Math.max(maxX, ...xs);
-            maxY = Math.max(maxY, ...ys);
-          });
-        }
-
-        let w = null;
-        let h = null;
-        if (found && isFinite(minX) && isFinite(minY) && isFinite(maxX) && isFinite(maxY) && maxX > minX && maxY > minY) {
-          const pad = 2;
-          const x = minX - pad;
-          const y = minY - pad;
-          w = (maxX - minX) + pad * 2;
-          h = (maxY - minY) + pad * 2;
-          clone.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
-          clone.setAttribute('width', String(Math.ceil(w)));
-          clone.setAttribute('height', String(Math.ceil(h)));
-        } else {
-          w = parseLen(clone.getAttribute('width'));
-          h = parseLen(clone.getAttribute('height'));
-          if ((w == null || h == null) && clone.hasAttribute('viewBox')) {
-            const vb = clone.getAttribute('viewBox').trim().split(/\s+|,/).map(Number);
-            if (vb.length === 4) {
-              w = w ?? vb[2];
-              h = h ?? vb[3];
-            }
-          }
-        }
-
-        return { clone, width: w, height: h, found };
-      };
-
-      let markup = '';
-      if (svgs.length === 1) {
-        const { clone } = cloneAndTrimSvg(svgs[0]);
-        markup = clone.outerHTML;
-      } else {
-        const combined = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        combined.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-
-        let yOffset = 0;
-        let maxW = 0;
-        const gap = 0;
-
-        svgs.forEach(svg => {
-          const { clone, width, height } = cloneAndTrimSvg(svg);
-          const w = Number.isFinite(width) ? width : parseLen(svg.getAttribute('width')) || 0;
-          const h = Number.isFinite(height) ? height : parseLen(svg.getAttribute('height')) || 0;
-
-          clone.setAttribute('x', '0');
-          clone.setAttribute('y', String(yOffset));
-          if (w) clone.setAttribute('width', String(Math.ceil(w)));
-          if (h) clone.setAttribute('height', String(Math.ceil(h)));
-
-          combined.appendChild(clone);
-          maxW = Math.max(maxW, w || 0);
-          yOffset += (h || 0) + gap;
-        });
-
-        combined.setAttribute('width', String(Math.ceil(maxW)));
-        combined.setAttribute('height', String(Math.ceil(Math.max(0, yOffset - gap))));
-        combined.setAttribute('viewBox', `0 0 ${Math.ceil(maxW)} ${Math.ceil(Math.max(0, yOffset - gap))}`);
-        markup = combined.outerHTML;
-      }
-
-      markup = markup
-        .replace(/\u00A0/g, ' ')
-        .replace(/&nbsp;/g, ' ');
       await navigator.clipboard.writeText(markup);
-      setStatus(svgs.length > 1 ? 'Combined SVG copied to clipboard.' : 'SVG copied to clipboard.');
+      setStatus(count > 1 ? 'Combined SVG copied to clipboard.' : 'SVG copied to clipboard.');
     } catch (err) {
       console.error('svg2clipboard error', err);
       setStatus('Failed to copy SVG: ' + err);
+    }
+  };
+
+  window.savesvg = function savesvg() {
+    try {
+      const { markup, count } = buildEditorSvgMarkup();
+      if (!markup) {
+        setStatus('No inline SVG found to save.');
+        return;
+      }
+
+      const filename = generateSvgFileName();
+      const blob = new Blob([markup], { type: 'image/svg+xml;charset=utf-8' });
+      const downloadLink = document.createElement('a');
+
+      downloadLink.href = URL.createObjectURL(blob);
+      downloadLink.download = filename;
+
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+
+      URL.revokeObjectURL(downloadLink.href);
+      document.body.removeChild(downloadLink);
+      setStatus(count > 1 ? `Combined SVG saved as '${filename}'.` : `SVG saved as '${filename}'.`);
+    } catch (err) {
+      console.error('savesvg error', err);
+      setStatus('Failed to save SVG: ' + err);
     }
   };
 })();
@@ -8369,6 +8645,7 @@ text = text.replace(/§§CODESPAN\d+§§/g, '<code></code>');
   Ctrl+h         Show this help
   Ctrl+[1-7]     Send selected text to the n-th search box
   Ctrl+Alt+1     Add explanation around selection
+  Ctrl+Alt+l     Record webcam video into the editor
   Ctrl+Alt+m     Match brackets (+ braces and parenthesis)
   Ctrl+Alt+p     Scale selected or nearby picture(s)
   Ctrl+Alt+P     Iconize selected picture(s)
@@ -8389,6 +8666,8 @@ text = text.replace(/§§CODESPAN\d+§§/g, '<code></code>');
 Text Commands (Can be used with Javascript Eval):
   wc           → Word count of selection
   reflow(n)    → Reflow selected text to n-character lines
+  savesvg      → Save editor SVG content to an SVG file
+  startVideoRecording() → Record webcam video into the editor
   delgraphics  → Delete SVG elements overlapping 2-point rectangle
   delgraphics_included → Delete SVG elements fully inside 2-point rectangle
   camel        → Convert identifier to camelCase
