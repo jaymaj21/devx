@@ -1,0 +1,75 @@
+--embgen_embedded_generator xml_driven_macro 12121212-1212-1212-1212-121212121212
+-- @types.xml {/types/type} {
+--     # Optional override: set targetTypes to a subset (e.g., {Person Address})
+--     if {![info exists targetTypes]} { set targetTypes {} }
+--
+--     set typeName $name
+--     if {[llength $targetTypes] > 0 && [lsearch -exact $targetTypes $typeName] < 0} {
+--         return
+--     }
+--
+--     set model_var   [snake_case $typeName]
+--     set view_dir    [file join rails_views [snake_case $typeName]]
+--     set model_title [string totitle [regsub -all {_} $model_var { }]]
+--
+--     # Read-only detail page
+--     emit_file [file join $view_dir "show.html.erb"] {
+--         emit "<h1>$model_title</h1>\n"
+--         foreach fieldNode [$xpathnode selectNodes {fields/field}] {
+--             set fname      [$fieldNode getAttribute name]
+--             set fname_sn   [snake_case $fname]
+--             set fname_h    [string totitle [regsub -all {_} $fname_sn { }]]
+--             emit "<p>\n  <strong>$fname_h:</strong>\n  <%= @$model_var.$fname_sn %>\n</p>\n\n"
+--         }
+--         emit "<%= link_to 'Edit', edit_${model_var}_path(@$model_var) %> |\n"
+--         emit "<%= link_to 'Back', ${model_var}s_path %>\n"
+--     }
+--
+--     # Editable form page
+--     emit_file [file join $view_dir "edit.html.erb"] {
+--         emit "<h1>Edit $model_title</h1>\n\n"
+--         emit "<%= form_with model: @$model_var, local: true do |f| %>\n"
+--         foreach fieldNode [$xpathnode selectNodes {fields/field}] {
+--             set fname      [$fieldNode getAttribute name]
+--             set fname_sn   [snake_case $fname]
+--             set fname_h    [string totitle [regsub -all {_} $fname_sn { }]]
+--             emit "  <div class=\"field\">\n"
+--             emit "    <%= f.label :$fname_sn, \"$fname_h\" %>\n"
+--             emit "    <%= f.text_field :$fname_sn %>\n"
+--             emit "  </div>\n\n"
+--         }
+--         emit "  <div class=\"actions\">\n"
+--         emit "    <%= f.submit %>\n"
+--         emit "  </div>\n"
+--         emit "<% end %>\n\n"
+--         emit "<%= link_to 'Show', @$model_var %> |\n"
+--         emit "<%= link_to 'Back', ${model_var}s_path %>\n"
+--     }
+--
+--     emit [::embgen::comment_line "generated rails views for $typeName at $view_dir"]
+--     emit "\n"
+-- }
+--embgen_generated_start 12121212-1212-1212-1212-121212121212
+-- generated rails views for Person at rails_views/person
+-- generated rails views for Address at rails_views/address
+-- generated rails views for Order at rails_views/order
+-- generated rails views for OrderItem at rails_views/order_item
+-- generated rails views for Product at rails_views/product
+-- generated rails views for Category at rails_views/category
+-- generated rails views for InventoryItem at rails_views/inventory_item
+-- generated rails views for Warehouse at rails_views/warehouse
+-- generated rails views for Payment at rails_views/payment
+-- generated rails views for Invoice at rails_views/invoice
+-- generated rails views for Shipment at rails_views/shipment
+-- generated rails views for UserAccount at rails_views/user_account
+-- generated rails views for UserProfile at rails_views/user_profile
+-- generated rails views for Role at rails_views/role
+-- generated rails views for Permission at rails_views/permission
+-- generated rails views for RolePermission at rails_views/role_permission
+-- generated rails views for AuditEvent at rails_views/audit_event
+-- generated rails views for Notification at rails_views/notification
+-- generated rails views for ConfigEntry at rails_views/config_entry
+-- generated rails views for FeatureFlag at rails_views/feature_flag
+-- generated rails views for Tenant at rails_views/tenant
+
+--embgen_generated_end 12121212-1212-1212-1212-121212121212

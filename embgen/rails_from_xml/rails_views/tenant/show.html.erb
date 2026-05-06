@@ -1,0 +1,23 @@
+<h1>Tenant</h1>
+<p>
+  <strong>Id:</strong>
+  <%= @tenant.id %>
+</p>
+
+<p>
+  <strong>Code:</strong>
+  <%= @tenant.code %>
+</p>
+
+<p>
+  <strong>Name:</strong>
+  <%= @tenant.name %>
+</p>
+
+<p>
+  <strong>Active:</strong>
+  <%= @tenant.active %>
+</p>
+
+<%= link_to 'Edit', edit_tenant_path(@tenant) %> |
+<%= link_to 'Back', tenants_path %>

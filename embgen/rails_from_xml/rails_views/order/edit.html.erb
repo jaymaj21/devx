@@ -1,0 +1,45 @@
+<h1>Edit Order</h1>
+
+<%= form_with model: @order, local: true do |f| %>
+  <div class="field">
+    <%= f.label :id, "Id" %>
+    <%= f.text_field :id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :person_id, "Person id" %>
+    <%= f.text_field :person_id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :order_number, "Order number" %>
+    <%= f.text_field :order_number %>
+  </div>
+
+  <div class="field">
+    <%= f.label :status, "Status" %>
+    <%= f.text_field :status %>
+  </div>
+
+  <div class="field">
+    <%= f.label :created_at, "Created at" %>
+    <%= f.text_field :created_at %>
+  </div>
+
+  <div class="field">
+    <%= f.label :updated_at, "Updated at" %>
+    <%= f.text_field :updated_at %>
+  </div>
+
+  <div class="field">
+    <%= f.label :total_amount, "Total amount" %>
+    <%= f.text_field :total_amount %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit %>
+  </div>
+<% end %>
+
+<%= link_to 'Show', @order %> |
+<%= link_to 'Back', orders_path %>

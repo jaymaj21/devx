@@ -1,0 +1,33 @@
+<h1>User profile</h1>
+<p>
+  <strong>Id:</strong>
+  <%= @user_profile.id %>
+</p>
+
+<p>
+  <strong>User id:</strong>
+  <%= @user_profile.user_id %>
+</p>
+
+<p>
+  <strong>First name:</strong>
+  <%= @user_profile.first_name %>
+</p>
+
+<p>
+  <strong>Last name:</strong>
+  <%= @user_profile.last_name %>
+</p>
+
+<p>
+  <strong>Avatar url:</strong>
+  <%= @user_profile.avatar_url %>
+</p>
+
+<p>
+  <strong>Bio:</strong>
+  <%= @user_profile.bio %>
+</p>
+
+<%= link_to 'Edit', edit_user_profile_path(@user_profile) %> |
+<%= link_to 'Back', user_profiles_path %>

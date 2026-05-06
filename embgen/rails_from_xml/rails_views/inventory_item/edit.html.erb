@@ -1,0 +1,35 @@
+<h1>Edit Inventory item</h1>
+
+<%= form_with model: @inventory_item, local: true do |f| %>
+  <div class="field">
+    <%= f.label :id, "Id" %>
+    <%= f.text_field :id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :product_id, "Product id" %>
+    <%= f.text_field :product_id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :warehouse_id, "Warehouse id" %>
+    <%= f.text_field :warehouse_id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :quantity, "Quantity" %>
+    <%= f.text_field :quantity %>
+  </div>
+
+  <div class="field">
+    <%= f.label :reserved, "Reserved" %>
+    <%= f.text_field :reserved %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit %>
+  </div>
+<% end %>
+
+<%= link_to 'Show', @inventory_item %> |
+<%= link_to 'Back', inventory_items_path %>

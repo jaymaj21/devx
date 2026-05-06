@@ -1,0 +1,38 @@
+<h1>Order</h1>
+<p>
+  <strong>Id:</strong>
+  <%= @order.id %>
+</p>
+
+<p>
+  <strong>Person id:</strong>
+  <%= @order.person_id %>
+</p>
+
+<p>
+  <strong>Order number:</strong>
+  <%= @order.order_number %>
+</p>
+
+<p>
+  <strong>Status:</strong>
+  <%= @order.status %>
+</p>
+
+<p>
+  <strong>Created at:</strong>
+  <%= @order.created_at %>
+</p>
+
+<p>
+  <strong>Updated at:</strong>
+  <%= @order.updated_at %>
+</p>
+
+<p>
+  <strong>Total amount:</strong>
+  <%= @order.total_amount %>
+</p>
+
+<%= link_to 'Edit', edit_order_path(@order) %> |
+<%= link_to 'Back', orders_path %>

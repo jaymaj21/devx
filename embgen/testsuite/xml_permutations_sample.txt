@@ -1,0 +1,160 @@
+
+//embgen_embedded_generator tcl_macro 88888888-8888-8888-8888-888888888888
+// set i 0
+// foreach perm [permutations {msg1 msg2 msg3 msg4}] {
+//     emit "
+// @Test
+// void test_case_$i ()
+// {
+//   try_order( [comma_separate $perm] );
+// }
+//     "
+//     incr i
+// }
+//embgen_generated_start 88888888-8888-8888-8888-888888888888
+
+@Test
+void test_case_0 ()
+{
+  try_order( msg1,msg2,msg3,msg4 );
+}
+    
+@Test
+void test_case_1 ()
+{
+  try_order( msg1,msg2,msg4,msg3 );
+}
+    
+@Test
+void test_case_2 ()
+{
+  try_order( msg1,msg3,msg2,msg4 );
+}
+    
+@Test
+void test_case_3 ()
+{
+  try_order( msg1,msg3,msg4,msg2 );
+}
+    
+@Test
+void test_case_4 ()
+{
+  try_order( msg1,msg4,msg2,msg3 );
+}
+    
+@Test
+void test_case_5 ()
+{
+  try_order( msg1,msg4,msg3,msg2 );
+}
+    
+@Test
+void test_case_6 ()
+{
+  try_order( msg2,msg1,msg3,msg4 );
+}
+    
+@Test
+void test_case_7 ()
+{
+  try_order( msg2,msg1,msg4,msg3 );
+}
+    
+@Test
+void test_case_8 ()
+{
+  try_order( msg2,msg3,msg1,msg4 );
+}
+    
+@Test
+void test_case_9 ()
+{
+  try_order( msg2,msg3,msg4,msg1 );
+}
+    
+@Test
+void test_case_10 ()
+{
+  try_order( msg2,msg4,msg1,msg3 );
+}
+    
+@Test
+void test_case_11 ()
+{
+  try_order( msg2,msg4,msg3,msg1 );
+}
+    
+@Test
+void test_case_12 ()
+{
+  try_order( msg3,msg1,msg2,msg4 );
+}
+    
+@Test
+void test_case_13 ()
+{
+  try_order( msg3,msg1,msg4,msg2 );
+}
+    
+@Test
+void test_case_14 ()
+{
+  try_order( msg3,msg2,msg1,msg4 );
+}
+    
+@Test
+void test_case_15 ()
+{
+  try_order( msg3,msg2,msg4,msg1 );
+}
+    
+@Test
+void test_case_16 ()
+{
+  try_order( msg3,msg4,msg1,msg2 );
+}
+    
+@Test
+void test_case_17 ()
+{
+  try_order( msg3,msg4,msg2,msg1 );
+}
+    
+@Test
+void test_case_18 ()
+{
+  try_order( msg4,msg1,msg2,msg3 );
+}
+    
+@Test
+void test_case_19 ()
+{
+  try_order( msg4,msg1,msg3,msg2 );
+}
+    
+@Test
+void test_case_20 ()
+{
+  try_order( msg4,msg2,msg1,msg3 );
+}
+    
+@Test
+void test_case_21 ()
+{
+  try_order( msg4,msg2,msg3,msg1 );
+}
+    
+@Test
+void test_case_22 ()
+{
+  try_order( msg4,msg3,msg1,msg2 );
+}
+    
+@Test
+void test_case_23 ()
+{
+  try_order( msg4,msg3,msg2,msg1 );
+}
+    
+//embgen_generated_end 88888888-8888-8888-8888-888888888888

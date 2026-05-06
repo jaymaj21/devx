@@ -1,0 +1,35 @@
+<h1>Edit Audit event</h1>
+
+<%= form_with model: @audit_event, local: true do |f| %>
+  <div class="field">
+    <%= f.label :id, "Id" %>
+    <%= f.text_field :id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :user_id, "User id" %>
+    <%= f.text_field :user_id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :event_type, "Event type" %>
+    <%= f.text_field :event_type %>
+  </div>
+
+  <div class="field">
+    <%= f.label :event_time, "Event time" %>
+    <%= f.text_field :event_time %>
+  </div>
+
+  <div class="field">
+    <%= f.label :details, "Details" %>
+    <%= f.text_field :details %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit %>
+  </div>
+<% end %>
+
+<%= link_to 'Show', @audit_event %> |
+<%= link_to 'Back', audit_events_path %>

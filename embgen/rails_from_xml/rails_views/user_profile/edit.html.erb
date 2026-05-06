@@ -1,0 +1,40 @@
+<h1>Edit User profile</h1>
+
+<%= form_with model: @user_profile, local: true do |f| %>
+  <div class="field">
+    <%= f.label :id, "Id" %>
+    <%= f.text_field :id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :user_id, "User id" %>
+    <%= f.text_field :user_id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :first_name, "First name" %>
+    <%= f.text_field :first_name %>
+  </div>
+
+  <div class="field">
+    <%= f.label :last_name, "Last name" %>
+    <%= f.text_field :last_name %>
+  </div>
+
+  <div class="field">
+    <%= f.label :avatar_url, "Avatar url" %>
+    <%= f.text_field :avatar_url %>
+  </div>
+
+  <div class="field">
+    <%= f.label :bio, "Bio" %>
+    <%= f.text_field :bio %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit %>
+  </div>
+<% end %>
+
+<%= link_to 'Show', @user_profile %> |
+<%= link_to 'Back', user_profiles_path %>

@@ -1,0 +1,45 @@
+<h1>Edit Product</h1>
+
+<%= form_with model: @product, local: true do |f| %>
+  <div class="field">
+    <%= f.label :id, "Id" %>
+    <%= f.text_field :id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :sku, "Sku" %>
+    <%= f.text_field :sku %>
+  </div>
+
+  <div class="field">
+    <%= f.label :name, "Name" %>
+    <%= f.text_field :name %>
+  </div>
+
+  <div class="field">
+    <%= f.label :description, "Description" %>
+    <%= f.text_field :description %>
+  </div>
+
+  <div class="field">
+    <%= f.label :price, "Price" %>
+    <%= f.text_field :price %>
+  </div>
+
+  <div class="field">
+    <%= f.label :currency, "Currency" %>
+    <%= f.text_field :currency %>
+  </div>
+
+  <div class="field">
+    <%= f.label :active, "Active" %>
+    <%= f.text_field :active %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit %>
+  </div>
+<% end %>
+
+<%= link_to 'Show', @product %> |
+<%= link_to 'Back', products_path %>

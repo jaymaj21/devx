@@ -1,0 +1,45 @@
+<h1>Edit Shipment</h1>
+
+<%= form_with model: @shipment, local: true do |f| %>
+  <div class="field">
+    <%= f.label :id, "Id" %>
+    <%= f.text_field :id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :order_id, "Order id" %>
+    <%= f.text_field :order_id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :tracking_id, "Tracking id" %>
+    <%= f.text_field :tracking_id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :carrier, "Carrier" %>
+    <%= f.text_field :carrier %>
+  </div>
+
+  <div class="field">
+    <%= f.label :status, "Status" %>
+    <%= f.text_field :status %>
+  </div>
+
+  <div class="field">
+    <%= f.label :shipped_at, "Shipped at" %>
+    <%= f.text_field :shipped_at %>
+  </div>
+
+  <div class="field">
+    <%= f.label :delivered_at, "Delivered at" %>
+    <%= f.text_field :delivered_at %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit %>
+  </div>
+<% end %>
+
+<%= link_to 'Show', @shipment %> |
+<%= link_to 'Back', shipments_path %>

@@ -1,0 +1,28 @@
+<h1>Inventory item</h1>
+<p>
+  <strong>Id:</strong>
+  <%= @inventory_item.id %>
+</p>
+
+<p>
+  <strong>Product id:</strong>
+  <%= @inventory_item.product_id %>
+</p>
+
+<p>
+  <strong>Warehouse id:</strong>
+  <%= @inventory_item.warehouse_id %>
+</p>
+
+<p>
+  <strong>Quantity:</strong>
+  <%= @inventory_item.quantity %>
+</p>
+
+<p>
+  <strong>Reserved:</strong>
+  <%= @inventory_item.reserved %>
+</p>
+
+<%= link_to 'Edit', edit_inventory_item_path(@inventory_item) %> |
+<%= link_to 'Back', inventory_items_path %>

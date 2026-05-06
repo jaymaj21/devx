@@ -1,0 +1,30 @@
+<h1>Edit Category</h1>
+
+<%= form_with model: @category, local: true do |f| %>
+  <div class="field">
+    <%= f.label :id, "Id" %>
+    <%= f.text_field :id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :name, "Name" %>
+    <%= f.text_field :name %>
+  </div>
+
+  <div class="field">
+    <%= f.label :description, "Description" %>
+    <%= f.text_field :description %>
+  </div>
+
+  <div class="field">
+    <%= f.label :parent_id, "Parent id" %>
+    <%= f.text_field :parent_id %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit %>
+  </div>
+<% end %>
+
+<%= link_to 'Show', @category %> |
+<%= link_to 'Back', categorys_path %>

@@ -1,0 +1,219 @@
+<types>
+  <type name="Person">
+    <fields>
+      <field name="id"           javatype="int"     dbtype="INTEGER"/>
+      <field name="firstName"    javatype="String"  dbtype="VARCHAR(255)"/>
+      <field name="lastName"     javatype="String"  dbtype="VARCHAR(255)"/>
+      <field name="email"        javatype="String"  dbtype="VARCHAR(255)"/>
+      <field name="dateOfBirth"  javatype="String"  dbtype="VARCHAR(20)"/>
+      <field name="phoneNumber"  javatype="String"  dbtype="VARCHAR(50)"/>
+      <field name="status"       javatype="String"  dbtype="VARCHAR(20)"/>
+    </fields>
+  </type>
+
+  <type name="Address">
+    <fields>
+      <field name="id"        javatype="int"     dbtype="INTEGER"/>
+      <field name="personId"  javatype="int"     dbtype="INTEGER"/>
+      <field name="street"    javatype="String"  dbtype="VARCHAR(255)"/>
+      <field name="city"      javatype="String"  dbtype="VARCHAR(255)"/>
+      <field name="state"     javatype="String"  dbtype="VARCHAR(255)"/>
+      <field name="zipCode"   javatype="String"  dbtype="VARCHAR(20)"/>
+      <field name="country"   javatype="String"  dbtype="VARCHAR(255)"/>
+    </fields>
+  </type>
+
+  <type name="Order">
+    <fields>
+      <field name="id"            javatype="long"    dbtype="BIGINT"/>
+      <field name="personId"      javatype="int"     dbtype="INTEGER"/>
+      <field name="orderNumber"   javatype="String"  dbtype="VARCHAR(50)"/>
+      <field name="status"        javatype="String"  dbtype="VARCHAR(20)"/>
+      <field name="createdAt"     javatype="String"  dbtype="TIMESTAMP"/>
+      <field name="updatedAt"     javatype="String"  dbtype="TIMESTAMP"/>
+      <field name="totalAmount"   javatype="double"  dbtype="DECIMAL(12,2)"/>
+    </fields>
+  </type>
+
+  <type name="OrderItem">
+    <fields>
+      <field name="id"          javatype="long"    dbtype="BIGINT"/>
+      <field name="orderId"     javatype="long"    dbtype="BIGINT"/>
+      <field name="productId"   javatype="int"     dbtype="INTEGER"/>
+      <field name="quantity"    javatype="int"     dbtype="INTEGER"/>
+      <field name="unitPrice"   javatype="double"  dbtype="DECIMAL(12,2)"/>
+      <field name="lineTotal"   javatype="double"  dbtype="DECIMAL(12,2)"/>
+    </fields>
+  </type>
+
+  <type name="Product">
+    <fields>
+      <field name="id"           javatype="int"     dbtype="INTEGER"/>
+      <field name="sku"          javatype="String"  dbtype="VARCHAR(50)"/>
+      <field name="name"         javatype="String"  dbtype="VARCHAR(255)"/>
+      <field name="description"  javatype="String"  dbtype="VARCHAR(2000)"/>
+      <field name="price"        javatype="double"  dbtype="DECIMAL(12,2)"/>
+      <field name="currency"     javatype="String"  dbtype="VARCHAR(3)"/>
+      <field name="active"       javatype="boolean" dbtype="BOOLEAN"/>
+    </fields>
+  </type>
+
+  <type name="Category">
+    <fields>
+      <field name="id"          javatype="int"     dbtype="INTEGER"/>
+      <field name="name"        javatype="String"  dbtype="VARCHAR(255)"/>
+      <field name="description" javatype="String"  dbtype="VARCHAR(1000)"/>
+      <field name="parentId"    javatype="int"     dbtype="INTEGER"/>
+    </fields>
+  </type>
+
+  <type name="InventoryItem">
+    <fields>
+      <field name="id"          javatype="int"     dbtype="INTEGER"/>
+      <field name="productId"   javatype="int"     dbtype="INTEGER"/>
+      <field name="warehouseId" javatype="int"     dbtype="INTEGER"/>
+      <field name="quantity"    javatype="int"     dbtype="INTEGER"/>
+      <field name="reserved"    javatype="int"     dbtype="INTEGER"/>
+    </fields>
+  </type>
+
+  <type name="Warehouse">
+    <fields>
+      <field name="id"        javatype="int"     dbtype="INTEGER"/>
+      <field name="code"      javatype="String"  dbtype="VARCHAR(50)"/>
+      <field name="name"      javatype="String"  dbtype="VARCHAR(255)"/>
+      <field name="location"  javatype="String"  dbtype="VARCHAR(255)"/>
+      <field name="capacity"  javatype="int"     dbtype="INTEGER"/>
+    </fields>
+  </type>
+
+  <type name="Payment">
+    <fields>
+      <field name="id"            javatype="long"    dbtype="BIGINT"/>
+      <field name="orderId"       javatype="long"    dbtype="BIGINT"/>
+      <field name="amount"        javatype="double"  dbtype="DECIMAL(12,2)"/>
+      <field name="currency"      javatype="String"  dbtype="VARCHAR(3)"/>
+      <field name="method"        javatype="String"  dbtype="VARCHAR(50)"/>
+      <field name="status"        javatype="String"  dbtype="VARCHAR(20)"/>
+      <field name="processedAt"   javatype="String"  dbtype="TIMESTAMP"/>
+    </fields>
+  </type>
+
+  <type name="Invoice">
+    <fields>
+      <field name="id"            javatype="long"    dbtype="BIGINT"/>
+      <field name="orderId"       javatype="long"    dbtype="BIGINT"/>
+      <field name="invoiceNumber" javatype="String"  dbtype="VARCHAR(50)"/>
+      <field name="issuedAt"      javatype="String"  dbtype="TIMESTAMP"/>
+      <field name="dueAt"         javatype="String"  dbtype="TIMESTAMP"/>
+      <field name="total"         javatype="double"  dbtype="DECIMAL(12,2)"/>
+    </fields>
+  </type>
+
+  <type name="Shipment">
+    <fields>
+      <field name="id"           javatype="long"    dbtype="BIGINT"/>
+      <field name="orderId"      javatype="long"    dbtype="BIGINT"/>
+      <field name="trackingId"   javatype="String"  dbtype="VARCHAR(100)"/>
+      <field name="carrier"      javatype="String"  dbtype="VARCHAR(100)"/>
+      <field name="status"       javatype="String"  dbtype="VARCHAR(20)"/>
+      <field name="shippedAt"    javatype="String"  dbtype="TIMESTAMP"/>
+      <field name="deliveredAt"  javatype="String"  dbtype="TIMESTAMP"/>
+    </fields>
+  </type>
+
+  <type name="UserAccount">
+    <fields>
+      <field name="id"            javatype="int"     dbtype="INTEGER"/>
+      <field name="username"      javatype="String"  dbtype="VARCHAR(100)"/>
+      <field name="hashedPassword" javatype="String" dbtype="VARCHAR(255)"/>
+      <field name="email"         javatype="String"  dbtype="VARCHAR(255)"/>
+      <field name="role"          javatype="String"  dbtype="VARCHAR(50)"/>
+      <field name="active"        javatype="boolean" dbtype="BOOLEAN"/>
+    </fields>
+  </type>
+
+  <type name="UserProfile">
+    <fields>
+      <field name="id"         javatype="int"     dbtype="INTEGER"/>
+      <field name="userId"     javatype="int"     dbtype="INTEGER"/>
+      <field name="firstName"  javatype="String"  dbtype="VARCHAR(255)"/>
+      <field name="lastName"   javatype="String"  dbtype="VARCHAR(255)"/>
+      <field name="avatarUrl"  javatype="String"  dbtype="VARCHAR(500)"/>
+      <field name="bio"        javatype="String"  dbtype="VARCHAR(2000)"/>
+    </fields>
+  </type>
+
+  <type name="Role">
+    <fields>
+      <field name="id"          javatype="int"     dbtype="INTEGER"/>
+      <field name="name"        javatype="String"  dbtype="VARCHAR(100)"/>
+      <field name="description" javatype="String"  dbtype="VARCHAR(1000)"/>
+    </fields>
+  </type>
+
+  <type name="Permission">
+    <fields>
+      <field name="id"          javatype="int"     dbtype="INTEGER"/>
+      <field name="code"        javatype="String"  dbtype="VARCHAR(100)"/>
+      <field name="description" javatype="String"  dbtype="VARCHAR(1000)"/>
+    </fields>
+  </type>
+
+  <type name="RolePermission">
+    <fields>
+      <field name="roleId"       javatype="int" dbtype="INTEGER"/>
+      <field name="permissionId" javatype="int" dbtype="INTEGER"/>
+    </fields>
+  </type>
+
+  <type name="AuditEvent">
+    <fields>
+      <field name="id"         javatype="long"    dbtype="BIGINT"/>
+      <field name="userId"     javatype="int"     dbtype="INTEGER"/>
+      <field name="eventType"  javatype="String"  dbtype="VARCHAR(100)"/>
+      <field name="eventTime"  javatype="String"  dbtype="TIMESTAMP"/>
+      <field name="details"    javatype="String"  dbtype="VARCHAR(2000)"/>
+    </fields>
+  </type>
+
+  <type name="Notification">
+    <fields>
+      <field name="id"         javatype="long"    dbtype="BIGINT"/>
+      <field name="userId"     javatype="int"     dbtype="INTEGER"/>
+      <field name="channel"    javatype="String"  dbtype="VARCHAR(50)"/>
+      <field name="payload"    javatype="String"  dbtype="VARCHAR(4000)"/>
+      <field name="status"     javatype="String"  dbtype="VARCHAR(20)"/>
+      <field name="createdAt"  javatype="String"  dbtype="TIMESTAMP"/>
+    </fields>
+  </type>
+
+  <type name="ConfigEntry">
+    <fields>
+      <field name="id"        javatype="int"     dbtype="INTEGER"/>
+      <field name="key"       javatype="String"  dbtype="VARCHAR(255)"/>
+      <field name="value"     javatype="String"  dbtype="VARCHAR(4000)"/>
+      <field name="scope"     javatype="String"  dbtype="VARCHAR(50)"/>
+      <field name="updatedAt" javatype="String"  dbtype="TIMESTAMP"/>
+    </fields>
+  </type>
+
+  <type name="FeatureFlag">
+    <fields>
+      <field name="id"        javatype="int"     dbtype="INTEGER"/>
+      <field name="name"      javatype="String"  dbtype="VARCHAR(255)"/>
+      <field name="enabled"   javatype="boolean" dbtype="BOOLEAN"/>
+      <field name="rollout"   javatype="int"     dbtype="INTEGER"/>
+    </fields>
+  </type>
+
+  <type name="Tenant">
+    <fields>
+      <field name="id"        javatype="int"     dbtype="INTEGER"/>
+      <field name="code"      javatype="String"  dbtype="VARCHAR(50)"/>
+      <field name="name"      javatype="String"  dbtype="VARCHAR(255)"/>
+      <field name="active"    javatype="boolean" dbtype="BOOLEAN"/>
+    </fields>
+  </type>
+
+</types>

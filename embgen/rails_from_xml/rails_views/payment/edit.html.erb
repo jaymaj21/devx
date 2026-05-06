@@ -1,0 +1,45 @@
+<h1>Edit Payment</h1>
+
+<%= form_with model: @payment, local: true do |f| %>
+  <div class="field">
+    <%= f.label :id, "Id" %>
+    <%= f.text_field :id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :order_id, "Order id" %>
+    <%= f.text_field :order_id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :amount, "Amount" %>
+    <%= f.text_field :amount %>
+  </div>
+
+  <div class="field">
+    <%= f.label :currency, "Currency" %>
+    <%= f.text_field :currency %>
+  </div>
+
+  <div class="field">
+    <%= f.label :method, "Method" %>
+    <%= f.text_field :method %>
+  </div>
+
+  <div class="field">
+    <%= f.label :status, "Status" %>
+    <%= f.text_field :status %>
+  </div>
+
+  <div class="field">
+    <%= f.label :processed_at, "Processed at" %>
+    <%= f.text_field :processed_at %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit %>
+  </div>
+<% end %>
+
+<%= link_to 'Show', @payment %> |
+<%= link_to 'Back', payments_path %>

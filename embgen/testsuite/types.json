@@ -1,0 +1,12 @@
+{
+  "types": [
+    {
+      "name": "Person",
+      "fields": [
+        { "name": "id",        "javatype": "int",    "dbtype": "INTEGER" },
+        { "name": "firstName", "javatype": "String", "dbtype": "VARCHAR(255)" },
+        { "name": "lastName",  "javatype": "String", "dbtype": "VARCHAR(255)" }
+      ]
+    }
+  ]
+}

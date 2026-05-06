@@ -1,0 +1,40 @@
+<h1>Edit Notification</h1>
+
+<%= form_with model: @notification, local: true do |f| %>
+  <div class="field">
+    <%= f.label :id, "Id" %>
+    <%= f.text_field :id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :user_id, "User id" %>
+    <%= f.text_field :user_id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :channel, "Channel" %>
+    <%= f.text_field :channel %>
+  </div>
+
+  <div class="field">
+    <%= f.label :payload, "Payload" %>
+    <%= f.text_field :payload %>
+  </div>
+
+  <div class="field">
+    <%= f.label :status, "Status" %>
+    <%= f.text_field :status %>
+  </div>
+
+  <div class="field">
+    <%= f.label :created_at, "Created at" %>
+    <%= f.text_field :created_at %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit %>
+  </div>
+<% end %>
+
+<%= link_to 'Show', @notification %> |
+<%= link_to 'Back', notifications_path %>

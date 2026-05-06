@@ -1,0 +1,33 @@
+<h1>Order item</h1>
+<p>
+  <strong>Id:</strong>
+  <%= @order_item.id %>
+</p>
+
+<p>
+  <strong>Order id:</strong>
+  <%= @order_item.order_id %>
+</p>
+
+<p>
+  <strong>Product id:</strong>
+  <%= @order_item.product_id %>
+</p>
+
+<p>
+  <strong>Quantity:</strong>
+  <%= @order_item.quantity %>
+</p>
+
+<p>
+  <strong>Unit price:</strong>
+  <%= @order_item.unit_price %>
+</p>
+
+<p>
+  <strong>Line total:</strong>
+  <%= @order_item.line_total %>
+</p>
+
+<%= link_to 'Edit', edit_order_item_path(@order_item) %> |
+<%= link_to 'Back', order_items_path %>

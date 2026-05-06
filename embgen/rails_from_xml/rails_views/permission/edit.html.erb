@@ -1,0 +1,25 @@
+<h1>Edit Permission</h1>
+
+<%= form_with model: @permission, local: true do |f| %>
+  <div class="field">
+    <%= f.label :id, "Id" %>
+    <%= f.text_field :id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :code, "Code" %>
+    <%= f.text_field :code %>
+  </div>
+
+  <div class="field">
+    <%= f.label :description, "Description" %>
+    <%= f.text_field :description %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit %>
+  </div>
+<% end %>
+
+<%= link_to 'Show', @permission %> |
+<%= link_to 'Back', permissions_path %>

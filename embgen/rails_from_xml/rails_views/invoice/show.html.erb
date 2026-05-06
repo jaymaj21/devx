@@ -1,0 +1,33 @@
+<h1>Invoice</h1>
+<p>
+  <strong>Id:</strong>
+  <%= @invoice.id %>
+</p>
+
+<p>
+  <strong>Order id:</strong>
+  <%= @invoice.order_id %>
+</p>
+
+<p>
+  <strong>Invoice number:</strong>
+  <%= @invoice.invoice_number %>
+</p>
+
+<p>
+  <strong>Issued at:</strong>
+  <%= @invoice.issued_at %>
+</p>
+
+<p>
+  <strong>Due at:</strong>
+  <%= @invoice.due_at %>
+</p>
+
+<p>
+  <strong>Total:</strong>
+  <%= @invoice.total %>
+</p>
+
+<%= link_to 'Edit', edit_invoice_path(@invoice) %> |
+<%= link_to 'Back', invoices_path %>

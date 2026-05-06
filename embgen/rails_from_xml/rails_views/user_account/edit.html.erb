@@ -1,0 +1,40 @@
+<h1>Edit User account</h1>
+
+<%= form_with model: @user_account, local: true do |f| %>
+  <div class="field">
+    <%= f.label :id, "Id" %>
+    <%= f.text_field :id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :username, "Username" %>
+    <%= f.text_field :username %>
+  </div>
+
+  <div class="field">
+    <%= f.label :hashed_password, "Hashed password" %>
+    <%= f.text_field :hashed_password %>
+  </div>
+
+  <div class="field">
+    <%= f.label :email, "Email" %>
+    <%= f.text_field :email %>
+  </div>
+
+  <div class="field">
+    <%= f.label :role, "Role" %>
+    <%= f.text_field :role %>
+  </div>
+
+  <div class="field">
+    <%= f.label :active, "Active" %>
+    <%= f.text_field :active %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit %>
+  </div>
+<% end %>
+
+<%= link_to 'Show', @user_account %> |
+<%= link_to 'Back', user_accounts_path %>

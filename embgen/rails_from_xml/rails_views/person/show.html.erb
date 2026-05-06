@@ -1,0 +1,38 @@
+<h1>Person</h1>
+<p>
+  <strong>Id:</strong>
+  <%= @person.id %>
+</p>
+
+<p>
+  <strong>First name:</strong>
+  <%= @person.first_name %>
+</p>
+
+<p>
+  <strong>Last name:</strong>
+  <%= @person.last_name %>
+</p>
+
+<p>
+  <strong>Email:</strong>
+  <%= @person.email %>
+</p>
+
+<p>
+  <strong>Date of birth:</strong>
+  <%= @person.date_of_birth %>
+</p>
+
+<p>
+  <strong>Phone number:</strong>
+  <%= @person.phone_number %>
+</p>
+
+<p>
+  <strong>Status:</strong>
+  <%= @person.status %>
+</p>
+
+<%= link_to 'Edit', edit_person_path(@person) %> |
+<%= link_to 'Back', persons_path %>

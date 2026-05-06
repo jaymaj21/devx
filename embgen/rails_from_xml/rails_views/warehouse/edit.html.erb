@@ -1,0 +1,35 @@
+<h1>Edit Warehouse</h1>
+
+<%= form_with model: @warehouse, local: true do |f| %>
+  <div class="field">
+    <%= f.label :id, "Id" %>
+    <%= f.text_field :id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :code, "Code" %>
+    <%= f.text_field :code %>
+  </div>
+
+  <div class="field">
+    <%= f.label :name, "Name" %>
+    <%= f.text_field :name %>
+  </div>
+
+  <div class="field">
+    <%= f.label :location, "Location" %>
+    <%= f.text_field :location %>
+  </div>
+
+  <div class="field">
+    <%= f.label :capacity, "Capacity" %>
+    <%= f.text_field :capacity %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit %>
+  </div>
+<% end %>
+
+<%= link_to 'Show', @warehouse %> |
+<%= link_to 'Back', warehouses_path %>

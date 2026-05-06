@@ -1,0 +1,376 @@
+embgen: Embedded Generators for Self-Maintaining Codebases
+==========================================================
+
+Overview
+--------
+Modern software systems evolve around shared schemas: database tables, JSON or XML
+definitions, protocol messages, DTOs, DAOs, view models, and configuration files.
+Every time a field is added to a core type, a ripple of mechanical, low‑creativity
+changes must be made across the codebase:
+
+- Database DDL and migration scripts
+- ORM mappings and DAOs
+- Serialization / deserialization code
+- Model‑to‑model converters
+- API DTOs and their assemblers
+- UI forms, validation rules, and test fixtures
+
+These changes are mostly boilerplate. They are easy to describe, but tedious and
+error‑prone to keep in sync by hand. Inevitably, one of the call sites is missed,
+and the codebase drifts out of alignment with the schema.
+
+The embgen tool is designed to attack exactly this class of problem by making those
+repetitive code fragments *self‑maintaining*.
+
+Instead of relying on external, whole‑file generators, embgen embeds tiny “generator
+notes” directly into your existing source files. These notes describe *how* to
+regenerate a particular region of code when the schema changes. embgen then scans
+your files, executes those embedded generators, and rewrites only the designated
+generated sections in‑place.
+
+The result is an ordinary codebase that stays in sync with evolving schemas using
+simple, local conventions and a lightweight command‑line tool.
+
+
+The Embedded Generator Pattern
+------------------------------
+An embedded generator is expressed entirely in comments, so it fits naturally into
+any language that supports a single‑line comment prefix (`//`, `#`, `--`, `;`, `%`).
+
+The basic pattern in a source file looks like this:
+
+    //embgen_embedded_generator GENERATOR_TYPE 46db82e1-adf1-4371-aafc-9123b4f08c34
+    // (note content goes here – the generator script)
+    //embgen_generated_start 46db82e1-adf1-4371-aafc-9123b4f08c34
+    // (generated code appears here)
+    //embgen_generated_end 46db82e1-adf1-4371-aafc-9123b4f08c34
+
+The UUID uniquely identifies one generator / generated‑region pair. embgen uses it
+to find the correct block of generated code to replace, even if other generators are
+added above or below.
+
+When you run:
+
+    tclsh embgen.tcl path/to/yourfile.ext
+
+embgen will:
+
+1. Scan the file for `embgen_embedded_generator` lines
+2. Collect the note content (the commented lines between the generator and the
+   corresponding `embgen_generated_start`)
+3. Invoke the appropriate generator for `GENERATOR_TYPE`
+4. Replace everything between `embgen_generated_start` and `embgen_generated_end`
+   for that UUID with the new generated content
+
+Everything else in the file is left untouched. You keep your own formatting,
+comments, and hand‑written logic; embgen only owns the narrow region between the
+`*_start` and `*_end` markers.
+
+
+Core Generator Types
+--------------------
+embgen provides several generator types out of the box. The most relevant to
+self‑maintaining code around schemas are:
+
+- `xml_driven_macro` – generate code from an XML schema, using XPath and Tcl
+- `json_driven_macro` – generate code from a JSON schema, using a simple path spec
+- `tcl_macro` – interpret the note as plain Tcl and use its `emit` buffer
+- `dot` / `plantuml` / `plantuml_ascii` – generate diagrams from Graphviz or PlantUML
+- `latex` / `latex_inline` – generate LaTeX‑rendered images
+- `using_command_line` – run an arbitrary command line and embed its output
+
+All of these ultimately work the same way: they treat the note content as code (of
+some kind) that writes to an output buffer via the `emit` helper. That buffer is
+then spliced back into the original file.
+
+The key idea is that the *source of truth* for generated code sits right next to the
+code it generates, and is expressed in terms of the schema you care about.
+
+
+Example Schema: types.xml
+-------------------------
+Consider a simple XML schema describing your domain types:
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <types>
+        <type name="Person">
+            <fields>
+                <field name="id"         javatype="int"    dbtype="INTEGER"/>
+                <field name="firstName"  javatype="String" dbtype="VARCHAR(255)"/>
+                <field name="lastName"   javatype="String" dbtype="VARCHAR(255)"/>
+                <field name="email"      javatype="String" dbtype="VARCHAR(255)"/>
+            </fields>
+        </type>
+        <type name="Address">
+            <fields>
+                <field name="street"  javatype="String" dbtype="VARCHAR(255)"/>
+                <field name="city"    javatype="String" dbtype="VARCHAR(255)"/>
+                <field name="zipCode" javatype="String" dbtype="VARCHAR(20)"/>
+                <field name="country" javatype="String" dbtype="VARCHAR(255)"/>
+            </fields>
+        </type>
+    </types>
+
+This file often ends up being the anchor for a large amount of repeated code:
+
+- Java fields in your domain model classes
+- DTO and DAO classes
+- Database table definitions and migrations
+- UI forms and validation rules
+- Test fixtures and data builders
+
+embgen lets you pin those patterns back to this schema, so that adding a field here
+automatically propagates to many call‑sites with a single command.
+
+
+Example 1: Java Fields in a Domain Model
+----------------------------------------
+Suppose you want the fields of `Person` to be declared in a Java class like this:
+
+    public class Person {
+        //embgen_embedded_generator xml_driven_macro 11111111-1111-1111-1111-111111111111
+        // @"types.xml" {/types/type[@name='Person']/fields/field} {
+        //     emit "    private $javatype $name; // $dbtype\n";
+        // }
+        //embgen_generated_start 11111111-1111-1111-1111-111111111111
+        // (generated fields will appear here)
+        //embgen_generated_end 11111111-1111-1111-1111-111111111111
+    }
+
+Breaking that down:
+
+- The generator type is `xml_driven_macro`
+- The note content uses an `@` directive with three parts:
+  - `types.xml` – which XML file to read
+  - an XPath expression selecting the nodes of interest:
+    `/types/type[@name='Person']/fields/field`
+  - a Tcl block that is run once per matching `<field>` element
+
+Within the Tcl block, embgen binds each XML attribute as a variable, so inside the
+emitter you can use `$name`, `$javatype`, `$dbtype`, etc.
+
+When you run:
+
+    tclsh embgen.tcl path/to/Person.java
+
+the generated region will be replaced with:
+
+    private int id; // INTEGER
+    private String firstName; // VARCHAR(255)
+    private String lastName; // VARCHAR(255)
+    private String email; // VARCHAR(255)
+
+If you later add a field to `Person` in `types.xml` (say `age`), running `embgen`
+again updates the class automatically. You never retype the pattern by hand.
+
+
+Example 2: SQL DDL and Migrations
+---------------------------------
+The same schema can be used to generate SQL `CREATE TABLE` statements and migration
+scripts. For example, in a `.sql` file:
+
+    --embgen_embedded_generator xml_driven_macro 22222222-2222-2222-2222-222222222222
+    -- @types.xml {/types/type/fields/field} {
+    --     set fieldsNode [$xpathnode parentNode]
+    --     set typeNode   [$fieldsNode parentNode]
+    --     set tableName  [$typeNode getAttribute name]
+    --
+    --     global tableColumns
+    --     if {![info exists tableColumns($tableName)]} {
+    --         set tableColumns($tableName) {}
+    --     }
+    --     lappend tableColumns($tableName) [list $name $dbtype]
+    -- }
+    -- @{} {} {
+    --     global tableColumns
+    --     if {![info exists tableColumns]} { return }
+    --
+    --     foreach table [lsort [array names tableColumns]] {
+    --         set cols $tableColumns($table)
+    --         emit "CREATE TABLE $table (\n"
+    --         set first 1
+    --         foreach col $cols {
+    --             lassign $col cname ctype
+    --             if {$first} {
+    --                 set first 0
+    --             } else {
+    --                 emit ",\n"
+    --             }
+    --             emit "    $cname $ctype"
+    --         }
+    --         emit "\n);\n\n"
+    --     }
+    -- }
+    --embgen_generated_start 22222222-2222-2222-2222-222222222222
+    -- (CREATE TABLE statements will be generated here)
+    --embgen_generated_end 22222222-2222-2222-2222-222222222222
+
+Here we:
+
+- First pass: walk all `<field>` elements and record their table and column types
+  in a Tcl array
+- Second pass (`@{} {} { ... }`): iterate over the accumulated tables and emit
+  the full DDL
+
+When you add a field to `Person` or `Address` in `types.xml`, re‑running `embgen`
+keeps your DDL block in sync with no manual edits.
+
+
+Example 3: Model–DTO Converters
+-------------------------------
+Another common pattern is converting between domain models and DTOs or DAOs. For
+example, a Java converter might look like:
+
+    //embgen_embedded_generator xml_driven_macro 33333333-3333-3333-3333-333333333333
+    // @"types.xml" {/types/type[@name='Person']/fields/field} {
+    //     emit "dto.set[string toupper [string index $name 0]]"
+    //     emit "[string range $name 1 end](model.get[string toupper [string index $name 0]]"
+    //     emit "[string range $name 1 end]());\n"
+    // }
+    //embgen_generated_start 33333333-3333-3333-3333-333333333333
+    // mapping code goes here
+    //embgen_generated_end 33333333-3333-3333-3333-333333333333
+
+The details of the string manipulation are less important than the pattern: for
+each field of `Person`, emit a single, consistent line of mapping logic. When the
+field list grows or changes, the converter regenerates itself.
+
+This same approach can be applied to:
+
+- Model → DTO conversions
+- DTO → Model conversions
+- Model → DAO and DAO → Model
+- Model → UI ViewModel and binding logic
+
+Everywhere you see a regular pattern across fields, embgen can express it as a
+single, maintainable generator.
+
+
+Example 4: Pure Tcl Macros (tcl_macro)
+--------------------------------------
+Sometimes you just want a small Tcl script to emit code, without any external
+schema. The `tcl_macro` generator type supports exactly that.
+
+In a C++ or Java file, you can write:
+
+    //embgen_embedded_generator tcl_macro 44444444-4444-4444-4444-444444444444
+    // set i 0
+    // foreach perm [permutations {msg1 msg2 msg3 msg4}] {
+    //     emit "
+    // @Test
+    // void test_case_$i () {
+    //   try_order( [comma_separate $perm] );
+    // }
+    //     "
+    //     incr i
+    // }
+    //embgen_generated_start 44444444-4444-4444-4444-444444444444
+    //embgen_generated_end 44444444-4444-4444-4444-444444444444
+
+Here the note content is just Tcl. embgen evaluates it; the script uses helper
+utilities like `permutations` and `comma_separate` to generate a matrix of test
+cases, and everything written via `emit` is spliced into the generated region.
+
+This is especially useful for:
+
+- Exhaustive or combinatorial test generation
+- Repeated boilerplate that is easier to describe procedurally than declaratively
+- Small, one‑off code generators co‑located with the code they affect
+
+
+Beyond Code: Diagrams and Documentation
+---------------------------------------
+Because embgen is agnostic to the content it generates, you can also use it to
+maintain diagrams and documentation derived from your code or configs:
+
+- `dot` generator: run Graphviz on a DOT graph spec in the note, reference the
+  generated PNG in comments or UI assets
+- `plantuml` / `plantuml_ascii`: generate UML diagrams or ASCII art sequence
+  diagrams from PlantUML notes
+- `latex` / `latex_inline`: embed rendered LaTeX math or documentation snippets
+
+These are not strictly schema‑driven, but they follow the same philosophy: keep
+the “recipe” for the generated artifact next to the code it documents.
+
+
+Working at Scale: embgen_many
+-----------------------------
+For larger codebases, you don’t want to run `embgen.tcl` file by file. The companion
+script `embgen_many.tcl` lets you run embgen over a tree of files, with include and
+exclude filters:
+
+    tclsh embgen_many.tcl ROOTDIR --include=*.java --include=*.sql --exclude=*Test.java
+
+`embgen_many` will:
+
+- Walk `ROOTDIR` recursively
+- Select files whose full paths match any `--include=PATTERN` glob
+- Drop any that match a `--exclude=PATTERN` glob
+- For each remaining file:
+  - `cd` into that file’s directory
+  - run `embgen.tcl` on the file
+
+This ensures that generated artifacts like PNGs and temporary files are placed in
+the relevant directories, and it makes it easy to refresh an entire codebase after
+a schema edit with a single command.
+
+
+Why embgen Improves Productivity
+--------------------------------
+embgen doesn’t ask you to buy into a heavy framework or rewrite your build process.
+Instead, it introduces a light‑touch convention for expressing small, local
+generators inside your existing files. This has several practical benefits:
+
+- **Self‑maintaining code around schemas**  
+  The authoritative schema (XML, JSON, or other) stays central, and all the
+  repetitive code that depends on it becomes regenerable and verifiable.
+
+- **Locality and discoverability**  
+  The generator that defines a pattern sits next to the code it generates. Future
+  readers don’t have to hunt through build scripts or external tools to find it.
+
+- **Incremental adoption**  
+  You can start with one or two hotspots (e.g. `Person` and `Address`), add
+  generators where the pain is most acute, and grow from there. No big‑bang
+  migration is required.
+
+- **Language‑agnostic**  
+  Because the generator markers live in comments, you can use embgen in C++,
+  Java, SQL, Tcl, shell scripts, LaTeX, or any other language with a single‑line
+  comment syntax.
+
+- **Extendable**  
+  New generator types can be registered in Tcl. For example, you can add your own
+  generator type that calls a custom CLI or an AI‑powered code assistant, passing
+  the note content as the prompt and inserting the result in the generated region.
+
+
+Getting Started
+---------------
+1. Decide on a schema format (XML, JSON, or otherwise) for your core types.
+2. Identify a small but painful pattern (e.g. field declarations, DTO mapping,
+   basic DDL) that should be kept in sync with that schema.
+3. Add an `embgen_embedded_generator` block around the repeated code, and move the
+   pattern into a note using `emit`.
+4. Run:
+
+       tclsh embgen.tcl yourfile.ext
+
+5. Commit both the generator note and the generated region. From then on, when the
+   schema changes, you simply re‑run embgen and inspect the diff.
+
+For larger projects, wire `embgen_many.tcl` into your build or CI process so that
+schema edits automatically trigger regeneration across the repository.
+
+
+Conclusion
+----------
+embgen brings the idea of code generation down to the level where it is both most
+useful and most maintainable: inside your existing files, expressed in a compact,
+declarative style that lives next to the code it affects.
+
+By capturing repetitive patterns as small embedded generators tied to schemas,
+embgen helps your codebase stay coherent as your domain evolves, dramatically
+reducing the mechanical work of keeping related layers in sync. Instead of chasing
+down every place a field is used, you define the pattern once and let the tool
+handle the rest.

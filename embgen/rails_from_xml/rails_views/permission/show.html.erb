@@ -1,0 +1,18 @@
+<h1>Permission</h1>
+<p>
+  <strong>Id:</strong>
+  <%= @permission.id %>
+</p>
+
+<p>
+  <strong>Code:</strong>
+  <%= @permission.code %>
+</p>
+
+<p>
+  <strong>Description:</strong>
+  <%= @permission.description %>
+</p>
+
+<%= link_to 'Edit', edit_permission_path(@permission) %> |
+<%= link_to 'Back', permissions_path %>

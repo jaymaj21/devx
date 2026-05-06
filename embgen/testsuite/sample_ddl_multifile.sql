@@ -1,0 +1,55 @@
+--embgen_embedded_generator xml_driven_macro 99999999-9999-9999-9999-999999999999
+-- @types.xml {/types/type} {
+--     set tableName [$xpathnode getAttribute name]
+--     # Configure targets and optional output subfolder here.
+--     if {[info exists targetTables] && [llength $targetTables] > 0
+--         && [lsearch -exact $targetTables $tableName] < 0} {
+--         return
+--     }
+--     if {[info exists baseDir]} {
+--         set outPath [file join $baseDir "${tableName}.sql"]
+--     } else {
+--         set outPath "${tableName}.sql"
+--     }
+--     emit_file $outPath {
+--         emit "CREATE TABLE $tableName (\n"
+--         set first 1
+--         foreach fieldNode [$xpathnode selectNodes {fields/field}] {
+--             set cname     [$fieldNode getAttribute name]
+--             set ctype     [$fieldNode getAttribute dbtype]
+--             if {$first} {
+--                 set first 0
+--             } else {
+--                 emit ",\n"
+--             }
+--             emit "    $cname $ctype"
+--         }
+--         emit "\n);\n"
+--     }
+--     emit [::embgen::comment_line "generated file: $outPath"]
+--     emit "\n"
+-- }
+--embgen_generated_start 99999999-9999-9999-9999-999999999999
+-- generated file: Person.sql
+-- generated file: Address.sql
+-- generated file: Order.sql
+-- generated file: OrderItem.sql
+-- generated file: Product.sql
+-- generated file: Category.sql
+-- generated file: InventoryItem.sql
+-- generated file: Warehouse.sql
+-- generated file: Payment.sql
+-- generated file: Invoice.sql
+-- generated file: Shipment.sql
+-- generated file: UserAccount.sql
+-- generated file: UserProfile.sql
+-- generated file: Role.sql
+-- generated file: Permission.sql
+-- generated file: RolePermission.sql
+-- generated file: AuditEvent.sql
+-- generated file: Notification.sql
+-- generated file: ConfigEntry.sql
+-- generated file: FeatureFlag.sql
+-- generated file: Tenant.sql
+
+--embgen_generated_end 99999999-9999-9999-9999-999999999999

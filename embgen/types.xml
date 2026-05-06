@@ -1,0 +1,9 @@
+<types>
+  <type name="Person">
+    <fields>
+      <field name="id"        javatype="int"    dbtype="INTEGER"/>
+      <field name="firstName" javatype="String" dbtype="VARCHAR(255)"/>
+      <field name="lastName"  javatype="String" dbtype="VARCHAR(255)"/>
+    </fields>
+  </type>
+</types>

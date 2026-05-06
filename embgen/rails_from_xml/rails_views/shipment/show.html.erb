@@ -1,0 +1,38 @@
+<h1>Shipment</h1>
+<p>
+  <strong>Id:</strong>
+  <%= @shipment.id %>
+</p>
+
+<p>
+  <strong>Order id:</strong>
+  <%= @shipment.order_id %>
+</p>
+
+<p>
+  <strong>Tracking id:</strong>
+  <%= @shipment.tracking_id %>
+</p>
+
+<p>
+  <strong>Carrier:</strong>
+  <%= @shipment.carrier %>
+</p>
+
+<p>
+  <strong>Status:</strong>
+  <%= @shipment.status %>
+</p>
+
+<p>
+  <strong>Shipped at:</strong>
+  <%= @shipment.shipped_at %>
+</p>
+
+<p>
+  <strong>Delivered at:</strong>
+  <%= @shipment.delivered_at %>
+</p>
+
+<%= link_to 'Edit', edit_shipment_path(@shipment) %> |
+<%= link_to 'Back', shipments_path %>

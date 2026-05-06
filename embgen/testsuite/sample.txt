@@ -1,0 +1,127 @@
+// ============================================================
+// embgen embedded generators demo file
+// 
+// Run:
+//   tclsh embgen.tcl embgen_demo_sample.txt
+//
+// Some generators (dot, plantuml, latex) require external tools to be installed.
+// JSON/XML macros require types.json and types.xml in the same directory.
+// ============================================================
+
+// ------------------------------------------------------------
+// Example 1: echo generator
+// ------------------------------------------------------------
+
+//embgen_embedded_generator echo 11111111-1111-1111-1111-111111111111
+// This code comes from the note text:
+// printf("Hello from embedded generator 1\\n");
+// for (int i = 0; i < 3; ++i) {
+//     printf("  i = %d\\n", i);
+// }
+//embgen_generated_start 11111111-1111-1111-1111-111111111111
+This code comes from the note text:
+printf("Hello from embedded generator 1\\n");
+for (int i = 0; i < 3; ++i) {
+    printf("  i = %d\\n", i);
+}
+//embgen_generated_end 11111111-1111-1111-1111-111111111111
+
+
+// ------------------------------------------------------------
+// Example 2: Graphviz DOT generator
+// ------------------------------------------------------------
+
+//embgen_embedded_generator dot 22222222-2222-2222-2222-222222222222
+// digraph G {
+//   rankdir=LR;
+//   A -> B;
+//   B -> C;
+//   C -> A;
+// }
+//embgen_generated_start 22222222-2222-2222-2222-222222222222
+// DOT graph generated at: C:/Git/jmtools/development_tools/embgen/testsuite/sample.22222222-2222-2222-2222-222222222222.png
+//embgen_generated_end 22222222-2222-2222-2222-222222222222
+
+
+// ------------------------------------------------------------
+// Example 3: PlantUML ASCII generator
+// ------------------------------------------------------------
+
+//embgen_embedded_generator plantuml_ascii 33333333-3333-3333-3333-333333333333
+// @startuml
+// Alice -> Bob: Hello
+// Bob --> Alice: Hi!
+// @enduml
+//embgen_generated_start 33333333-3333-3333-3333-333333333333
+     ,-----.          ,---.
+     |Alice|          |Bob|
+     `--+--'          `-+-'
+        |    Hello      |  
+        |-------------->|  
+        |               |  
+        |     Hi!       |  
+        |<- - - - - - - |  
+     ,--+--.          ,-+-.
+     |Alice|          |Bob|
+     `-----'          `---'
+
+
+//embgen_generated_end 33333333-3333-3333-3333-333333333333
+
+
+// ------------------------------------------------------------
+// Example 4: JSON-driven macro
+// ------------------------------------------------------------
+
+//embgen_embedded_generator json_driven_macro 44444444-4444-4444-4444-444444444444
+// @types.json {types {name Person} fields} {
+//     emit "$javatype $name; // $dbtype\n";
+// }
+//embgen_generated_start 44444444-4444-4444-4444-444444444444
+int id; // INTEGER
+String firstName; // VARCHAR(255)
+String lastName; // VARCHAR(255)
+
+//embgen_generated_end 44444444-4444-4444-4444-444444444444
+
+
+// ------------------------------------------------------------
+// Example 5: XML-driven macro
+// ------------------------------------------------------------
+
+//embgen_embedded_generator xml_driven_macro 55555555-5555-5555-5555-555555555555
+// @types.xml {/types/type[@name='Person']/fields/field} {
+//     emit "$javatype $name; // $dbtype\n";
+// }
+//embgen_generated_start 55555555-5555-5555-5555-555555555555
+int id; // INTEGER
+String firstName; // VARCHAR(255)
+String lastName; // VARCHAR(255)
+String email; // VARCHAR(255)
+String dateOfBirth; // VARCHAR(20)
+String phoneNumber; // VARCHAR(50)
+String status; // VARCHAR(20)
+
+//embgen_generated_end 55555555-5555-5555-5555-555555555555
+
+
+// ------------------------------------------------------------
+// Example 6: LaTeX generator (may require latex + dvipng)
+// ------------------------------------------------------------
+
+//embgen_embedded_generator latex 66666666-6666-6666-6666-666666666666
+// Here is some LaTeX math: $E = mc^2$.
+//embgen_generated_start 66666666-6666-6666-6666-666666666666
+// LaTeX PNG generated at: C:/Git/jmtools/development_tools/embgen/testsuite/sample.66666666-6666-6666-6666-666666666666.png
+//embgen_generated_end 66666666-6666-6666-6666-666666666666
+
+
+// ------------------------------------------------------------
+// Example 7: using_command_line
+// ------------------------------------------------------------
+
+//embgen_embedded_generator using_command_line 77777777-7777-7777-7777-777777777777
+// echo "Hello from shell via using_command_line"
+//embgen_generated_start 77777777-7777-7777-7777-777777777777
+Hello from shell via using_command_line
+//embgen_generated_end 77777777-7777-7777-7777-777777777777

@@ -1,0 +1,210 @@
+BG white DF {courier 10 normal} T {--embgen_embedded_generator xml_driven_macro 22222222-2222-2222-2222-222222222222} T {
+} T \ \ \ \ --\ @types.xml\ \{/types/type/fields/field\}\ \{ T {
+} T {    --     set } S U63620555-460d-a348-b0a4-e0039d5bd541 T fieldsNode P { U63620555-460d-a348-b0a4-e0039d5bd541 -background {#e7ac97}} /S U63620555-460d-a348-b0a4-e0039d5bd541 T { [$} S Ucf59274b-a637-094a-89ac-eb773b075509 T xpathnode P { Ucf59274b-a637-094a-89ac-eb773b075509 -background {#accd99}} /S Ucf59274b-a637-094a-89ac-eb773b075509 T { parentNode]} T {
+} T {    --     set } S Uabb35618-1e7b-614f-824b-1586426c80a9 T typeNode P { Uabb35618-1e7b-614f-824b-1586426c80a9 -background {#d9f9ce}} /S Uabb35618-1e7b-614f-824b-1586426c80a9 T {   [$} S U63620555-460d-a348-b0a4-e0039d5bd541 T fieldsNode /S U63620555-460d-a348-b0a4-e0039d5bd541 T { parentNode]} T {
+} T {    --     set tableName  [$} S Uabb35618-1e7b-614f-824b-1586426c80a9 T typeNode /S Uabb35618-1e7b-614f-824b-1586426c80a9 T { getAttribute name]} T {
+} T {    --} T {
+} T {    --     global } S Ucd40ffa2-7525-5145-901b-8266441e0b45 T tableColumns P { Ucd40ffa2-7525-5145-901b-8266441e0b45 -background {#f9bcc3}} /S Ucd40ffa2-7525-5145-901b-8266441e0b45 T {
+} T \ \ \ \ --\ \ \ \ \ if\ \{!\[info\ exists\  S Ucd40ffa2-7525-5145-901b-8266441e0b45 T tableColumns /S Ucd40ffa2-7525-5145-901b-8266441e0b45 T (\$tableName)\]\}\ \{ T {
+} T {    --         set } S Ucd40ffa2-7525-5145-901b-8266441e0b45 T tableColumns /S Ucd40ffa2-7525-5145-901b-8266441e0b45 T {($tableName) {}} T {
+} T \ \ \ \ --\ \ \ \ \ \} T {
+} T {    --     lappend } S Ucd40ffa2-7525-5145-901b-8266441e0b45 T tableColumns /S Ucd40ffa2-7525-5145-901b-8266441e0b45 T {($tableName) [list $name $dbtype]} T {
+} T \ \ \ \ --\ \} T {
+} T \ \ \ \ --\ @\{\}\ \{\}\ \{ T {
+} T {    --     global } S Ucd40ffa2-7525-5145-901b-8266441e0b45 T tableColumns /S Ucd40ffa2-7525-5145-901b-8266441e0b45 T {
+} T \ \ \ \ --\ \ \ \ \ if\ \{!\[info\ exists\  S Ucd40ffa2-7525-5145-901b-8266441e0b45 T tableColumns /S Ucd40ffa2-7525-5145-901b-8266441e0b45 T \]\}\ \{\ return\ \} T {
+} T {    --} T {
+} T {    --     foreach table [lsort [array names } S Ucd40ffa2-7525-5145-901b-8266441e0b45 T tableColumns /S Ucd40ffa2-7525-5145-901b-8266441e0b45 T \]\]\ \{ T {
+} T {    --         set cols $} S Ucd40ffa2-7525-5145-901b-8266441e0b45 T tableColumns /S Ucd40ffa2-7525-5145-901b-8266441e0b45 T {($table)} T {
+} T {    --         emit "CREATE TABLE $table (\n"} T {
+} T {    --         set first 1} T {
+} T {    --         foreach } S U80e1858c-3b38-9d4b-9523-159f4bd1f154 T col P { U80e1858c-3b38-9d4b-9523-159f4bd1f154 -background {#c6b4a2}} /S U80e1858c-3b38-9d4b-9523-159f4bd1f154 T \ \$cols\ \{ T {
+} T {    --             lassign $} S U80e1858c-3b38-9d4b-9523-159f4bd1f154 T col /S U80e1858c-3b38-9d4b-9523-159f4bd1f154 T { } S Ub73d3e25-27a9-6a4a-a1aa-23fb17d3f180 T cname P { Ub73d3e25-27a9-6a4a-a1aa-23fb17d3f180 -background {#e4bcd9}} /S Ub73d3e25-27a9-6a4a-a1aa-23fb17d3f180 T { } S Uab380a18-a1a3-e940-a1fb-6cbd641fe88c T ctype P { Uab380a18-a1a3-e940-a1fb-6cbd641fe88c -background {#c6a8cb}} /S Uab380a18-a1a3-e940-a1fb-6cbd641fe88c T {
+} T \ \ \ \ --\ \ \ \ \ \ \ \ \ \ \ \ \ if\ \{\$first\}\ \{ T {
+} T {    --                 set first 0} T {
+} T \ \ \ \ --\ \ \ \ \ \ \ \ \ \ \ \ \ \}\ else\ \{ T {
+} T {    --                 emit ",\n"} T {
+} T \ \ \ \ --\ \ \ \ \ \ \ \ \ \ \ \ \ \} T {
+} T {    --             emit "    $} S Ub73d3e25-27a9-6a4a-a1aa-23fb17d3f180 T cname /S Ub73d3e25-27a9-6a4a-a1aa-23fb17d3f180 T { $} S Uab380a18-a1a3-e940-a1fb-6cbd641fe88c T ctype /S Uab380a18-a1a3-e940-a1fb-6cbd641fe88c T {"} T {
+} T \ \ \ \ --\ \ \ \ \ \ \ \ \ \} T {
+} T {    --         emit "\n);\n\n"} T {
+} T \ \ \ \ --\ \ \ \ \ \} T {
+} T \ \ \ \ --\ \} T {
+} T {    --embgen_generated_start 22222222-2222-2222-2222-222222222222} T {
+} T {    CREATE TABLE Address (} T {
+} T {        id INTEGER,} T {
+} T {        personId INTEGER,} T {
+} T {        street VARCHAR(255),} T {
+} T {        city VARCHAR(255),} T {
+} T {        state VARCHAR(255),} T {
+} T {        zipCode VARCHAR(20),} T {
+} T {        country VARCHAR(255)} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE AuditEvent (} T {
+} T {        id BIGINT,} T {
+} T {        userId INTEGER,} T {
+} T {        eventType VARCHAR(100),} T {
+} T {        eventTime TIMESTAMP,} T {
+} T {        details VARCHAR(2000)} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE Category (} T {
+} T {        id INTEGER,} T {
+} T {        name VARCHAR(255),} T {
+} T {        description VARCHAR(1000),} T {
+} T {        parentId INTEGER} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE ConfigEntry (} T {
+} T {        id INTEGER,} T {
+} T {        key VARCHAR(255),} T {
+} T {        value VARCHAR(4000),} T {
+} T {        scope VARCHAR(50),} T {
+} T {        updatedAt TIMESTAMP} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE FeatureFlag (} T {
+} T {        id INTEGER,} T {
+} T {        name VARCHAR(255),} T {
+} T {        enabled BOOLEAN,} T {
+} T {        rollout INTEGER} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE InventoryItem (} T {
+} T {        id INTEGER,} T {
+} T {        productId INTEGER,} T {
+} T {        warehouseId INTEGER,} T {
+} T {        quantity INTEGER,} T {
+} T {        reserved INTEGER} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE Invoice (} T {
+} T {        id BIGINT,} T {
+} T {        orderId BIGINT,} T {
+} T {        invoiceNumber VARCHAR(50),} T {
+} T {        issuedAt TIMESTAMP,} T {
+} T {        dueAt TIMESTAMP,} T {
+} T {        total DECIMAL(12,2)} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE Notification (} T {
+} T {        id BIGINT,} T {
+} T {        userId INTEGER,} T {
+} T {        channel VARCHAR(50),} T {
+} T {        payload VARCHAR(4000),} T {
+} T {        status VARCHAR(20),} T {
+} T {        createdAt TIMESTAMP} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE Order (} T {
+} T {        id BIGINT,} T {
+} T {        personId INTEGER,} T {
+} T {        orderNumber VARCHAR(50),} T {
+} T {        status VARCHAR(20),} T {
+} T {        createdAt TIMESTAMP,} T {
+} T {        updatedAt TIMESTAMP,} T {
+} T {        totalAmount DECIMAL(12,2)} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE OrderItem (} T {
+} T {        id BIGINT,} T {
+} T {        orderId BIGINT,} T {
+} T {        productId INTEGER,} T {
+} T {        quantity INTEGER,} T {
+} T {        unitPrice DECIMAL(12,2),} T {
+} T {        lineTotal DECIMAL(12,2)} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE Payment (} T {
+} T {        id BIGINT,} T {
+} T {        orderId BIGINT,} T {
+} T {        amount DECIMAL(12,2),} T {
+} T {        currency VARCHAR(3),} T {
+} T {        method VARCHAR(50),} T {
+} T {        status VARCHAR(20),} T {
+} T {        processedAt TIMESTAMP} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE Permission (} T {
+} T {        id INTEGER,} T {
+} T {        code VARCHAR(100),} T {
+} T {        description VARCHAR(1000)} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE Person (} T {
+} T {        id INTEGER,} T {
+} T {        firstName VARCHAR(255),} T {
+} T {        lastName VARCHAR(255),} T {
+} T {        email VARCHAR(255),} T {
+} T {        dateOfBirth VARCHAR(20),} T {
+} T {        phoneNumber VARCHAR(50),} T {
+} T {        status VARCHAR(20)} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE Product (} T {
+} T {        id INTEGER,} T {
+} T {        sku VARCHAR(50),} T {
+} T {        name VARCHAR(255),} T {
+} T {        description VARCHAR(2000),} T {
+} T {        price DECIMAL(12,2),} T {
+} T {        currency VARCHAR(3),} T {
+} T {        active BOOLEAN} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE Role (} T {
+} T {        id INTEGER,} T {
+} T {        name VARCHAR(100),} T {
+} T {        description VARCHAR(1000)} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE RolePermission (} T {
+} T {        roleId INTEGER,} T {
+} T {        permissionId INTEGER} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE Shipment (} T {
+} T {        id BIGINT,} T {
+} T {        orderId BIGINT,} T {
+} T {        trackingId VARCHAR(100),} T {
+} T {        carrier VARCHAR(100),} T {
+} T {        status VARCHAR(20),} T {
+} T {        shippedAt TIMESTAMP,} T {
+} T {        deliveredAt TIMESTAMP} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE Tenant (} T {
+} T {        id INTEGER,} T {
+} T {        code VARCHAR(50),} T {
+} T {        name VARCHAR(255),} T {
+} T {        active BOOLEAN} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE UserAccount (} T {
+} T {        id INTEGER,} T {
+} T {        username VARCHAR(100),} T {
+} T {        hashedPassword VARCHAR(255),} T {
+} T {        email VARCHAR(255),} T {
+} T {        role VARCHAR(50),} T {
+} T {        active BOOLEAN} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE UserProfile (} T {
+} T {        id INTEGER,} T {
+} T {        userId INTEGER,} T {
+} T {        firstName VARCHAR(255),} T {
+} T {        lastName VARCHAR(255),} T {
+} T {        avatarUrl VARCHAR(500),} T {
+} T {        bio VARCHAR(2000)} T {
+} T {    );} T {
+} T {
+} T {    CREATE TABLE Warehouse (} T {
+} T {        id INTEGER,} T {
+} T {        code VARCHAR(50),} T {
+} T {        name VARCHAR(255),} T {
+} T {        location VARCHAR(255),} T {
+} T {        capacity INTEGER} T {
+} T {    );} T {
+} T {
+} T {
+} T {    --embgen_generated_end 22222222-2222-2222-2222-222222222222}

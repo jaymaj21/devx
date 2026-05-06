@@ -1,0 +1,28 @@
+<h1>Audit event</h1>
+<p>
+  <strong>Id:</strong>
+  <%= @audit_event.id %>
+</p>
+
+<p>
+  <strong>User id:</strong>
+  <%= @audit_event.user_id %>
+</p>
+
+<p>
+  <strong>Event type:</strong>
+  <%= @audit_event.event_type %>
+</p>
+
+<p>
+  <strong>Event time:</strong>
+  <%= @audit_event.event_time %>
+</p>
+
+<p>
+  <strong>Details:</strong>
+  <%= @audit_event.details %>
+</p>
+
+<%= link_to 'Edit', edit_audit_event_path(@audit_event) %> |
+<%= link_to 'Back', audit_events_path %>

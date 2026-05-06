@@ -1,0 +1,328 @@
+\documentclass[11pt]{article}
+
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\setlength{\emergencystretch}{2em}
+
+\lstdefinestyle{embgen}{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  frame=single,
+  framerule=0.3pt,
+  rulecolor=\color{black!35}
+}
+
+\title{Embedded Generators: Situated Code Generation for Self-Maintaining Codebases}
+\author{Jayanta Majumder \and Sambuddha Majumder}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Modern software systems often contain many layers whose structure is derived
+from a smaller set of schemas: database tables, domain models, DTOs, DAOs,
+serialization code, user-interface forms, and test fixtures.  When the schema
+changes, these derived fragments must change with it.  In practice, the work is
+mechanical but distributed, and therefore error-prone.  This paper describes
+the embedded generator pattern implemented by \texttt{embgen}, a lightweight
+tool that places small generator programs directly inside source-file comments
+and rewrites only explicitly marked generated regions.  The approach recovers
+some of the practical value of macro systems--code situated next to the
+abstraction that produces it--without requiring the host language to be
+homoiconic or to provide compile-time procedural macros.
+\end{abstract}
+
+\section{Introduction}
+
+The history of programming languages contains a recurring aspiration: programs
+should be able to construct other programs when the construction is more
+regular, more reliable, or more expressive than hand-written repetition.  Lisp
+made this idea unusually direct.  In Paul Graham's account of what distinguished
+Lisp, one of the central properties is that ``the whole language always
+available'' and that there is ``no real distinction between read-time,
+compile-time, and runtime'' \cite{graham-diff}.  He connects this immediately
+to macros: ``Running code at compile-time is the basis of macros''
+\cite{graham-diff}.  In \emph{On Lisp}, he gives the more operational point:
+``A macro generating its expansion has at its disposition the full power of
+Lisp'' \cite{graham-onlisp}.
+
+This matters because a macro is not merely a textual abbreviation.  It is a
+program that runs in a privileged phase and emits program text, or more
+precisely program structure, for a later phase.  The user can create a local
+abstraction whose expansion is computed by the same language in which the rest
+of the system is written.  In a Lisp-family language, the representation of
+programs as ordinary symbolic data gives this technique an unusually natural
+form.
+
+Most industrial code, however, is not written in such languages.  C and C++
+provide a preprocessor, but its macros are fundamentally token replacement
+facilities: a macro name is replaced by its body, parameters are substituted as
+preprocessing tokens, and further operators such as stringizing and token
+concatenation are available \cite{gcc-cpp-macros,gcc-cpp-args}.  Conditional
+compilation is useful, but the facility is not the same as running an arbitrary
+host-language program over a rich model and emitting a structured expansion.
+Rust is a notable modern exception: its procedural macros run during
+compilation and operate over token streams, consuming and producing Rust syntax
+\cite{rust-proc-macros}.  But for many languages and many codebases, such
+compile-time power is absent, inconvenient, or tied to a particular build
+system.
+
+The proposed embedded generators are based on the insight that the practical power of
+situated code generation does not require the generated language itself to be
+homoiconic.  Nor does it require the compiler to host the generator.  What is
+needed is a stable source of truth, a small program that maps that source into a
+repeated code pattern, and a set of disciplined locations in the source file where the
+generated result is allowed to appear.  XML, JSON, or another schema language
+can provide the input representation; comments can host the generator; and a
+command-line tool can perform the rewrite before compilation, review, or
+deployment.
+
+\section{The Maintenance Problem}
+
+Large applications tend to accrete parallel representations of the same domain
+facts.  A field such as \texttt{email} or \texttt{dateOfBirth} may appear in a
+database definition, a domain model, a DTO, a DAO, a JSON serializer, a form,
+and several test fixtures.  Adding or renaming the field is conceptually simple,
+but the edit fans out across many files.  The resulting failures are usually
+not intellectually interesting: a mapper omits a field, a fixture drifts from a
+schema, a view fails to expose a new property, or a migration no longer matches
+the model layer.
+
+Whole-file generators address part of this problem, but they often force a
+sharp division between generated and hand-written code.  That division can be
+awkward where the repeated fragment is small and embedded inside otherwise
+hand-maintained logic.  Developers then face an unattractive choice: either
+generate more of the file than they really want to give up, or keep the small
+repeated region by hand.
+
+\section{The Embedded Generator Pattern}
+
+\texttt{embgen} uses a narrower contract.  A source file contains a generator
+note and a generated region, both marked by comments.  A UUID binds the note to
+the region it owns:
+
+\begin{lstlisting}[style=embgen]
+//embgen_embedded_generator xml_driven_macro 11111111-1111-1111-1111-111111111111
+// @types.xml {/types/type[@name='Person']/fields/field} {
+//     emit "    private $javatype $name; // $dbtype\n";
+// }
+//embgen_generated_start 11111111-1111-1111-1111-111111111111
+// generated code appears here
+//embgen_generated_end 11111111-1111-1111-1111-111111111111
+\end{lstlisting}
+
+The marker syntax is deliberately comment-based.  It can be embedded in Java,
+C++, SQL, Ruby, shell scripts, LaTeX, and other formats with single-line
+comments.  The host compiler or interpreter treats the generator note as a
+comment.  \texttt{embgen}, run as a separate tool, recognizes the marker,
+strips the comment prefix from the note, executes the named generator, and
+replaces only the text between \texttt{embgen\_generated\_start} and
+\texttt{embgen\_generated\_end}.
+
+The UUID is important engineering machinery.  It prevents accidental coupling
+to source order and lets multiple generators coexist in one file.  The
+surrounding code remains ordinary hand-written source.  The generated region is
+small, explicit, and reviewable.
+
+\section{Execution Model}
+
+The Tcl implementation, \texttt{embgen.tcl}, and the Ruby implementation,
+\texttt{embgen.rb}, follow the same conceptual pipeline:
+
+\begin{enumerate}
+  \item scan each file for embedded generator headers;
+  \item collect the note body up to the matching generated-start marker;
+  \item dispatch the note to the generator type named in the header;
+  \item execute the generator with helper operations such as \texttt{emit};
+  \item replace the old generated body with the new emitted text; and
+  \item flush any queued secondary files produced by \texttt{emit\_file} or
+        \texttt{emit\_to\_file}.
+\end{enumerate}
+
+The built-in generator types include schema-driven generators
+(\texttt{xml\_driven\_macro} and \texttt{json\_driven\_macro}), procedural
+generators (\texttt{tcl\_macro} in the Tcl version and \texttt{ruby\_macro} in
+the Ruby version), documentation and diagram generators
+(\texttt{dot}, \texttt{plantuml}, \texttt{plantuml\_ascii},
+\texttt{latex}, and \texttt{latex\_inline}), an \texttt{echo} generator, and a
+\texttt{using\_command\_line} generator.
+
+For XML-driven generation, a note contains one or more directives of the form:
+
+\begin{lstlisting}[style=embgen]
+@types.xml {/types/type[@name='Person']/fields/field} {
+    emit "private $javatype $name; // $dbtype\n";
+}
+\end{lstlisting}
+
+The XPath selects nodes.  For each selected node, its attributes are bound as
+variables, and the embedded body emits text.  In the Ruby implementation, the
+same idea is expressed with Ruby interpolation and REXML node access:
+
+\begin{lstlisting}[style=embgen]
+@types.xml {/types/type} {
+    table_name = xpathnode.attributes['name']
+    emit "CREATE TABLE #{table_name} (\n"
+    xpathnode.elements.each_with_index('fields/field') do |field, idx|
+        emit ",\n" unless idx.zero?
+        emit "    #{field.attributes['name']} #{field.attributes['dbtype']}"
+    end
+    emit "\n);\n\n"
+}
+\end{lstlisting}
+
+Relative schema paths are resolved relative to the processed file, walking up
+parent directories when needed.  This keeps generator notes relocatable with
+their source files while still allowing a shared schema to serve as the project
+source of truth.
+
+\section{Examples from the Test Suite}
+
+The repository fixtures exercise the pattern at several scales.  The
+\texttt{sample.txt} fixtures demonstrate basic generators: echoing note text,
+Graphviz and PlantUML output, XML and JSON field generation, LaTeX image
+generation, and command-line output embedding.  The schema fixtures
+\texttt{types.xml} and \texttt{types.json} describe domain types such as
+\texttt{Person}, \texttt{Address}, \texttt{Order}, \texttt{Product},
+\texttt{Invoice}, and \texttt{Tenant}.  From these, the SQL fixtures generate
+complete \texttt{CREATE TABLE} statements.
+
+The multi-file SQL fixture demonstrates a more substantial use case.  A single
+embedded generator iterates over all schema types and emits one SQL file per
+table, using \texttt{emit\_file}.  The generated region in the driver file then
+contains a short audit trail such as ``generated file: Person.sql'', while the
+actual table definitions are written to separate files.  This shows that the
+embedded note can be a local command post for a family of derived artifacts, not
+only for the text physically inside the current file.
+
+The Rails view fixture pushes the same idea into a user-interface layer.  For
+each type, the generator creates \texttt{show.html.erb} and
+\texttt{edit.html.erb} files and derives labels and model variable names from
+schema fields.  The value is not that generated views are intrinsically
+complete; it is that the repetitive field-level scaffolding has an explicit,
+rerunnable derivation.
+
+The permutation fixture demonstrates a non-schema use case.  A procedural macro
+uses \texttt{permutations} and \texttt{comma\_separate} to generate exhaustive
+test cases for different message orderings.  This is the same core pattern:
+replace hand-maintained repetition with a small local program whose output is
+checked into the source tree and reviewed as ordinary code.
+
+\section{Relation to Macros}
+
+Embedded generators are macro-like in their purpose but not in their phase
+integration.  A Lisp macro is part of the language implementation's expansion
+process.  A Rust procedural macro is part of compilation and returns syntax to
+the compiler.  An embedded generator is an external rewriting step over marked
+regions of ordinary files.
+
+This difference is a limitation and a strength.  It is a limitation because the
+host compiler does not type-check the generator itself as part of the target
+language, and because incremental rebuild tracking must be supplied by project
+convention, CI, or build integration.  It is a strength because the technique is
+language-agnostic.  The same schema-driven generator style can maintain Java
+fields, SQL DDL, Rails views, documentation snippets, and tests.  The generated
+artifact need not even be source code.
+
+The deeper commonality is locality.  In a good macro system, the abstraction
+appears at the use site and the expansion is close to the program it explains.
+In \texttt{embgen}, the generator note is directly adjacent to the region it
+owns.  This preserves discoverability: a maintainer reading the generated code
+can see how it is regenerated without searching through a distant build script
+or generator project.
+
+\section{Reviewability and Idempotence}
+
+The recommended workflow is to commit both the generator note and the generated
+region.  This is sometimes controversial: generated code is often excluded from
+version control.  For embedded generators, checking in both parts is a useful
+discipline.  The generator is small and local; the output is what the compiler,
+database, or renderer actually consumes; and the diff after a schema change
+becomes a concrete review artifact.  If a new field is added to
+\texttt{types.xml}, the regenerated SQL, model fragments, view fragments, or
+fixtures appear in the same review.
+
+The generated region is also bounded.  \texttt{embgen} does not claim ownership
+of the whole file.  This reduces the social and technical cost of adoption.  A
+team can begin with one painful repeated fragment, give it a UUID, and leave the
+rest of the file untouched.
+
+\section{Risks and Boundaries}
+
+The pattern is powerful enough to require discipline.  Embedded code execution
+has the same security implications as other local code-generation steps.  A
+repository that runs \texttt{using\_command\_line}, diagram tools, LaTeX, Tcl, or
+Ruby bodies is executing code, not merely formatting text.  Projects should run
+generators in trusted contexts, review generator notes carefully, and integrate
+the tool into CI only with the same care given to build scripts.
+
+Generator notes should also stay small.  If a generator becomes a large program,
+it may deserve to be promoted into a named library or external tool.  The
+embedded form is best when it captures a local, regular, reviewable mapping
+from schema data or simple procedural logic into a nearby code region.
+
+\section{Conclusion}
+
+\texttt{embgen} generalizes a practical lesson from macro systems: many of the
+best abstractions are programs that write the repetitive parts of other
+programs.  Lisp offers this through a language whose code representation and
+phase structure make macros exceptionally expressive.  Rust offers another
+modern route through procedural macros.  Embedded generators offer a third,
+more portable route: place the generator in comments, place the schema in XML,
+JSON, or another explicit representation, and let a small tool refresh only the
+marked generated regions.
+
+The result is not a replacement for true language-integrated macros.  It is a
+pragmatic technique for ordinary polyglot codebases, where schema drift and
+boilerplate maintenance are everyday costs.  By making the derivation local,
+explicit, rerunnable, and reviewable, embedded generators allow codebases to
+retain hand-written structure while making their mechanical fragments
+self-maintaining.
+
+\begin{thebibliography}{9}
+
+\bibitem{graham-diff}
+Paul Graham.
+\newblock \emph{What Made Lisp Different}.
+\newblock December 2001, revised May 2002.
+\newblock \url{https://www.paulgraham.com/diff.html}
+
+\bibitem{graham-nerds}
+Paul Graham.
+\newblock \emph{Revenge of the Nerds}.
+\newblock \url{https://www.paulgraham.com/icad.html}
+
+\bibitem{graham-onlisp}
+Paul Graham.
+\newblock \emph{On Lisp: Advanced Techniques for Common Lisp}.
+\newblock 1993.
+\newblock \url{https://www.paulgraham.com/onlisp.html}
+
+\bibitem{gcc-cpp-macros}
+Free Software Foundation.
+\newblock \emph{The C Preprocessor: Macros}.
+\newblock GCC documentation.
+\newblock \url{https://gcc.gnu.org/onlinedocs/cpp/Macros.html}
+
+\bibitem{gcc-cpp-args}
+Free Software Foundation.
+\newblock \emph{The C Preprocessor: Macro Arguments}.
+\newblock GCC documentation.
+\newblock \url{https://gcc.gnu.org/onlinedocs/cpp/Macro-Arguments.html}
+
+\bibitem{rust-proc-macros}
+The Rust Project Developers.
+\newblock \emph{The Rust Reference: Procedural Macros}.
+\newblock \url{https://doc.rust-lang.org/reference/procedural-macros.html}
+
+\end{thebibliography}
+
+\end{document}

@@ -1,0 +1,30 @@
+<h1>Edit Feature flag</h1>
+
+<%= form_with model: @feature_flag, local: true do |f| %>
+  <div class="field">
+    <%= f.label :id, "Id" %>
+    <%= f.text_field :id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :name, "Name" %>
+    <%= f.text_field :name %>
+  </div>
+
+  <div class="field">
+    <%= f.label :enabled, "Enabled" %>
+    <%= f.text_field :enabled %>
+  </div>
+
+  <div class="field">
+    <%= f.label :rollout, "Rollout" %>
+    <%= f.text_field :rollout %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit %>
+  </div>
+<% end %>
+
+<%= link_to 'Show', @feature_flag %> |
+<%= link_to 'Back', feature_flags_path %>

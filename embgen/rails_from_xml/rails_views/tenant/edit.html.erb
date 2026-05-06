@@ -1,0 +1,30 @@
+<h1>Edit Tenant</h1>
+
+<%= form_with model: @tenant, local: true do |f| %>
+  <div class="field">
+    <%= f.label :id, "Id" %>
+    <%= f.text_field :id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :code, "Code" %>
+    <%= f.text_field :code %>
+  </div>
+
+  <div class="field">
+    <%= f.label :name, "Name" %>
+    <%= f.text_field :name %>
+  </div>
+
+  <div class="field">
+    <%= f.label :active, "Active" %>
+    <%= f.text_field :active %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit %>
+  </div>
+<% end %>
+
+<%= link_to 'Show', @tenant %> |
+<%= link_to 'Back', tenants_path %>

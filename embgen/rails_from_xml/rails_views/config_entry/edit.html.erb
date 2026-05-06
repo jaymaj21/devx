@@ -1,0 +1,35 @@
+<h1>Edit Config entry</h1>
+
+<%= form_with model: @config_entry, local: true do |f| %>
+  <div class="field">
+    <%= f.label :id, "Id" %>
+    <%= f.text_field :id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :key, "Key" %>
+    <%= f.text_field :key %>
+  </div>
+
+  <div class="field">
+    <%= f.label :value, "Value" %>
+    <%= f.text_field :value %>
+  </div>
+
+  <div class="field">
+    <%= f.label :scope, "Scope" %>
+    <%= f.text_field :scope %>
+  </div>
+
+  <div class="field">
+    <%= f.label :updated_at, "Updated at" %>
+    <%= f.text_field :updated_at %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit %>
+  </div>
+<% end %>
+
+<%= link_to 'Show', @config_entry %> |
+<%= link_to 'Back', config_entrys_path %>

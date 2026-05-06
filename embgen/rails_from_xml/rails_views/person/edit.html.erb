@@ -1,0 +1,45 @@
+<h1>Edit Person</h1>
+
+<%= form_with model: @person, local: true do |f| %>
+  <div class="field">
+    <%= f.label :id, "Id" %>
+    <%= f.text_field :id %>
+  </div>
+
+  <div class="field">
+    <%= f.label :first_name, "First name" %>
+    <%= f.text_field :first_name %>
+  </div>
+
+  <div class="field">
+    <%= f.label :last_name, "Last name" %>
+    <%= f.text_field :last_name %>
+  </div>
+
+  <div class="field">
+    <%= f.label :email, "Email" %>
+    <%= f.text_field :email %>
+  </div>
+
+  <div class="field">
+    <%= f.label :date_of_birth, "Date of birth" %>
+    <%= f.text_field :date_of_birth %>
+  </div>
+
+  <div class="field">
+    <%= f.label :phone_number, "Phone number" %>
+    <%= f.text_field :phone_number %>
+  </div>
+
+  <div class="field">
+    <%= f.label :status, "Status" %>
+    <%= f.text_field :status %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit %>
+  </div>
+<% end %>
+
+<%= link_to 'Show', @person %> |
+<%= link_to 'Back', persons_path %>
