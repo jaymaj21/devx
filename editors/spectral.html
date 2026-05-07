@@ -316,6 +316,50 @@ function noteButtonClickHandler(event) {
         event.preventDefault(); // Prevent focus stealing
         showNoteEditPopup(event);
     };
+
+function hydrateEditorControls(root = document.getElementById('editor')) {
+    if (!root) return;
+
+    root.querySelectorAll('button.note-button, .note-button').forEach(btn => {
+        if (!btn.hasAttribute('data-message')) {
+            btn.setAttribute('data-message', '');
+        }
+        btn.setAttribute("onclick", 'noteButtonClickHandler(event)');
+        btn.onclick = noteButtonClickHandler;
+    });
+
+    root.querySelectorAll('a[onclick]').forEach(anchor => {
+        const onclick = anchor.getAttribute('onclick') || '';
+        const match = onclick.match(/selectText\(['"]([^'"]+)['"]\)/);
+        if (match) {
+            anchor.setAttribute('data-select-id', match[1]);
+        }
+    });
+
+    root.querySelectorAll('a[data-select-id]').forEach(anchor => {
+        const id = anchor.getAttribute('data-select-id');
+        if (id) {
+            anchor.setAttribute('href', '#' + id);
+            anchor.setAttribute("onclick", "selectText('" + id + "'); return false;");
+            anchor.onclick = function(event) {
+                event.preventDefault();
+                selectText(id);
+                return false;
+            };
+        }
+    });
+
+    root.querySelectorAll('.image-button-reveal[data-imghtml]').forEach(btn => {
+        btn.setAttribute('onclick', 'showImageFromButton(this)');
+        btn.onclick = function() {
+            showImageFromButton(btn);
+        };
+    });
+
+    if (typeof hydrateEmbeddedVideoSources === 'function') {
+        hydrateEmbeddedVideoSources(root);
+    }
+}
     
 function selectText(containerid) {
     if (document.selection) { // IE
@@ -1779,9 +1823,7 @@ document.getElementById('fileLoader').addEventListener('change', function(event)
             if (loadedEditorDiv) {
                 // Found an editor div, load its innerHTML
                 editor.innerHTML = loadedEditorDiv.innerHTML;
-                if (typeof hydrateEmbeddedVideoSources === 'function') {
-                    hydrateEmbeddedVideoSources(editor);
-                }
+                hydrateEditorControls(editor);
                 setStatus("Loaded editor content from HTML file.");
                 return;
             }
@@ -3992,26 +4034,7 @@ function extractTextWithNewlines(container) {
 document.getElementById('editor').addEventListener('paste', function (event) {
     // Allow browser paste first
     setTimeout(() => {
-        // After paste is complete, rebind note buttons
-        const editor = document.getElementById('editor');
-        const buttons = editor.querySelectorAll('button.note-button');
-
-        buttons.forEach(btn => {
-            if (!btn.dataset.message) return;
-
-            // Remove inline onclick if it somehow persisted (rare)
-            btn.removeAttribute('onclick');
-            btn.setAttribute("onclick", 'noteButtonClickHandler(event)');
-
-        });
-        
-        editor.querySelectorAll('a[data-select-id]').forEach(anchor => {
-            const id = anchor.getAttribute('data-select-id');
-            if (id) {
-                anchor.setAttribute("onclick", "selectText('" + id + "')");
-            }
-        });
-        
+        hydrateEditorControls(document.getElementById('editor'));
     }, 100); // small delay to wait for paste to finish
 });
 
@@ -6653,6 +6676,72 @@ function insertDownloadLinkAtSavedRange() {
     return false;
   }
 
+
+  // Extract code from pasted ChatGPT/CodeMirror code blocks without losing visual line breaks.
+  // textContent ignores <br>, which is why multi-line code was being flattened in verbatim.
+  function getPreTextPreservingVisualBreaks(preEl) {
+    const codeRoot = findBestCodeRoot(preEl);
+    let text = domTextWithCodeLineBreaks(codeRoot);
+
+    return text
+      .replace(/\r\n?/g, '\n')
+      .replace(/\u00a0/g, ' ')
+      .replace(/[ \t]+$/g, ''); // trim only the final padding, not indentation on earlier lines
+  }
+
+  function findBestCodeRoot(preEl) {
+    // ChatGPT exports often paste as:
+    // <pre outer> ... <pre class="cm-content"><code>line<br>line</code></pre> ... </pre>
+    // Prefer the innermost/code-editor content, otherwise fall back to the pre itself.
+    const selectors = [
+      'pre.cm-content code',
+      'pre[class*="cm-content"] code',
+      '.cm-content code',
+      'code'
+    ];
+
+    for (const selector of selectors) {
+      const matches = Array.from(preEl.querySelectorAll(selector));
+      if (matches.length) {
+        return matches[matches.length - 1];
+      }
+    }
+    return preEl;
+  }
+
+  function domTextWithCodeLineBreaks(root) {
+    let out = '';
+
+    function walk(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        out += node.nodeValue || '';
+        return;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+      const el = node;
+      const tag = el.tagName.toLowerCase();
+
+      if (tag === 'br') {
+        out += '\n';
+        return;
+      }
+
+      const isCodeMirrorLine = el.classList && el.classList.contains('cm-line');
+      const beforeLen = out.length;
+
+      el.childNodes.forEach(walk);
+
+      // Some CodeMirror exports use one div per visual line rather than <br>.
+      if (isCodeMirrorLine && out.length > beforeLen && !out.endsWith('\n')) {
+        out += '\n';
+      }
+    }
+
+    walk(root);
+    return out;
+  }
+
   // Generic DOM -> LaTeX
   function nodeToLatex(node) {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -6705,15 +6794,18 @@ function insertDownloadLinkAtSavedRange() {
     if (tag === 'em' || tag === 'i') return `\\emph{${childrenToLatex(el)}}`;
     if (tag === 'u') return `\\underline{${childrenToLatex(el)}}`;
     if (tag === 'code' && el.closest('pre')) {
-      // handled by <pre>
-      return escapeLatex(el.textContent);
+      // handled by the nearest <pre>; do not escape or recurse here.
+      return '';
     }
     if (tag === 'code') {
       return `\\texttt{${escapeLatex(el.textContent)}}`;
     }
     if (tag === 'pre') {
-      // safest for arbitrary code
-      return `\\begin{verbatim}\n${el.textContent.replace(/\s+$/,'')}\n\\end{verbatim}\n\n`;
+      // Safest for arbitrary code. Use DOM-aware extraction because ChatGPT
+      // code blocks often contain nested spans and <br> elements; textContent
+      // would flatten those line breaks.
+      const codeText = getPreTextPreservingVisualBreaks(el);
+      return `\\begin{verbatim}\n${codeText}\n\\end{verbatim}\n\n`;
     }
 
     if (tag === 'blockquote') {
@@ -6765,15 +6857,22 @@ function insertDownloadLinkAtSavedRange() {
     return out;
   }
 
+
+  function cleanLatexOutsideVerbatim(latex) {
+    const pieces = latex.split(/(\\begin\{verbatim\}[\s\S]*?\\end\{verbatim\})/g);
+    return pieces.map(piece => {
+      if (piece.startsWith('\\begin{verbatim}')) return piece;
+      return piece
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n');
+    }).join('').trim();
+  }
+
   // Public: turn #editor HTML into LaTeX (string)
   window.exportEditorToLatex = function exportEditorToLatex() {
     const root = document.getElementById('editor');
     if (!root) throw new Error("No element with id='editor' found.");
-    const latex = childrenToLatex(root)
-      .replace(/[ \t]+\n/g, '\n')     // strip trailing spaces on lines
-      .replace(/\n{3,}/g, '\n\n')     // collapse excessive blank lines
-      .trim();
-    return latex;
+    return cleanLatexOutsideVerbatim(childrenToLatex(root));
   };
 
   // Public convenience: copy directly to system clipboard
@@ -7556,6 +7655,160 @@ function startSvgPointPicker(f, opts = {}) {
     container.removeEventListener('selectstart', prevent, true);
     window.removeEventListener('keydown', onKey, true);
   }
+
+  container.addEventListener('click', onClick, true);
+  container.addEventListener('dragstart', prevent, true);
+  container.addEventListener('selectstart', prevent, true);
+  window.addEventListener('keydown', onKey, true);
+
+  return teardown;
+}
+
+
+function _clientPointToSvgPoint(svg, clientX, clientY) {
+  if (!svg) return { x: clientX, y: clientY };
+
+  // Convert viewport/client coordinates into the SVG's own coordinate system.
+  // This handles viewBox, CSS scaling, and SVG transforms much better than
+  // simply subtracting the bounding rectangle.
+  try {
+    const pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    const ctm = svg.getScreenCTM();
+    if (ctm) {
+      const local = pt.matrixTransform(ctm.inverse());
+      return { x: local.x, y: local.y };
+    }
+  } catch (e) {
+    // Fall through to a safe approximate mapping.
+  }
+
+  const rect = svg.getBoundingClientRect();
+  const vb = svg.viewBox && svg.viewBox.baseVal;
+  if (vb && vb.width && vb.height && rect.width && rect.height) {
+    return {
+      x: vb.x + ((clientX - rect.left) * vb.width / rect.width),
+      y: vb.y + ((clientY - rect.top) * vb.height / rect.height)
+    };
+  }
+
+  return { x: clientX - rect.left, y: clientY - rect.top };
+}
+
+function _svgFontSizeFromChooser(defaultSize = '16') {
+  const sizeSel = document.getElementById('sizeChooser')?.value;
+  switch (sizeSel) {
+    case '1': return '10';
+    case '3': return '16';
+    case '5': return '24';
+    case '7': return '32';
+    default: return defaultSize;
+  }
+}
+
+function _newSpectralSvgText(svg, localPt, textValue = 'text') {
+  const textEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  textEl.textContent = textValue;
+  textEl.setAttribute('x', String(localPt.x));
+  textEl.setAttribute('y', String(localPt.y));
+  textEl.setAttribute('data-spectral-svg-text', '1');
+  textEl.setAttribute('dominant-baseline', 'middle');
+
+  const colorSel = document.getElementById('colorChooser')?.value || '#000000';
+  textEl.setAttribute('fill', colorSel);
+
+  const fontSel = document.getElementById('fontChooser')?.value;
+  if (fontSel && fontSel !== 'No Selection') {
+    textEl.setAttribute('font-family', fontSel);
+  }
+
+  textEl.setAttribute('font-size', _svgFontSizeFromChooser('16'));
+
+  if (typeof boldMode !== 'undefined' && boldMode) textEl.setAttribute('font-weight', 'bold');
+  if (typeof italicsMode !== 'undefined' && italicsMode) textEl.setAttribute('font-style', 'italic');
+  if (typeof underlineMode !== 'undefined' && underlineMode) textEl.setAttribute('text-decoration', 'underline');
+
+  svg.appendChild(textEl);
+  return textEl;
+}
+
+function add_svg_text() {
+  setStatus('Click a point inside an SVG to insert text (Esc to cancel)…');
+
+  return startSvgPointPicker((svgId, pt) => {
+    const svg = document.getElementById(svgId);
+    if (!svg) {
+      setStatus('Could not locate SVG for text insertion.');
+      return;
+    }
+
+    const localPt = _clientPointToSvgPoint(svg, pt.x, pt.y);
+    const textEl = _newSpectralSvgText(svg, localPt, 'text');
+
+    setStatus(`Inserted SVG text at (${localPt.x.toFixed(1)}, ${localPt.y.toFixed(1)}).`);
+    return textEl;
+  }, {
+    container: '#editor',
+    onEscape: () => setStatus('Canceled SVG text insertion.')
+  });
+}
+
+function delete_svg_text() {
+  const containerSel = '#editor';
+  const container = document.querySelector(containerSel) || document.body;
+  const prevCursor = container.style.cursor;
+  let armed = true;
+
+  setStatus('Click an SVG text object to delete it (Esc to cancel)…');
+  container.style.cursor = 'crosshair';
+
+  const prevent = (e) => {
+    if (!armed) return;
+    if (!container.contains(e.target)) return;
+    if (e.type === 'dragstart' || e.type === 'selectstart') e.preventDefault();
+  };
+
+  function teardown() {
+    if (!armed) return;
+    armed = false;
+    container.style.cursor = prevCursor || '';
+    container.removeEventListener('click', onClick, true);
+    container.removeEventListener('dragstart', prevent, true);
+    container.removeEventListener('selectstart', prevent, true);
+    window.removeEventListener('keydown', onKey, true);
+  }
+
+  const onClick = (e) => {
+    if (!armed) return;
+    if (!container.contains(e.target)) return;
+
+    const svg = e.target.closest('svg');
+    if (!svg) return;
+
+    const targetEl = e.target.nodeType === Node.ELEMENT_NODE ? e.target : e.target.parentElement;
+    const textEl = targetEl ? targetEl.closest('text') : null;
+
+    // Stay armed if the user clicked in the SVG but not on text. This mirrors the
+    // existing point-pickers' behaviour of waiting for a valid target.
+    if (!textEl || !svg.contains(textEl)) {
+      setStatus('That SVG item is not text. Click an SVG text object, or press Esc to cancel.');
+      return;
+    }
+
+    teardown();
+    const removedText = textEl.textContent || '';
+    textEl.remove();
+    setStatus(`Deleted SVG text${removedText ? ': ' + removedText : '.'}`);
+  };
+
+  const onKey = (e) => {
+    if (!armed) return;
+    if (e.key === 'Escape') {
+      teardown();
+      setStatus('Canceled SVG text deletion.');
+    }
+  };
 
   container.addEventListener('click', onClick, true);
   container.addEventListener('dragstart', prevent, true);
