@@ -1,0 +1,32 @@
+T {Project: Lunar Data Pipeline
+} S title T {Release Plan v2 (Their Branch)
+} T {Project: Lunar Data Pipeline
+} S title T {Release Plan v2 (Your Branch)
+} \} \} /S title T {
+Scope:
+- ingest telemetry streams
+- generate quality metrics
+T {- archive nightly snapshots
+}  T {- add metrics dashboard export
+} } \} S todo T {
+TODO:
+T {- choose checksum algorithm
+} T {- finalize retry policy: exponential backoff (max 5 retries)
+}  T {- choose checksum algorithm: SHA-256
+} T {- finalize retry policy
+} } \} S todo /S todo S note T {
+Notes:
+Owner: Dana
+T {Status: Approved
+} P { note -foreground {#0b5394}} /S note S risk T {
+} T {Risk:
+} T {- storage growth may exceed estimate in week 3
+} P { risk -background {#ffe599}} /S risk T {
+} T {Reference Doc: } N C:/Git/jmtools/development_tools/JMWrap/hltdiff_demo_3way/assets/retry_policy.txt T {
+}  T {Status: In Review
+} P { note -foreground {#0b5394}} /S note S newitem T {
+} T {Your Additions:
+} T {- added dashboard deliverable
+} P { newitem -background {#d0e0ff}} /S newitem T {
+} T {Reference Doc: } N C:/Git/jmtools/development_tools/JMWrap/hltdiff_demo_3way/assets/decision_log.txt T {
+} } /S note /S title

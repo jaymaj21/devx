@@ -1,0 +1,32 @@
+BG white DF {Courier 10} P {title -foreground {#1f3a93} -font {Courier 11 bold}} P {todo -background {#f4cccc}} P {note -foreground {#0b5394}} P {risk -background {#ffe599}} P {code -background {#fff2cc} -font {Courier 10 bold}} P {hyperref_traceability -underline 1 -foreground {#1155cc}} E {risk -background {#ffe599}} T {Project: Lunar Data Pipeline
+} S title T {Release Plan v2 (Their Branch)
+} /S title T {
+Scope:
+- ingest telemetry streams
+- generate quality metrics
+- archive nightly snapshots
+} S todo T {
+TODO:
+- choose checksum algorithm
+- finalize retry policy: exponential backoff (max 5 retries)
+} /S todo S note T {
+Notes:
+Owner: Dana
+Status: Approved
+} /S note S risk T {
+Risk:
+- storage growth may exceed estimate in week 3
+} /S risk T {
+Reference Doc: } N {assets/retry_policy.txt} T {
+Artifacts:
+- Supporting File: } F {assets/decision_log.txt} T {
+- Audio Brief: } M {assets/retry_policy.txt} T {
+Review Packet: } C {review_theirs checksum-v2 assets/retry_policy.txt} T {
+Verifier Hook: } V {verify_theirs vtag-v2 assets/retry_policy.txt} T {
+Generator Hook: } G {generate_theirs gtag-v2 assets/decision_log.txt} T {
+Trace Link: } EXT {{assets/retry_policy.txt} traceability} S hyperref_traceability T {traceability} /S hyperref_traceability T {
+Snippet:
+} S code T {retry_delay = min(2**attempt, 120)} /S code T {
+image2 : } I {assets/spectral2.png} T {
+}
+

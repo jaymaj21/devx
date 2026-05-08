@@ -1,0 +1,27 @@
+BG white DF {Courier 10} T {Project: Lunar Data Pipeline} T {
+} S title T {Release Plan v2 (Their Branch)} T {
+} P { title -font {Courier 11 bold} -foreground {#1f3a93}} /S title T {
+} T Scope: T {
+} T {- ingest telemetry streams} T {
+} T {- generate quality metrics} T {
+} T {- archive nightly snapshots} T {
+} S todo T {
+} T TODO: T {
+} T {- choose checksum algorithm} T {
+} T {- finalize retry policy: exponential backoff (max 5 retries)} T {
+} P { todo -background {#f4cccc}} /S todo S note T {
+} T Notes: T {
+} T {Owner: Dana} T {
+} T {Status: Approved} T {
+} P { note -foreground {#0b5394}} /S note S newitem T {
+} P { newitem -background {#d0e0ff}} /S newitem S risk T Risk: T {
+} T {- storage growth may exceed estimate in week 3} T {
+} P { risk -background {#ffe599}} /S risk T {
+} T {Reference Doc: } N assets/retry_policy.txt T {
+} T {Reference Doc: } N assets/decision_log.txt T {
+} T {
+} T {image1 : } I assets/spectral1.png T {
+} T {
+} T {image2 : } I assets/spectral2.png T {
+} T {
+}

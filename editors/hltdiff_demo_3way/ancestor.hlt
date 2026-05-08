@@ -1,0 +1,26 @@
+BG white DF {Courier 10} P {title -foreground {#1f3a93} -font {Courier 11 bold}} P {todo -background {#fff6bf}} P {note -foreground {#0b5394}} P {code -background {#f3f3f3} -font {Courier 10 bold}} P {hyperref_traceability -underline 1 -foreground {#1155cc}} E {title -foreground {#1f3a93} -font {Courier 11 bold}} T {Project: Lunar Data Pipeline
+} S title T {Release Plan v1
+} /S title T {
+Scope:
+- ingest telemetry streams
+- generate quality metrics
+} S todo T {
+TODO:
+- choose checksum algorithm
+- finalize retry policy
+} /S todo S note T {
+Notes:
+Owner: Dana
+Status: Draft
+} /S note T {
+Artifacts:
+- Decision Log: } N {assets/decision_log.txt} T {
+- Supporting File: } F {assets/retry_policy.txt} T {
+- Audio Brief: } M {assets/retry_policy.txt} T {
+Review Packet: } C {review_ancestor checksum-v1 assets/decision_log.txt} T {
+Verifier Hook: } V {verify_ancestor vtag-v1 assets/retry_policy.txt} T {
+Generator Hook: } G {generate_ancestor gtag-v1 assets/decision_log.txt} T {
+Trace Link: } EXT {{assets/decision_log.txt} traceability} S hyperref_traceability T {traceability} /S hyperref_traceability T {
+Snippet:
+} S code T {if retry_count > 3 then escalate} /S code T {
+}

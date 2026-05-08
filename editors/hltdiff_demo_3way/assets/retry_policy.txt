@@ -1,0 +1,7 @@
+Retry Policy Notes
+==================
+
+- Backoff strategy: exponential.
+- Maximum retries: 5.
+- Retry only for transient transport errors and 5xx responses.
+- Do not retry validation failures.

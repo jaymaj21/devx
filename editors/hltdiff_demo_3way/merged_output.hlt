@@ -1,0 +1,36 @@
+T {Project: Lunar Data Pipeline
+} P {title -foreground {#1f3a93} -font {Courier 11 bold}} S title T {Release Plan v2 (Their Branch)
+} /S title T {
+Scope:
+- ingest telemetry streams
+- generate quality metrics
+} T {- archive nightly snapshots
+} P {todo -background {#d9ead3}} S todo T {
+TODO:
+} /S todo P {todo -background {#f4cccc}} S todo T {- choose checksum algorithm
+- finalize retry policy: exponential backoff (max 5 retries)
+} /S todo P {note -foreground {#0b5394}} S note T {
+Notes:
+Owner: Dana
+} /S note P {note -foreground {#0b5394}} S note T {Status: Approved
+} /S note E {newitem -background {#d0e0ff}} S newitem T {
+} /S newitem E {risk -background {#ffe599}} S risk T {Risk:
+- storage growth may exceed estimate in week 3
+} /S risk T {
+} T {Reference Doc: } N assets/retry_policy.txt T {
+} T {Artifacts:
+} T {- Supporting File: } F assets/decision_log.txt T {
+} T {- Audio Brief: } M assets/retry_policy.txt T {
+} T {Review Packet: } C {review_theirs checksum-v2 assets/retry_policy.txt} T {
+Verifier Hook: } V {verify_theirs vtag-v2 assets/retry_policy.txt} T {
+Generator Hook: } G {generate_theirs gtag-v2 assets/decision_log.txt} T {
+} T {Review Packet: } C {review_yours checksum-v2 assets/decision_log.txt} T {
+Verifier Hook: } V {verify_yours vtag-v2 assets/retry_policy.txt} T {
+Generator Hook: } G {generate_yours gtag-v2 assets/decision_log.txt} T {
+} P {hyperref_traceability -underline 1 -foreground {#1155cc}} T {Trace Link: } EXT {{assets/decision_log.txt} traceability} S hyperref_traceability T traceability /S hyperref_traceability T {
+Snippet:
+} P {code -background {#fff2cc} -font {Courier 10 bold}} S code T {retry_delay = min(2**attempt, 120)} /S code T {
+image2 : } I assets/spectral2.png T {
+} P {code -background {#eef7ff} -font {Courier 10 bold}} S code T {emit_dashboard(metrics, \"daily\")} /S code T {
+image1 : } I assets/spectral1.png T {
+}

@@ -1,0 +1,33 @@
+BG white DF {Courier 10} P {title -foreground {#1f3a93} -font {Courier 11 bold}} P {todo -background {#d9ead3}} P {note -foreground {#0b5394}} P {newitem -background {#d0e0ff}} P {code -background {#eef7ff} -font {Courier 10 bold}} P {hyperref_traceability -underline 1 -foreground {#1155cc}} E {newitem -background {#d0e0ff}} T {Project: Lunar Data Pipeline
+} S title T {Release Plan v2 (Your Branch)
+} /S title T {
+Scope:
+- ingest telemetry streams
+- generate quality metrics
+- add metrics dashboard export
+} S todo T {
+TODO:
+- choose checksum algorithm: SHA-256
+- finalize retry policy
+} /S todo S note T {
+Notes:
+Owner: Dana
+Status: In Review
+} /S note S newitem T {
+Your Additions:
+- added dashboard deliverable
+- added branch-local reviewer checklist
+} /S newitem T {
+Reference Doc: } N {assets/decision_log.txt} T {
+Artifacts:
+- Supporting File: } F {assets/retry_policy.txt} T {
+- Audio Brief: } M {assets/retry_policy.txt} T {
+Review Packet: } C {review_yours checksum-v2 assets/decision_log.txt} T {
+Verifier Hook: } V {verify_yours vtag-v2 assets/retry_policy.txt} T {
+Generator Hook: } G {generate_yours gtag-v2 assets/decision_log.txt} T {
+Trace Link: } EXT {{assets/decision_log.txt} traceability} S hyperref_traceability T {traceability} /S hyperref_traceability T {
+Snippet:
+} S code T {emit_dashboard(metrics, \"daily\")}
+ /S code T {
+image1 : } I {assets/spectral1.png} T {
+}

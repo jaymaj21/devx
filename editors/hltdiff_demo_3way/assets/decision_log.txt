@@ -1,0 +1,9 @@
+Decision Log
+============
+
+2026-01-12
+- Candidate checksum algorithms: CRC32, SHA-1, SHA-256.
+- Team preference was to move to SHA-256 before release hardening.
+
+2026-01-15
+- Dashboard export requested by operations for weekly audit.

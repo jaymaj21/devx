@@ -4149,6 +4149,7 @@ proc do-show-merge {{showMerge ""}} {
             merge-add-marks
         }
         wm deiconify .merge
+        layout-merge-windows
         focus -force $w(mergeText)
         merge-center
         merge-rendered-refresh
@@ -4165,6 +4166,22 @@ proc do-show-merge {{showMerge ""}} {
     }
     #debug-info "  ...restore-cursor from do-show-merge"
     restore-cursor
+}
+
+proc layout-merge-windows {} {
+    global w
+
+    if {![info exists w(merge)] || ![winfo exists $w(merge)]} {
+        return
+    }
+
+    catch {wm state $w(merge) normal}
+    update idletasks
+
+    set x [winfo rootx .]
+    set y [expr {[winfo rooty .] + [winfo height .]}]
+    catch {wm geometry $w(merge) "+${x}+${y}"}
+    catch {raise $w(merge)}
 }
 
 proc merge-bring-preview-front {} {
@@ -6454,16 +6471,27 @@ proc hlt:save {w args} {
                 lappend save T $value
             }
         image {
-                set fpath ""
-                catch {set fpath [$value cget -file]}
-                if {$fpath ne ""} {
-                    if {$savingToFile} {
-                        set fpath [hlt:relativize_path $saveTarget $fpath]
+                global hlt_img_token
+                if {[info exists hlt_img_token($value)]} {
+                    set pair $hlt_img_token($value)
+                    set key [lindex $pair 0]
+                    set val [lindex $pair 1]
+                    if {$key eq "I" && $savingToFile} {
+                        set val [hlt:relativize_path $saveTarget $val]
                     }
-                    lappend save I $fpath
+                    lappend save $key $val
                 } else {
-                    set data64 [binary encode base64 [$value data -format png]]
-                    lappend save EI $data64
+                    set fpath ""
+                    catch {set fpath [$value cget -file]}
+                    if {$fpath ne ""} {
+                        if {$savingToFile} {
+                            set fpath [hlt:relativize_path $saveTarget $fpath]
+                        }
+                        lappend save I $fpath
+                    } else {
+                        set data64 [binary encode base64 [$value data -format png]]
+                        lappend save EI $data64
+                    }
                 }
             }
         window {
@@ -6532,7 +6560,6 @@ proc hlt:validate_span_structure {save} {
     }
     return [list 1 ""]
 }
-
 proc hlt:heal_span_structure {save} {
     # Best-effort healing:
     # 1) trim dangling odd token if present
@@ -6871,6 +6898,7 @@ array set hlt_file_payload {}
 array set hlt_embedded_payload {}
 array set hlt_embedded_token {}
 array set hlt_img_keep {}
+array set hlt_img_token {}
 
 proc hltdiff_tag {tag} {
     array set map {
@@ -6951,6 +6979,81 @@ proc hlt:show_embedded_popup {btn ftype} {
     hlt:popup_text "$ftype embedded" $txt
 }
 
+proc hlt:image_target_height {w} {
+    set font [$w cget -font]
+    set linespace [font metrics $font -linespace]
+    if {$linespace < 1} {
+        set linespace 14
+    }
+    return $linespace
+}
+
+proc hlt:image_thumbnail {img targetHeight} {
+    set h [image height $img]
+    set thumb [image create photo]
+    if {$targetHeight > 0 && $h > $targetHeight} {
+        set subsample [expr {int(ceil(double($h) / double($targetHeight)))}]
+        if {$subsample < 1} {
+            set subsample 1
+        }
+        $thumb copy $img -subsample $subsample $subsample
+    } else {
+        $thumb copy $img
+    }
+    return $thumb
+}
+
+proc hlt:show_image_popup {img title} {
+    global hlt_widget_seq
+    global hlt_img_keep
+
+    set win ".hltimagepopup[incr hlt_widget_seq]"
+    toplevel $win
+    wm title $win $title
+    set hlt_img_keep($win) $img
+
+    canvas $win.c -xscrollcommand [list $win.x set] -yscrollcommand [list $win.y set]
+    scrollbar $win.x -orient horizontal -command [list $win.c xview]
+    scrollbar $win.y -orient vertical -command [list $win.c yview]
+    grid $win.c -row 0 -column 0 -sticky nsew
+    grid $win.y -row 0 -column 1 -sticky ns
+    grid $win.x -row 1 -column 0 -sticky ew
+    grid rowconfigure $win 0 -weight 1
+    grid columnconfigure $win 0 -weight 1
+
+    set iw [image width $img]
+    set ih [image height $img]
+    $win.c create image 0 0 -anchor nw -image $img
+    $win.c configure -scrollregion [list 0 0 $iw $ih]
+    set ww [expr {$iw > 1000 ? 1000 : $iw}]
+    set wh [expr {$ih > 800 ? 800 : $ih}]
+    if {$ww < 200} {
+        set ww 200
+    }
+    if {$wh < 150} {
+        set wh 150
+    }
+    wm geometry $win "${ww}x${wh}"
+}
+
+proc hlt:insert_thumbnail_image {w pos img title token} {
+    global hlt_widget_seq
+    global hlt_img_keep
+    global hlt_img_token
+
+    set target [hlt:image_target_height $w]
+    set thumb [hlt:image_thumbnail $img $target]
+    lappend hlt_img_keep($w) $img $thumb
+    set hlt_img_token($thumb) $token
+
+    set idx [$w index $pos]
+    set tag "hlt_image_[incr hlt_widget_seq]"
+    $w image create $idx -image $thumb
+    $w tag add $tag $idx "$idx + 1c"
+    $w tag bind $tag <Double-Button-1> [list hlt:show_image_popup $img $title]
+    return 1
+}
+
 proc hlt:insert_file_button {w pos ftype fname {tokenValue ""}} {
     global hlt_widget_seq
     global hlt_file_payload
@@ -6978,22 +7081,16 @@ proc hlt:insert_embedded_button {w pos ftype data {tokenValue ""}} {
 }
 
 proc hlt:insert_image_file {w pos fname} {
-    global hlt_img_keep
     if {![file exists $fname]} {
         return 0
     }
     set img [image create photo -file $fname]
-    lappend hlt_img_keep($w) $img
-    $w image create $pos -image $img
-    return 1
+    return [hlt:insert_thumbnail_image $w $pos $img [file tail $fname] [list I $fname]]
 }
 
 proc hlt:insert_image_base64 {w pos data64} {
-    global hlt_img_keep
     set img [image create photo -data [binary decode base64 $data64]]
-    lappend hlt_img_keep($w) $img
-    $w image create $pos -image $img
-    return 1
+    return [hlt:insert_thumbnail_image $w $pos $img "Embedded image" [list EI $data64]]
 }
 
 proc linepad_tag {prefix line} {
