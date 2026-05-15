@@ -39,12 +39,15 @@ public class JarInstrumenter {
         boolean sidecar = false;
         File in = null, out = null;
         for (String a : args) {
-            if ("--sidecar".equals(a)) { sidecar = true; }
+            if (a.startsWith("--startid=")) {
+                int s = Integer.parseInt(a.substring("--startid=".length()));
+                PROBE_COUNTER.set(s);
+            } else if ("--sidecar".equals(a)) { sidecar = true; }
             else if (in == null) in = new File(a);
             else if (out == null) out = new File(a);
         }
         if (in == null || out == null) {
-            System.err.println("Usage: java -jar branch-probe-instrumenter-jar-with-dependencies.jar [--sidecar] <in.jar> <out.jar>");
+            System.err.println("Usage: java -jar branch-probe-instrumenter-jar-with-dependencies.jar [--startid=N] [--sidecar] <in.jar> <out.jar>");
             System.exit(2);
         }
         instrumentJar(in, out);
@@ -56,6 +59,7 @@ public class JarInstrumenter {
             }
             System.out.println("Wrote sidecar: " + side.getAbsolutePath());
         }
+        System.out.println("LAST_ID=" + (PROBE_COUNTER.get() - 1));
     }
 
     private static synchronized void addIndex(int id, String cls, String method, String where, String source, int line) {
@@ -84,7 +88,9 @@ public class JarInstrumenter {
 
                     boolean copyRaw = !name.endsWith(".class")
                             || name.equals("module-info.class")
-                            || (name.startsWith("META-INF/") && (name.endsWith(".SF") || name.endsWith(".RSA") || name.endsWith(".DSA") || name.endsWith("MANIFEST.MF")));
+                            || (name.startsWith("META-INF/") && (name.endsWith(".SF") || name.endsWith(".RSA") || name.endsWith(".DSA") || name.endsWith("MANIFEST.MF")))
+                            // Don't instrument the probe runtime if it is bundled in the input jar.
+                            || name.replace('\\','/').endsWith("/mprewriter.class");
 
                     JarEntry newEntry = new JarEntry(name);
                     jos.putNextEntry(newEntry);
