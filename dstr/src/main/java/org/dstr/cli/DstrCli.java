@@ -1,6 +1,7 @@
 package org.dstr.cli;
 
 import java.nio.file.Path;
+import com.trading.domain.mprewriter;
 import org.dstr.check.ExplicitStateChecker;
 import org.dstr.model.CheckResult;
 import org.dstr.model.Counterexample;
@@ -14,7 +15,11 @@ public final class DstrCli {
             System.exit(2);
         }
 
-        Spec spec = new SpecParser().parse(Path.of(args[0]));
+        Path specPath = Path.of(args[0]);
+        String specFileName = specPath.getFileName().toString();
+        mprewriter.reset_context_to(specFileName);
+
+        Spec spec = new SpecParser().parse(specPath);
         CheckResult result = new ExplicitStateChecker().check(spec);
 
         System.out.println("Spec: " + spec.name());

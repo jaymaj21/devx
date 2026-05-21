@@ -22,6 +22,8 @@ import static org.objectweb.asm.Opcodes.*;
  */
 public class JarInstrumenter {
 
+    private static final String PROBE_RUNTIME_INTERNAL = "com/trading/domain/mprewriter";
+    private static final String PROBE_INDEX_ENTRY = "META-INF/branch-probes.csv";
     private static final AtomicInteger PROBE_COUNTER = new AtomicInteger(1);
     private static final StringBuilder PROBE_INDEX = new StringBuilder("id,class,method,where,source,line\n");
     private static final java.util.Set<String> ALLOWED_KINDS;
@@ -50,8 +52,12 @@ public class JarInstrumenter {
             System.err.println("Usage: java -jar branch-probe-instrumenter-jar-with-dependencies.jar [--startid=N] [--sidecar] <in.jar> <out.jar>");
             System.exit(2);
         }
-        instrumentJar(in, out);
-        System.out.println("Instrumented: " + in + " -> " + out);
+        boolean instrumented = instrumentJar(in, out);
+        if (instrumented) {
+            System.out.println("Instrumented: " + in + " -> " + out);
+        } else {
+            System.out.println("Skipped already instrumented jar: " + in);
+        }
         if (sidecar) {
             File side = new File(out.getParentFile(), out.getName().replaceAll("\\.jar$", "") + "-branch-probes.csv");
             try (FileOutputStream fos = new FileOutputStream(side)) {
@@ -71,7 +77,12 @@ public class JarInstrumenter {
                 .append(line >= 0 ? line : "").append('\n');
     }
 
-    private static void instrumentJar(File inJar, File outJar) throws IOException {
+    private static boolean instrumentJar(File inJar, File outJar) throws IOException {
+        if (jarLooksInstrumented(inJar)) {
+            copyFile(inJar, outJar);
+            System.out.println("SKIPPED_ALREADY_INSTRUMENTED=" + inJar.getAbsolutePath());
+            return false;
+        }
         try (JarInputStream jis = new JarInputStream(new FileInputStream(inJar));
              FileOutputStream fos = new FileOutputStream(outJar)) {
 
@@ -110,6 +121,65 @@ public class JarInstrumenter {
                 byte[] csv = PROBE_INDEX.toString().getBytes(StandardCharsets.UTF_8);
                 jos.write(csv);
                 jos.closeEntry();
+            }
+        }
+        return true;
+    }
+
+    private static boolean jarLooksInstrumented(File jarFile) throws IOException {
+        try (JarInputStream jis = new JarInputStream(new FileInputStream(jarFile))) {
+            JarEntry entry;
+            while ((entry = jis.getNextJarEntry()) != null) {
+                String name = entry.getName();
+                if (PROBE_INDEX_ENTRY.equals(name)) {
+                    return true;
+                }
+                if (name.endsWith(".class")) {
+                    byte[] bytes = jis.readAllBytes();
+                    if (classLooksInstrumented(bytes)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean classLooksInstrumented(byte[] classBytes) {
+        try {
+            ClassReader cr = new ClassReader(classBytes);
+            final boolean[] found = new boolean[]{false};
+            cr.accept(new ClassVisitor(ASM9) {
+                @Override
+                public MethodVisitor visitMethod(int access, String name, String descriptor, String signature, String[] exceptions) {
+                    return new MethodVisitor(ASM9) {
+                        @Override
+                        public void visitMethodInsn(int opcode, String owner, String methodName, String methodDescriptor, boolean isInterface) {
+                            if (opcode == INVOKESTATIC && PROBE_RUNTIME_INTERNAL.equals(owner)) {
+                                if ("hit".equals(methodName)
+                                        || "scope_ENTER".equals(methodName)
+                                        || "scope_EXIT".equals(methodName)
+                                        || "scope_START".equals(methodName)) {
+                                    found[0] = true;
+                                }
+                            }
+                        }
+                    };
+                }
+            }, ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+            return found[0];
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static void copyFile(File inFile, File outFile) throws IOException {
+        try (InputStream in = new FileInputStream(inFile);
+             OutputStream out = new FileOutputStream(outFile)) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
             }
         }
     }

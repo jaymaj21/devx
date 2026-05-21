@@ -35,7 +35,11 @@ public class ContextManager {
 
     // Withdraw a context (remove from current context set)
     public static void withdrawContext(String ctx) {
-        currentContexts.remove(ctx);
+        if (ctx != null && "all".equalsIgnoreCase(ctx.trim())) {
+            currentContexts.clear();
+        } else {
+            currentContexts.remove(ctx);
+        }
         updateContextSetId();
     }
 
