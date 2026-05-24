@@ -6,3 +6,6 @@
 *.log
 *.out
 
+# Local generated run artifacts
+artifacts/
+

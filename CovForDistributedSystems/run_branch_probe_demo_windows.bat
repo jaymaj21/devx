@@ -1,5 +1,5 @@
 @echo off
-setlocal EnableExtensions EnableDelayedExpansion
+setlocal EnableExtensions
 
 rem End-to-end Windows demo:
 rem 1) build code-analytics
@@ -27,6 +27,7 @@ set "DEMO_OUT=%DEMO_DIR%\target\branch-probe-demoapp-1.0.0-instrumented.jar"
 set "INCL_FILE=%DEMO_DIR%\inclusions.txt"
 set "EXCL_FILE=%DEMO_DIR%\exclusions.txt"
 set "SERVER_OUT=%ROOT%\code-analytics-demo-output.txt"
+set "SERVER_RUNNER=%ROOT%\code-analytics-demo-runner.bat"
 
 if not exist "%INCL_FILE%" set "INCL_FILE=%DEMO_DIR%\inclusions.example.txt"
 
@@ -87,11 +88,16 @@ if errorlevel 1 goto :fail
 echo.
 echo === Starting code-analytics ===
 if exist "%SERVER_OUT%" del "%SERVER_OUT%"
-start "code-analytics-demo" /b cmd /v:on /c "(timeout /t 8 /nobreak >nul & echo :hits & echo :exit) | java -cp ""%SERVER_JAR%"" com.codeanalytics.ClojureShell > ""%SERVER_OUT%"" 2>&1"
+(
+  echo @echo off
+  echo setlocal EnableExtensions
+  echo ^(ping -n 9 127.0.0.1 ^>nul ^& echo :hits ^& echo :exit^) ^| java -cp "%SERVER_JAR%" com.codeanalytics.ClojureShell ^> "%SERVER_OUT%" 2^>^&1
+) > "%SERVER_RUNNER%"
+start "code-analytics-demo" /b cmd /c ""%SERVER_RUNNER%""
 if errorlevel 1 goto :fail
 
 echo Waiting for code-analytics to start...
-timeout /t 2 /nobreak >nul
+ping -n 3 127.0.0.1 >nul
 
 echo.
 echo === Running instrumented demo ===
@@ -101,13 +107,14 @@ if errorlevel 1 goto :fail
 echo.
 echo Waiting for code-analytics to print hits and exit...
 :wait_for_server
-timeout /t 1 /nobreak >nul
+ping -n 2 127.0.0.1 >nul
 findstr /c:"Bye!" "%SERVER_OUT%" >nul 2>nul
 if errorlevel 1 goto :wait_for_server
 
 echo.
 echo === code-analytics output ===
 type "%SERVER_OUT%"
+if exist "%SERVER_RUNNER%" del "%SERVER_RUNNER%"
 
 echo.
 echo Demo complete.
@@ -115,6 +122,7 @@ echo Output file: "%SERVER_OUT%"
 goto :eof
 
 :fail
+if exist "%SERVER_RUNNER%" del "%SERVER_RUNNER%"
 echo.
 echo Script failed.
 exit /b 1

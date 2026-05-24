@@ -1,0 +1,716 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{xcolor}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!50!black,
+  urlcolor=blue!50!black,
+  citecolor=blue!50!black
+}
+
+\setlist[itemize]{leftmargin=1.5em}
+\setlist[enumerate]{leftmargin=1.5em}
+
+\newcommand{\tool}{\textsc{mprewriter}}
+\newcommand{\hittrace}{\texttt{HITTRC01}}
+\newcommand{\code}[1]{\texttt{#1}}
+
+\title{\tool: Low-Overhead Probe-Based Observability and Coverage for Distributed Systems}
+\author{Jayanta Majumdar \and Sambuddha Majumder}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Distributed systems are difficult to test and diagnose because the behavior of
+interest is often spread across languages, processes, hosts, and runtime
+contexts. Conventional code coverage tools usually report what happened inside
+one process, one test run, or one language runtime. Logging and tracing systems
+can describe request paths, but they are often too coarse or too expensive to
+use as a dense coverage signal. This paper describes \tool, a small
+language-neutral observability substrate for distributed systems. Applications
+are instrumented with lightweight probes. A probe records a compact hit message
+containing an application id, instance id, thread id, stack depth, and location
+id. Probe runtimes batch these messages and send them over UDP or TCP to
+collector servers. Collectors persist the raw event history in a common binary
+trace format, maintain context-aware hit counts, and answer interactive
+coverage queries. A prototype implementation includes Java, C++, and Rust
+probe runtimes; Java bytecode instrumentation using ASM; Java, C++, and Rust
+collectors; trace dumpers in multiple languages; context management; and
+regression tests that exercise cross-language producer and server
+combinations. The central design claim is that dense observability becomes
+practical when the hot path is reduced to a minimal enqueue, while parsing,
+aggregation, durability, and query handling are moved to asynchronous
+collectors and offline tools.
+\end{abstract}
+
+\section{Introduction}
+
+Coverage is normally understood as a property of a test run: a program was
+executed, a coverage tool observed which lines or branches ran, and a report was
+produced afterward. That model is useful, but it does not fit many distributed
+systems. A modern service boundary may be crossed by Java, C++, and Rust
+components. A request may trigger asynchronous tasks and callbacks. A feature
+flag, tenant, experiment, market data condition, or failure mode may be the
+reason a particular path executes. In that setting, the more useful question is
+not only ``was this line covered?'' but ``which runtime contexts exercised this
+location, in which application instance, and what history led to it?''
+
+\tool\ is a pragmatic answer to that question. Its design is deliberately
+small. Instrumented code calls a probe function with a location id. The probe
+runtime records a hit in a process-local buffer and a background sender batches
+hits into datagrams. A server receives hit, log, and context messages, persists
+the raw arrival history, and maintains counters keyed by application,
+instance, context set, and location. The same wire format is shared by Java,
+C++, and Rust. The same administrative command vocabulary is exposed by the
+Java, C++, and Rust collectors.
+
+The name \tool\ comes from ``multipurpose rewriter''. The original emphasis was
+on source or bytecode rewriting, especially inserting probes into application
+code. The current implementation still contains that instrumentation-first
+heritage, but the larger idea is now a cross-language probe protocol and a
+family of collectors and analysis tools.
+
+\section{Goals and Non-Goals}
+
+The project is guided by five goals.
+
+\begin{enumerate}
+  \item \textbf{Low hot-path overhead.} A probe should be cheap enough to place
+  at method entries, branch edges, exception handlers, and manually selected
+  application events.
+
+  \item \textbf{Language neutrality.} A Java service, a C++ service, and a Rust
+  service should be able to send equivalent hit messages to the same collector.
+
+  \item \textbf{Distributed coverage.} Coverage should be computable across
+  process boundaries and runtime instances, not only within a single test JVM
+  or single binary.
+
+  \item \textbf{Runtime context slicing.} Coverage should be attributable to
+  dynamic context sets such as feature flags, scenarios, experiments, tenants,
+  or operational phases.
+
+  \item \textbf{Post-hoc analysis.} Collectors should persist enough raw
+  history that later tools can dump, filter, replay, or summarize a run without
+  requiring the original application processes.
+\end{enumerate}
+
+The project is not intended to replace distributed tracing systems such as
+OpenTelemetry, nor does it attempt to provide strong transactional delivery
+semantics by default. The common path uses UDP because losing a small number of
+coverage hits may be acceptable for high-volume observation. TCP support and
+trace persistence are available when stronger collection is required. The
+design favors useful, cheap, and portable observability over a heavyweight
+exactness guarantee.
+
+\section{Prototype Implementation}
+
+The prototype implementation is composed of several separable units. The
+following table describes them by responsibility rather than assuming any
+particular source tree layout. Concrete module names are included only as
+identifiers for the implementation artifacts.
+
+\begingroup
+\small
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.36\linewidth}%
+                  >{\raggedright\arraybackslash}p{0.57\linewidth}}
+\textbf{Implementation artifact} & \textbf{Role} \\
+\hline
+\code{code-analytics} & Java collector module. It listens on UDP port 8083 and
+TCP port 8084, writes \hittrace\ files, maintains hit counters, and exposes a
+Clojure-backed administrative shell. \\
+\code{code-analytics-cpp} & C++17 collector module. It provides UDP/TCP
+listeners, a binary trace writer, context management, and an embedded Tcl
+shell. \\
+\code{code-analytics-rust/cov\_server} & Rust collector crate. It uses a Molt
+shell, shared protocol parsing, context-aware hit counts, and trace hooks. \\
+\code{JavaAppWithUdpProbes} & Java demonstration application and early Java
+probe runtime. It exercises manual probes, logs, stack depth, and tests around
+a small trading-domain application. \\
+\code{CppAppWithUdpProbes} & C++ demonstration application and optimized probe
+runtime using a batched UDP sender and a lock-free MPSC ring for hit records. \\
+\code{RustAppWithUdpProbes} & Rust demonstration applications and probe
+runtimes, including a macro-based interface and latency benchmarks. \\
+\code{branch-probe-instrumenter} & Standalone ASM-based Java JAR
+instrumenter. It injects method, branch, switch, catch, and finally probes and
+emits a probe mapping CSV. \\
+\code{branch-probe-suite} & Combined Java instrumentation suite containing the
+runtime and instrumenter modules intended to be built and used together. \\
+\code{tools/trace-dump-*} & Standalone Java, C++, and Rust trace dumpers for
+the common \hittrace\ binary trace format. \\
+\code{testsuite} & Scripted cross-language regression harness with golden
+outputs. \\
+\code{benchmark.md} and \code{run\_benchmarks.ps1} & Engineering notes and a
+helper script used to record latency measurements for Java, C++, and Rust probe
+paths. \\
+\end{longtable}
+\endgroup
+
+The implementation history shows a steady evolution from a Java UDP hit server and manual
+probes to a broader system: context management, binary trace writing, Rust and
+C++ producers and servers, stack-depth propagation, a cross-language test
+suite, Java JAR instrumentation, inclusion and exclusion filtering, sidecar
+probe maps, trace dumpers, and latency-focused runtime optimizations.
+
+\section{System Model}
+
+\subsection{Actors}
+
+\tool\ separates the system into four actors.
+
+\begin{itemize}
+  \item \textbf{Instrumenters} insert calls to a probe API. In Java this is
+  done by an ASM JAR rewriter. In C++ and Rust, probes can be inserted by
+  source-level tooling, macros, or manual calls.
+
+  \item \textbf{Probe runtimes} live inside the application process. They pack
+  location hits into compact records, maintain cheap stack-depth information
+  where possible, and send records asynchronously.
+
+  \item \textbf{Collectors} receive UDP and TCP messages, write the raw
+  history to a trace file, maintain counters, and expose query commands.
+
+  \item \textbf{Offline tools} dump traces, compute statistics, filter by time
+  ranges, compare output to golden files, and correlate location ids with
+  source maps.
+\end{itemize}
+
+\subsection{Data Flow}
+
+The normal data flow is:
+
+\begin{enumerate}
+  \item A probe site executes in application code.
+  \item The probe runtime records a hit in a local queue or ring buffer.
+  \item A background sender batches one or more records into a UDP datagram.
+  \item A collector receives the datagram and writes the exact payload into a
+  binary trace frame.
+  \item The collector parses the payload and increments coverage counters.
+  \item An operator or test script queries the collector using the shared admin
+  command vocabulary.
+\end{enumerate}
+
+This design keeps application threads away from file I/O, network parsing,
+aggregation, and interactive query logic. The application pays only for
+location-id capture and enqueue work on the hot path.
+
+\section{Wire Protocol}
+
+All multi-byte fields are big-endian. The most important message is the
+20-byte hit record:
+
+\begin{center}
+\begin{tabular}{lll}
+\textbf{Field} & \textbf{Type} & \textbf{Meaning} \\
+\hline
+\code{messageType} & \code{u16} & \code{1} for hit \\
+\code{appId} & \code{u16} & Application family or logical service id \\
+\code{instanceId} & \code{u32} & Runtime instance id \\
+\code{threadId} & \code{u32} & Producer thread id or stable thread hash \\
+\code{stackDepth} & \code{u32} & Probe-observed call depth \\
+\code{locationId} & \code{u32} & Instrumented source or bytecode location \\
+\end{tabular}
+\end{center}
+
+The log record extends the same envelope:
+
+\begin{center}
+\begin{tabular}{lll}
+\textbf{Field} & \textbf{Type} & \textbf{Meaning} \\
+\hline
+\code{messageType} & \code{u16} & \code{2} for log \\
+\code{appId} & \code{u16} & Application id \\
+\code{instanceId} & \code{u32} & Runtime instance id \\
+\code{threadId} & \code{u32} & Producer thread id \\
+\code{stackDepth} & \code{u32} & Current stack depth \\
+\code{msgLen} & \code{u16} & UTF-8 byte length \\
+\code{msg} & bytes & UTF-8 payload \\
+\end{tabular}
+\end{center}
+
+Context updates are smaller:
+
+\begin{center}
+\begin{tabular}{lll}
+\textbf{Message type} & \textbf{Payload} & \textbf{Meaning} \\
+\hline
+\code{3} & UTF-8 label & Attach context label to the active context set \\
+\code{4} & UTF-8 label & Withdraw context label from the active context set \\
+\end{tabular}
+\end{center}
+
+The protocol intentionally does not encode language-specific type systems,
+stack frame objects, or source names. Those are reconstructed using the probe
+map emitted by the instrumenter or by application-specific metadata. The
+on-the-wire contract remains small enough for simple implementations in
+multiple languages.
+
+\section{Probe Runtime Design}
+
+\subsection{The Hot Path}
+
+The core optimization is to make a hit record cheap to produce. In the fastest
+paths, a probe call:
+
+\begin{enumerate}
+  \item obtains a thread id and current depth,
+  \item packs fields into a primitive value or a preallocated slot,
+  \item claims a queue or ring-buffer position,
+  \item marks the slot ready,
+  \item returns to application code.
+\end{enumerate}
+
+Network I/O is handled by a sender thread. Batching uses 72 hit records per
+datagram, because \(72 \times 20 = 1440\) bytes, which fits comfortably under a
+typical Ethernet MTU after IP and UDP headers. This avoids fragmentation while
+amortizing UDP send cost over many hits.
+
+\subsection{Java Runtime}
+
+The Java runtime appears in several forms. One demonstration runtime, packaged
+with a small trading-domain application, uses \code{ArrayBlockingQueue} and
+\code{StackWalker} to compute application-frame depth. An optimized benchmark
+runtime uses a bounded MPSC ring implemented with arrays, \code{AtomicLong}
+head and tail counters, and \code{VarHandle} acquire/release operations for
+slot readiness. It can compute depth using \code{StackWalker}, or it can use a
+constant-depth mode for extremely hot locations.
+
+The Java branch-probe runtime is a small companion library for bytecode-
+instrumented applications. It uses a thread-local depth counter maintained by
+instrumented method entry and exit calls. This is important for Java because
+full stack walking is expensive. By making the instrumenter insert
+\code{scope\_ENTER} and \code{scope\_EXIT}, the runtime can report meaningful
+depth with a cheap thread-local integer.
+
+\subsection{C++ Runtime}
+
+The C++ probe runtime uses a lock-free MPSC ring with prepacked 20-byte
+network-order frames. Each producer claims a slot by advancing an atomic tail,
+writes the frame into a cache-aligned slot, and sets a ready flag. The sender
+drains the ring into a reusable send buffer and emits UDP datagrams. Logs are
+rarer and use a simple mutex-protected queue.
+
+C++ also has a natural way to maintain stack depth. A probe macro creates an
+RAII guard. The guard increments a thread-local depth counter on construction,
+records the hit, and decrements the counter on destruction. This makes depth
+robust to ordinary control flow and exceptions.
+
+\subsection{Rust Runtime}
+
+The Rust runtimes use the same basic design: an application-facing probe API,
+thread-local depth, and an asynchronous UDP worker. The Rust macro support
+includes a procedural macro crate, \code{mprewriter\_macros}, that expands a
+probe site into creation of a depth guard followed by a call to
+\code{scope\_START}. As in C++, Rust's ownership and drop semantics provide a
+good fit for depth guards.
+
+The Rust server and Rust probe demos demonstrate the portability of the
+protocol. A Rust producer can send hits to a Java server, and C++ producers can
+be consumed by Rust or Java servers in the regression suite.
+
+\section{Instrumentation}
+
+\subsection{Java Bytecode Instrumentation}
+
+The Java instrumenter uses ASM to rewrite classes inside a JAR. It injects
+probes for:
+
+\begin{itemize}
+  \item method entry,
+  \item conditional branch true and false edges,
+  \item switch targets,
+  \item catch handler entries,
+  \item finally handler entries.
+\end{itemize}
+
+For normal methods, method-entry probes are delayed until the first source line
+is available. For constructors, entry probes are delayed until after the
+superclass constructor has run. This avoids invalid bytecode around constructor
+prologues and gives the probe a useful source line. If a method has no line
+information, the instrumenter falls back to emitting a method-entry probe near
+exit with an unknown line.
+
+Each injected probe receives a monotonically assigned location id. The
+instrumenter writes a CSV index with the columns:
+
+\begin{center}
+\code{id,class,method,where,source,line}
+\end{center}
+
+The CSV is embedded as \code{META-INF/branch-probes.csv}; optionally, a sidecar
+CSV is written next to the output JAR. This map is the bridge between compact
+runtime location ids and human-readable source locations.
+
+\subsection{Filtering}
+
+Probe density matters. Instrumenting every branch in a large application can
+create too much traffic or noise. The instrumenter therefore supports:
+
+\begin{itemize}
+  \item \code{bp.inject}, a comma-separated set of probe kinds to inject,
+  \item \code{bp.excludefile}, a class and line-range exclusion file,
+  \item \code{bp.includefile}, a class and line-range inclusion file.
+\end{itemize}
+
+The inclusion and exclusion mechanism lets a user focus on a package, a
+suspect class, or a few line ranges while keeping the same downstream protocol.
+
+\section{Collectors}
+
+\subsection{Common Responsibilities}
+
+All collectors implement the same conceptual loop:
+
+\begin{enumerate}
+  \item receive UDP datagrams and TCP streams,
+  \item identify the message type,
+  \item write the raw payload to the trace file with a source tag,
+  \item parse complete hit, log, and context messages,
+  \item update in-memory coverage state,
+  \item answer administrative queries.
+\end{enumerate}
+
+The Java server uses a Clojure-backed shell. The C++ server embeds Tcl. The
+Rust server uses Molt. Despite the different shell implementations, the
+colon-prefixed command set is intentionally aligned:
+
+\begin{center}
+\small
+\begin{tabular}{>{\raggedright\arraybackslash}p{0.38\linewidth}%
+                >{\raggedright\arraybackslash}p{0.48\linewidth}}
+\textbf{Command} & \textbf{Purpose} \\
+\hline
+\code{:help} & List commands \\
+\code{:hits} & Print received or aggregated hits \\
+\code{:apply-context <label>} & Add a label to the active context set \\
+\code{:withdraw-context <label>} & Remove a label from the active context set \\
+\code{:coverage-report <appId> <instanceId> <file>} & Write a coverage report \\
+\code{:flush-trace} & Flush buffered trace data \\
+\code{:trace-persist} & Force durable persistence \\
+\code{:exit} & Stop the shell \\
+\end{tabular}
+\end{center}
+
+\subsection{Context Management}
+
+The collector maintains a global active context set. The empty context set is
+assigned id 1 and is reported as \code{default}. Each distinct non-empty set of
+labels is canonicalized and assigned a stable integer id. When a hit arrives,
+it is counted against the current context-set id.
+
+This is a simple model, but it is powerful enough for many testing and
+observability scenarios. A test driver can apply context \code{feature-X},
+exercise a workflow, withdraw it, apply \code{feature-Y}, and later ask which
+locations were covered under each context. A production diagnostic session can
+mark a phase, incident, synthetic transaction, or customer segment without
+changing the application probe sites.
+
+\subsection{Coverage Reports}
+
+The common coverage report format is plain text:
+
+\begin{verbatim}
+CONTEXTS N
+<ctxId> <label>
+...
+HITS M
+<ctxId> <locId> <count>
+...
+\end{verbatim}
+
+The report is filtered by application id and instance id. The CSV probe map
+then resolves \code{locId} into class, method, branch kind, source file, and
+line. Separating the report from the source map keeps the runtime protocol
+small and lets instrumentation metadata be archived alongside the build
+artifact.
+
+\section{Trace Persistence}
+
+Collectors write a binary trace format with magic \hittrace. The header is:
+
+\begin{center}
+\begin{tabular}{lll}
+\textbf{Field} & \textbf{Type} & \textbf{Meaning} \\
+\hline
+\code{magic} & 8 bytes & ASCII \code{HITTRC01} \\
+\code{endian} & \code{u8} & \code{0} for big-endian \\
+\code{startMillis} & \code{u64} & File creation time in epoch milliseconds \\
+\end{tabular}
+\end{center}
+
+Each frame is:
+
+\begin{center}
+\begin{tabular}{lll}
+\textbf{Field} & \textbf{Type} & \textbf{Meaning} \\
+\hline
+\code{flag} & \code{u16} & Hit, log, context attach, context withdraw, or timestamp \\
+\code{source} & \code{u8} & UDP, TCP, or internal \\
+\code{nanos} & \code{u64} & Collector-side monotonic timestamp \\
+\code{len} & \code{u32} & Payload length \\
+\code{payload} & bytes & Raw message bytes \\
+\end{tabular}
+\end{center}
+
+The frame payload is deliberately raw. If a UDP datagram contains multiple
+20-byte hit messages, the collector can preserve the exact received bytes and
+still parse the contents for live counters. This design supports later trace
+dumping and parser improvement without changing the producer protocol.
+
+Trace dumpers exist in Tcl, Java, C++, and Rust. They can print legacy
+stack-depth-style output, parsed hit/log/context lines, raw frame summaries, or
+time-filtered subsets. The dumpers support time windows expressed as raw
+nanosecond values or RFC3339 UTC timestamps, using the trace header and
+timestamp frames to align monotonic file time with wall-clock time.
+
+\section{Testing}
+
+The prototype includes a cross-language regression harness. Each test starts a
+collector, runs an instrumented producer or demo application, issues admin
+queries, and compares the observed output to a golden transcript. The scenarios
+include:
+
+\begin{itemize}
+  \item Java server receiving Java probes,
+  \item Java server receiving C++ probes,
+  \item Java server receiving Rust probes,
+  \item Rust server receiving C++ probes,
+  \item Java server receiving a JAR-instrumented branch-probe demo,
+  \item Java server receiving a fractal/demo workload.
+\end{itemize}
+
+These tests matter because the most important property of the system is
+interoperability. A producer and collector written in different languages must
+agree on byte order, field widths, batching behavior, hit counts, log framing,
+stack depth, and admin output. Golden files make that agreement visible.
+
+\section{Evaluation}
+
+\subsection{Latency Benchmarks}
+
+The prototype includes latency benchmark drivers for Java, C++, and Rust. The
+benchmark pattern is simple: warm up, execute one million probe hits, measure
+elapsed time around the hit calls, and allow the sender thread to flush. An
+engineering benchmark note records the following representative measurements:
+
+\begin{center}
+\begin{tabular}{llll}
+\textbf{Language} & \textbf{Average per hit} & \textbf{Total for 1M hits} & \textbf{Notes} \\
+\hline
+Java & \(2.6\)--\(2.8\,\mu s\) & about \(2.6\)--\(2.8\,s\) & with stack walking \\
+Java & \(0.018\,\mu s\) & \(17.662\,ms\) & constant depth \\
+C++ & \(0.071\,\mu s\) & \(71.516\,ms\) & optimized ring path \\
+Rust & \(0.115\)--\(0.122\,\mu s\) & about \(115\)--\(122\,ms\) & release build \\
+\end{tabular}
+\end{center}
+
+These figures should be read as engineering measurements from one prototype
+environment, not as a universal benchmark. They are still useful because they show
+where the costs are. Java stack walking dominates the Java path. When stack
+depth is represented by a cheap counter or constant, Java can be comparable to
+native paths for the enqueue portion. C++ and Rust benefit from RAII/drop-based
+depth guards and direct control over memory layout.
+
+\subsection{Throughput and Loss Tradeoffs}
+
+The UDP path favors throughput and low perturbation. The runtime can continue
+even if a collector is absent. Under overload, drops are possible at the
+runtime queue, socket buffer, network, or collector receive buffer. The
+implementation mitigates this with batching and large socket buffers, but it
+does not pretend UDP is lossless.
+
+This tradeoff is appropriate for many coverage and observability uses. If a
+test is checking whether a location was exercised at least once, occasional
+duplicate or missing hits may be acceptable when repeated across runs. If a
+workflow requires exact event accounting, the same message format can be sent
+over TCP or persisted locally before export.
+
+\section{Use Cases}
+
+\subsection{Distributed Coverage}
+
+The most direct use case is coverage across several services. Each service is
+assigned an application and instance id. Tests run against the composed system,
+and collectors receive hits from every instrumented process. Coverage reports
+can then show whether a scenario exercised the expected locations across
+language and process boundaries.
+
+\subsection{Branch Coverage for Java Services}
+
+The JAR instrumenter can insert probes at method entries and branch edges. The
+probe map records whether a location is \code{METHOD\_ENTRY}, \code{IF\_TRUE},
+\code{IF\_FALSE}, \code{CATCH\_ENTRY}, or \code{FINALLY\_ENTRY}. Combining that
+map with collector hit counts gives branch coverage without requiring a
+language-specific coverage database at runtime.
+
+\subsection{Operational Context Slicing}
+
+Context messages let the observer label a time interval or runtime phase. For
+example, a harness can apply \code{scenario=retry-timeout}, run a test, and
+withdraw it. Later, the coverage report distinguishes hits observed under that
+context from hits observed under \code{default}. This is useful when the same
+code is executed by many tests or tenants and the question is which condition
+caused a path to run.
+
+\subsection{Trace Replay and Debugging}
+
+Because collectors persist raw frames, a session can be inspected after the
+application has exited. Trace dumpers can show hit sequences, log messages, and
+context changes. Time filters can restrict inspection to a short interval
+around an incident or test phase.
+
+\section{Design Discussion}
+
+\subsection{Why a Small Binary Protocol?}
+
+A small binary protocol is easier to implement consistently across languages
+and cheap to produce at high frequency. The 20-byte hit message avoids runtime
+allocation for strings, JSON serialization, schema registries, and large trace
+objects. The cost is that human-readable source information must be handled by
+sidecar metadata such as the branch-probe CSV. That separation is a good trade
+for a dense probe system.
+
+\subsection{Why UDP?}
+
+UDP is attractive for high-frequency probes because it decouples application
+threads from collector availability. A service can be instrumented even when
+the collector is not running. Batching keeps packet count manageable. The
+system does not require a connection handshake or backpressure on the common
+path. TCP remains useful for modes where loss is unacceptable, and the
+collectors already parse both UDP datagrams and TCP streams.
+
+\subsection{Why Context Sets Instead of a Single Context Id?}
+
+A single context label is too weak for real tests and operations. At any
+moment, an application may be under several labels: a test scenario, a feature
+flag, an experiment, and a tenant class. The collector therefore treats the
+active context as a set. Each distinct set receives an id. This keeps hit
+records compact while preserving multi-label attribution.
+
+\subsection{Why Multiple Collector Implementations?}
+
+Multiple collector implementations are partly practical and partly validating.
+They make it possible to run the system in environments where Java, C++, or
+Rust is the natural deployment choice. More importantly, they test whether the
+protocol is truly language-neutral. If three collectors and three producer
+runtimes can interoperate, accidental assumptions in one implementation are
+more likely to be exposed.
+
+\section{Limitations}
+
+The current system has several limitations.
+
+\begin{itemize}
+  \item \textbf{UDP loss is possible.} The common path prioritizes low
+  overhead. Exact accounting requires TCP or an additional reliability layer.
+
+  \item \textbf{The active context set is global per collector.} This is simple,
+  but it may be too coarse when several independent scenarios send to one
+  collector at the same time. A future protocol could carry context id or
+  request id directly in hit records.
+
+  \item \textbf{Location maps are external to hit records.} This keeps hits
+  small but requires careful archival of \code{branch-probes.csv} or equivalent
+  metadata for each instrumented build.
+
+  \item \textbf{Java stack depth is expensive when computed by walking the
+  stack.} The newer runtime design addresses this with instrumented
+  \code{scope\_ENTER}/\code{scope\_EXIT}, but manually instrumented Java code
+  must avoid full stack walking in hot paths.
+
+  \item \textbf{The protocol is intentionally minimal.} It does not yet encode
+  request ids, parent-child spans, wall-clock timestamps per producer, source
+  hashes, or schema versions beyond the trace-file magic.
+
+  \item \textbf{Some tooling is prototype-grade.} The current implementation
+  includes demos, experiments, shell scripts, generated build files, and
+  several versions of the same idea. The core protocol is clear, but packaging
+  and operational polish remain future work.
+\end{itemize}
+
+\section{Future Work}
+
+Several extensions follow naturally from the current implementation.
+
+\begin{enumerate}
+  \item \textbf{Protocol versioning.} Add an explicit version or capability
+  field to support future hit formats while preserving compatibility.
+
+  \item \textbf{Per-hit context ids.} Let producers attach a context id or
+  request id to each hit when concurrent context streams share one collector.
+
+  \item \textbf{Reliable mode.} Provide a first-class TCP or local-spool mode
+  for tests that require exact hit counts.
+
+  \item \textbf{Trace indexing.} Build indexes over \hittrace\ files so time
+  windows, location ids, and context transitions can be queried without a full
+  scan.
+
+  \item \textbf{Source-map integration.} Bundle probe maps, build ids, and
+  source hashes so reports can be resolved automatically against the correct
+  source revision.
+
+  \item \textbf{Unified CLI.} Wrap server startup, instrumentation, trace
+  dumping, and coverage report generation in one command-line interface.
+
+  \item \textbf{OpenTelemetry bridge.} Export selected probe events or coverage
+  summaries into existing observability systems while preserving the cheap
+  internal protocol.
+\end{enumerate}
+
+\section{Conclusion}
+
+\tool\ demonstrates that useful distributed coverage can be built from a small
+cross-language probe protocol. The design avoids putting analysis work in the
+application process. Probes enqueue compact binary hits, background senders
+batch them, collectors persist raw history, and admin tools compute
+context-aware reports. The prototype validates the idea from several angles:
+manual probes, Java bytecode instrumentation, optimized native and JVM
+runtimes, Java/C++/Rust collectors, binary trace dumpers, regression tests, and
+benchmarks. The result is not a replacement for full tracing infrastructure,
+but a focused substrate for asking a valuable question in distributed systems:
+which parts of the system actually ran, under which runtime contexts, and with
+how little measurement cost?
+
+\begin{thebibliography}{9}
+
+\bibitem{asm}
+OW2 Consortium.
+\newblock ASM: Java bytecode manipulation and analysis framework.
+\newblock \url{https://asm.ow2.io/}.
+
+\bibitem{jacoco}
+JaCoCo Project.
+\newblock JaCoCo Java Code Coverage Library.
+\newblock \url{https://www.jacoco.org/jacoco/}.
+
+\bibitem{opentelemetry}
+OpenTelemetry Authors.
+\newblock OpenTelemetry specification.
+\newblock \url{https://opentelemetry.io/}.
+
+\bibitem{tcl}
+Tcl Core Team.
+\newblock Tcl scripting language.
+\newblock \url{https://www.tcl-lang.org/}.
+
+\bibitem{molt}
+Molt Project.
+\newblock Molt Tcl-like interpreter for Rust.
+\newblock \url{https://github.com/wduquette/molt}.
+
+\end{thebibliography}
+
+\end{document}
