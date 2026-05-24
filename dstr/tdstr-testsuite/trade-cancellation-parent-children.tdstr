@@ -1,0 +1,84 @@
+# This sample mirrors an English transition description rather than a
+# benchmark-sized model. It is useful as a compiler sample, but the full
+# checker state space would be extremely large because all fields are explicit
+# finite variables.
+
+system trade-cancellation-parent-children {
+    vars* _ {p c1 c2} * {market_status mission_state mission_version mission_revision event_type}
+
+    domain* *_market_status MATCHED PARTIALLY_MATCHED NOT_MATCHED REJECTED
+    domain* *_mission_state OPEN RELEASED SETTLED BOOKED CANCELLED PARTIALLY_SETTLED PARTIALLY_BOOKED CANCEL_REQUESTED
+    domain* *_event_type INSTRUCTION_NACKED INSTRUCTION_RELEASED INSTRUCTION_ACKED
+    domain* *_mission_version 1 2
+    domain* *_mission_revision 1 2 
+
+    # This keeps the behavioral story concrete even though the declared domains
+    # remain large enough that visualization should usually be done either with
+    # --max-states or via the corresponding -small sample.
+    init \
+        {equals p_mission_state OPEN} {equals c1_mission_state OPEN} {equals c2_mission_state OPEN}
+
+    action trade-cancellation \
+        {unchanged* *_market_status *_event_type *_mission_version *_mission_revision} \
+        {
+            alternate-scenarios
+            {
+                if
+                {
+                    {equals p_mission_state OPEN}
+                    {equals c1_mission_state OPEN}
+                    {equals c2_mission_state OPEN}
+                }
+                then
+                {
+                    {assign CANCELLED to p_mission_state}
+                    {assign CANCELLED to c1_mission_state}
+                    {assign CANCELLED to c2_mission_state}
+                }
+            }
+            {
+                if
+                {
+                    {equals p_mission_state RELEASED}
+                    {equals c1_mission_state RELEASED}
+                    {equals c2_mission_state RELEASED}
+                }
+                then
+                {
+                    {assign CANCEL_REQUESTED to p_mission_state}
+                    {assign CANCEL_REQUESTED to c1_mission_state}
+                    {assign CANCEL_REQUESTED to c2_mission_state}
+                }
+            }
+            {
+                if
+                {
+                    {equals p_mission_state BOOKED}
+                    {equals c1_mission_state BOOKED}
+                    {equals c2_mission_state BOOKED}
+                }
+                then
+                {
+                    {assign p_mission_state to p_mission_state}
+                    {assign c1_mission_state to c1_mission_state}
+                    {assign c2_mission_state to c2_mission_state}
+                }
+            }
+            {
+                if
+                {
+                    {equals p_mission_state CANCELLED}
+                    {equals c1_mission_state CANCELLED}
+                    {equals c2_mission_state CANCELLED}
+                }
+                then
+                {
+                    {assign p_mission_state to p_mission_state}
+                    {assign c1_mission_state to c1_mission_state}
+                    {assign c2_mission_state to c2_mission_state}
+                }
+            }
+        }
+
+    next @trade-cancellation
+}

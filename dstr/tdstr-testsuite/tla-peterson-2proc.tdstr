@@ -1,0 +1,42 @@
+system tla-peterson-2proc {
+    vars p1pc p2pc c1 c2 turn
+    domain p1pc a0 a1 a2 a3 cs a4
+    domain p2pc a0 a1 a2 a3 cs a4
+    domain c1 true false
+    domain c2 true false
+    domain turn 1 2
+
+    init {= p1pc a0} {= p2pc a0} {= c1 false} {= c2 false} {= turn 1}
+
+    action p1-a0 {= p1pc a0} {= p1pc+ a1} {*}[unchanged p2pc c1 c2 turn]
+    action p1-a1 {= p1pc a1} {= p1pc+ a2} {= c1+ true} {*}[unchanged p2pc c2 turn]
+    action p1-a2 {= p1pc a2} {= p1pc+ a3} {= turn+ 2} {*}[unchanged p2pc c1 c2]
+    action p1-a3 {= p1pc a3} {or {not c2} {= turn 1}} {= p1pc+ cs} {*}[unchanged p2pc c1 c2 turn]
+    action p1-cs {= p1pc cs} {= p1pc+ a4} {*}[unchanged p2pc c1 c2 turn]
+    action p1-a4 {= p1pc a4} {= p1pc+ a0} {= c1+ false} {*}[unchanged p2pc c2 turn]
+
+    action p2-a0 {= p2pc a0} {= p2pc+ a1} {*}[unchanged p1pc c1 c2 turn]
+    action p2-a1 {= p2pc a1} {= p2pc+ a2} {= c2+ true} {*}[unchanged p1pc c1 turn]
+    action p2-a2 {= p2pc a2} {= p2pc+ a3} {= turn+ 1} {*}[unchanged p1pc c1 c2]
+    action p2-a3 {= p2pc a3} {or {not c1} {= turn 2}} {= p2pc+ cs} {*}[unchanged p1pc c1 c2 turn]
+    action p2-cs {= p2pc cs} {= p2pc+ a4} {*}[unchanged p1pc c1 c2 turn]
+    action p2-a4 {= p2pc a4} {= p2pc+ a0} {= c2+ false} {*}[unchanged p1pc c1 turn]
+
+    next {
+        or
+        @p1-a0 @p1-a1 @p1-a2 @p1-a3 @p1-cs @p1-a4
+        @p2-a0 @p2-a1 @p2-a2 @p2-a3 @p2-cs @p2-a4
+    }
+
+    invariant mutual-exclusion {
+        not
+        {
+            and
+            {in p1pc {set cs a4}}
+            {in p2pc {set cs a4}}
+        }
+    }
+
+    property p1-can-reach-cs {eventually {= p1pc cs}}
+    property p2-can-reach-cs {eventually {= p2pc cs}}
+}

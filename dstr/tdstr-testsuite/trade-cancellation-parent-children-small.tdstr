@@ -1,0 +1,81 @@
+# Visualizable sibling of trade-cancellation-parent-children.
+# It keeps the same structure and transition logic, but collapses the domains of
+# non-mission-state fields to singletons and restricts mission states to the
+# states relevant to the cancellation transition.
+
+system trade-cancellation-parent-children-small {
+    vars* _ {p c1 c2} * {market_status mission_state mission_version mission_revision event_type}
+
+    domain* *_market_status MATCHED
+    domain* *_mission_state OPEN RELEASED BOOKED CANCELLED
+    domain* *_event_type INSTRUCTION_ACKED
+    domain* *_mission_version 1
+    domain* *_mission_revision 1
+
+    init \
+        {equals p_mission_state OPEN} {equals c1_mission_state OPEN} {equals c2_mission_state OPEN}
+
+    action trade-cancellation \
+        {unchanged* *_market_status *_event_type *_mission_version *_mission_revision} \
+        {
+            alternate-scenarios
+            {
+                if
+                {
+                    {equals p_mission_state OPEN}
+                    {equals c1_mission_state OPEN}
+                    {equals c2_mission_state OPEN}
+                }
+                then
+                {
+                    {assign CANCELLED to p_mission_state}
+                    {assign CANCELLED to c1_mission_state}
+                    {assign CANCELLED to c2_mission_state}
+                }
+            }
+            {
+                if
+                {
+                    {equals p_mission_state RELEASED}
+                    {equals c1_mission_state RELEASED}
+                    {equals c2_mission_state RELEASED}
+                }
+                then
+                {
+                    {assign CANCEL_REQUESTED to p_mission_state}
+                    {assign CANCEL_REQUESTED to c1_mission_state}
+                    {assign CANCEL_REQUESTED to c2_mission_state}
+                }
+            }
+            {
+                if
+                {
+                    {equals p_mission_state BOOKED}
+                    {equals c1_mission_state BOOKED}
+                    {equals c2_mission_state BOOKED}
+                }
+                then
+                {
+                    {assign p_mission_state to p_mission_state}
+                    {assign c1_mission_state to c1_mission_state}
+                    {assign c2_mission_state to c2_mission_state}
+                }
+            }
+            {
+                if
+                {
+                    {equals p_mission_state CANCELLED}
+                    {equals c1_mission_state CANCELLED}
+                    {equals c2_mission_state CANCELLED}
+                }
+                then
+                {
+                    {assign p_mission_state to p_mission_state}
+                    {assign c1_mission_state to c1_mission_state}
+                    {assign c2_mission_state to c2_mission_state}
+                }
+            }
+        }
+
+    next @trade-cancellation
+}

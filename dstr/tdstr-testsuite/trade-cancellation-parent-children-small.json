@@ -1,0 +1,734 @@
+{
+  "name": "trade-cancellation-parent-children-small",
+  "variables": [
+    "p_market_status",
+    "p_mission_state",
+    "p_mission_version",
+    "p_mission_revision",
+    "p_event_type",
+    "c1_market_status",
+    "c1_mission_state",
+    "c1_mission_version",
+    "c1_mission_revision",
+    "c1_event_type",
+    "c2_market_status",
+    "c2_mission_state",
+    "c2_mission_version",
+    "c2_mission_revision",
+    "c2_event_type"
+  ],
+  "domains": {
+    "p_market_status": {
+      "set": [
+        {
+          "lit": "matched"
+        }
+      ]
+    },
+    "p_mission_state": {
+      "set": [
+        {
+          "lit": "open"
+        },
+        {
+          "lit": "released"
+        },
+        {
+          "lit": "booked"
+        },
+        {
+          "lit": "cancelled"
+        }
+      ]
+    },
+    "p_mission_version": {
+      "set": [
+        {
+          "lit": 1
+        }
+      ]
+    },
+    "p_mission_revision": {
+      "set": [
+        {
+          "lit": 1
+        }
+      ]
+    },
+    "p_event_type": {
+      "set": [
+        {
+          "lit": "instruction_acked"
+        }
+      ]
+    },
+    "c1_market_status": {
+      "set": [
+        {
+          "lit": "matched"
+        }
+      ]
+    },
+    "c1_mission_state": {
+      "set": [
+        {
+          "lit": "open"
+        },
+        {
+          "lit": "released"
+        },
+        {
+          "lit": "booked"
+        },
+        {
+          "lit": "cancelled"
+        }
+      ]
+    },
+    "c1_mission_version": {
+      "set": [
+        {
+          "lit": 1
+        }
+      ]
+    },
+    "c1_mission_revision": {
+      "set": [
+        {
+          "lit": 1
+        }
+      ]
+    },
+    "c1_event_type": {
+      "set": [
+        {
+          "lit": "instruction_acked"
+        }
+      ]
+    },
+    "c2_market_status": {
+      "set": [
+        {
+          "lit": "matched"
+        }
+      ]
+    },
+    "c2_mission_state": {
+      "set": [
+        {
+          "lit": "open"
+        },
+        {
+          "lit": "released"
+        },
+        {
+          "lit": "booked"
+        },
+        {
+          "lit": "cancelled"
+        }
+      ]
+    },
+    "c2_mission_version": {
+      "set": [
+        {
+          "lit": 1
+        }
+      ]
+    },
+    "c2_mission_revision": {
+      "set": [
+        {
+          "lit": 1
+        }
+      ]
+    },
+    "c2_event_type": {
+      "set": [
+        {
+          "lit": "instruction_acked"
+        }
+      ]
+    }
+  },
+  "init": {
+    "and": [
+      {
+        "=": [
+          {
+            "var": "p_market_status"
+          },
+          {
+            "lit": "matched"
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "c1_market_status"
+          },
+          {
+            "lit": "matched"
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "c2_market_status"
+          },
+          {
+            "lit": "matched"
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "p_event_type"
+          },
+          {
+            "lit": "instruction_acked"
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "c1_event_type"
+          },
+          {
+            "lit": "instruction_acked"
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "c2_event_type"
+          },
+          {
+            "lit": "instruction_acked"
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "p_mission_version"
+          },
+          {
+            "lit": 1
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "c1_mission_version"
+          },
+          {
+            "lit": 1
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "c2_mission_version"
+          },
+          {
+            "lit": 1
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "p_mission_revision"
+          },
+          {
+            "lit": 1
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "c1_mission_revision"
+          },
+          {
+            "lit": 1
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "c2_mission_revision"
+          },
+          {
+            "lit": 1
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "p_mission_state"
+          },
+          {
+            "lit": "open"
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "c1_mission_state"
+          },
+          {
+            "lit": "open"
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "c2_mission_state"
+          },
+          {
+            "lit": "open"
+          }
+        ]
+      }
+    ]
+  },
+  "actions": [
+    {
+      "name": "trade-cancellation",
+      "body": {
+        "and": [
+          {
+            "=": [
+              {
+                "next": "p_market_status"
+              },
+              {
+                "var": "p_market_status"
+              }
+            ]
+          },
+          {
+            "=": [
+              {
+                "next": "p_event_type"
+              },
+              {
+                "var": "p_event_type"
+              }
+            ]
+          },
+          {
+            "=": [
+              {
+                "next": "p_mission_version"
+              },
+              {
+                "var": "p_mission_version"
+              }
+            ]
+          },
+          {
+            "=": [
+              {
+                "next": "p_mission_revision"
+              },
+              {
+                "var": "p_mission_revision"
+              }
+            ]
+          },
+          {
+            "=": [
+              {
+                "next": "c1_market_status"
+              },
+              {
+                "var": "c1_market_status"
+              }
+            ]
+          },
+          {
+            "=": [
+              {
+                "next": "c1_event_type"
+              },
+              {
+                "var": "c1_event_type"
+              }
+            ]
+          },
+          {
+            "=": [
+              {
+                "next": "c1_mission_version"
+              },
+              {
+                "var": "c1_mission_version"
+              }
+            ]
+          },
+          {
+            "=": [
+              {
+                "next": "c1_mission_revision"
+              },
+              {
+                "var": "c1_mission_revision"
+              }
+            ]
+          },
+          {
+            "=": [
+              {
+                "next": "c2_market_status"
+              },
+              {
+                "var": "c2_market_status"
+              }
+            ]
+          },
+          {
+            "=": [
+              {
+                "next": "c2_event_type"
+              },
+              {
+                "var": "c2_event_type"
+              }
+            ]
+          },
+          {
+            "=": [
+              {
+                "next": "c2_mission_version"
+              },
+              {
+                "var": "c2_mission_version"
+              }
+            ]
+          },
+          {
+            "=": [
+              {
+                "next": "c2_mission_revision"
+              },
+              {
+                "var": "c2_mission_revision"
+              }
+            ]
+          },
+          {
+            "or": [
+              {
+                "and": [
+                  {
+                    "and": [
+                      {
+                        "=": [
+                          {
+                            "var": "p_mission_state"
+                          },
+                          {
+                            "lit": "open"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "var": "c1_mission_state"
+                          },
+                          {
+                            "lit": "open"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "var": "c2_mission_state"
+                          },
+                          {
+                            "lit": "open"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "and": [
+                      {
+                        "=": [
+                          {
+                            "next": "p_mission_state"
+                          },
+                          {
+                            "lit": "cancelled"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "next": "c1_mission_state"
+                          },
+                          {
+                            "lit": "cancelled"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "next": "c2_mission_state"
+                          },
+                          {
+                            "lit": "cancelled"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "and": [
+                      {
+                        "=": [
+                          {
+                            "var": "p_mission_state"
+                          },
+                          {
+                            "lit": "released"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "var": "c1_mission_state"
+                          },
+                          {
+                            "lit": "released"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "var": "c2_mission_state"
+                          },
+                          {
+                            "lit": "released"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "and": [
+                      {
+                        "=": [
+                          {
+                            "next": "p_mission_state"
+                          },
+                          {
+                            "lit": "cancel_requested"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "next": "c1_mission_state"
+                          },
+                          {
+                            "lit": "cancel_requested"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "next": "c2_mission_state"
+                          },
+                          {
+                            "lit": "cancel_requested"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "and": [
+                      {
+                        "=": [
+                          {
+                            "var": "p_mission_state"
+                          },
+                          {
+                            "lit": "booked"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "var": "c1_mission_state"
+                          },
+                          {
+                            "lit": "booked"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "var": "c2_mission_state"
+                          },
+                          {
+                            "lit": "booked"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "and": [
+                      {
+                        "=": [
+                          {
+                            "next": "p_mission_state"
+                          },
+                          {
+                            "var": "p_mission_state"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "next": "c1_mission_state"
+                          },
+                          {
+                            "var": "c1_mission_state"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "next": "c2_mission_state"
+                          },
+                          {
+                            "var": "c2_mission_state"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "and": [
+                      {
+                        "=": [
+                          {
+                            "var": "p_mission_state"
+                          },
+                          {
+                            "lit": "cancelled"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "var": "c1_mission_state"
+                          },
+                          {
+                            "lit": "cancelled"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "var": "c2_mission_state"
+                          },
+                          {
+                            "lit": "cancelled"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "and": [
+                      {
+                        "=": [
+                          {
+                            "next": "p_mission_state"
+                          },
+                          {
+                            "var": "p_mission_state"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "next": "c1_mission_state"
+                          },
+                          {
+                            "var": "c1_mission_state"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "next": "c2_mission_state"
+                          },
+                          {
+                            "var": "c2_mission_state"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "next": {
+    "actionRef": "trade-cancellation"
+  },
+  "invariants": [],
+  "properties": []
+}
