@@ -36,6 +36,24 @@
             `(= ,(next-var-symbol var) ,var))
           vars))
 
+(defun wildcard-match-p (pattern text)
+  (labels ((match-at (pi ti)
+             (cond
+               ((= pi (length pattern))
+                (= ti (length text)))
+               ((char= (char pattern pi) #\*)
+                (or (match-at (1+ pi) ti)
+                    (and (< ti (length text))
+                         (match-at pi (1+ ti)))))
+               ((char= (char pattern pi) #\?)
+                (and (< ti (length text))
+                     (match-at (1+ pi) (1+ ti))))
+               (t
+                (and (< ti (length text))
+                     (char-equal (char pattern pi) (char text ti))
+                     (match-at (1+ pi) (1+ ti)))))))
+    (match-at 0 0)))
+
 (defun main ()
   (handler-case
       (let ((args (cdr sb-ext:*posix-argv*)))
@@ -229,10 +247,17 @@
              (when variables
                (error "Only one VARS clause is allowed"))
              (setf variables (parse-vars tail)))
+            ((symbol-name= head "vars*")
+             (when variables
+               (error "Only one VARS clause is allowed"))
+             (setf variables (parse-vars-product tail)))
             ((symbol-name= head "domain")
              (destructuring-bind (var &rest domain-body) tail
                (setf (gethash (dsl-name var) domains)
                      (parse-domain-clause var domain-body))))
+            ((symbol-name= head "domain*")
+             (dolist (entry (parse-domain-star-clause tail variables domains))
+               (setf (gethash (car entry) domains) (cdr entry))))
             ((symbol-name= head "init")
              (when init
                (error "Only one INIT clause is allowed"))
@@ -292,6 +317,26 @@
       (error "Duplicate variable name in VARS clause: ~S" vars))
     names))
 
+(defun parse-vars-product (tail)
+  (unless (= (length tail) 4)
+    (error "VARS* expects: (vars* separator (group1 ...) * (group2 ...)), got ~S" tail))
+  (destructuring-bind (separator left-group marker right-group) tail
+    (unless (string= (dsl-name marker) "*")
+      (error "VARS* expects * as the third argument, got ~S" marker))
+    (unless (listp left-group)
+      (error "VARS* left group must be a list, got ~S" left-group))
+    (unless (listp right-group)
+      (error "VARS* right group must be a list, got ~S" right-group))
+    (unless left-group
+      (error "VARS* left group cannot be empty"))
+    (unless right-group
+      (error "VARS* right group cannot be empty"))
+    (parse-vars
+     (loop for left in left-group append
+           (loop for right in right-group
+                 collect (intern (format nil "~A~A~A" (dsl-name left) (dsl-name separator) (dsl-name right))
+                                 *package*))))))
+
 (defun parse-domain-clause (var body)
   (let ((variable-name (dsl-name var)))
     (unless body
@@ -311,6 +356,25 @@
                                        nil
                                        :domain-literals-p t))
                        body)))))
+
+(defun parse-domain-star-clause (tail variables domains)
+  (unless variables
+    (error "DOMAIN* requires VARS or VARS* to be declared first"))
+  (unless (and tail (cdr tail))
+    (error "DOMAIN* requires a glob pattern and at least one value or expression"))
+  (destructuring-bind (pattern &rest body) tail
+    (let* ((pattern-name (dsl-name pattern))
+           (matches (remove-if-not (lambda (variable)
+                                     (wildcard-match-p pattern-name variable))
+                                   variables)))
+      (unless matches
+        (error "DOMAIN* pattern matched no declared variables: ~A" pattern-name))
+      (dolist (variable matches)
+        (when (gethash variable domains)
+          (error "Duplicate DOMAIN clause for variable ~A via DOMAIN*" variable)))
+      (let ((compiled-domain (parse-domain-clause pattern body)))
+        (loop for variable in matches
+              collect (cons variable compiled-domain))))))
 
 (defun parse-named-clause (kind tail)
   (unless (and tail (cdr tail))
@@ -368,14 +432,90 @@
      (assert-arity form 2)
      (list :unary "eventually"
            (compile-expr (second form) context allow-next allow-action-ref)))
+    ((symbol-name= (car form) "if")
+     (compile-if-then-expr form context allow-next allow-action-ref))
+    ((symbol-name= (car form) "assign")
+     (compile-assign-expr form context allow-next allow-action-ref))
+    ((symbol-name= (car form) "equals")
+     (compile-equals-expr form context allow-next allow-action-ref))
+    ((symbol-name= (car form) "unchanged*")
+     (compile-unchanged-star-expr form context))
     ((member (dsl-name (car form)) '("forall" "exists") :test #'equal)
      (compile-quantified-expr form context allow-next allow-action-ref))
     ((member (dsl-name (car form))
-             '("and" "or" "+" "-" "*" "/" "=" "!=" "<" "<=" ">" ">=" "in" "implies")
+             '("and" "or" "alternate-scenarios" "+" "-" "*" "/" "=" "!=" "<" "<=" ">" ">=" "in" "implies")
              :test #'equal)
      (compile-operator-expr form context allow-next allow-action-ref))
     (t
      (error "Unsupported expression form ~S" form))))
+
+(defun compile-if-then-expr (form context allow-next allow-action-ref)
+  (unless (= (length form) 4)
+    (error "IF expects the form (if condition then consequence), got ~S" form))
+  (unless (symbol-name= (third form) "then")
+    (error "IF expects THEN as the third element, got ~S" form))
+  (list :nary "and"
+        (list (compile-if-branch (second form) context allow-next allow-action-ref)
+              (compile-if-branch (fourth form) context allow-next allow-action-ref))))
+
+(defun compile-if-branch (form context allow-next allow-action-ref)
+  (if (implicit-and-form-p form)
+      (compile-body form context allow-next allow-action-ref)
+      (compile-expr form context allow-next allow-action-ref)))
+
+(defun implicit-and-form-p (form)
+  (and (listp form)
+       (> (length form) 1)
+       (every #'consp form)
+       (not (and (consp form)
+                 (symbolp (car form))
+                 (member (dsl-name (car form))
+                         '("quote" "set" "not" "eventually" "if" "assign" "equals" "unchanged*"
+                           "forall" "exists" "and" "or" "alternate-scenarios"
+                           "+" "-" "*" "/" "=" "!=" "<" "<=" ">" ">=" "in" "implies")
+                         :test #'equal)))))
+
+(defun compile-assign-expr (form context allow-next allow-action-ref)
+  (declare (ignore allow-action-ref))
+  (unless (= (length form) 4)
+    (error "ASSIGN expects the form (assign value to variable), got ~S" form))
+  (unless (symbol-name= (third form) "to")
+    (error "ASSIGN expects TO as the third element, got ~S" form))
+  (let* ((target (fourth form))
+         (target-name (dsl-name target)))
+    (unless (member target-name (context-variables context) :test #'equal)
+      (error "ASSIGN target must be a declared variable name, got ~S" target))
+    (list :binary "="
+          (list :next target-name)
+          (compile-expr (second form) context t allow-action-ref))))
+
+(defun compile-equals-expr (form context allow-next allow-action-ref)
+  (unless (= (length form) 3)
+    (error "EQUALS expects exactly two arguments, got ~S" form))
+  (list :binary "="
+        (compile-expr (second form) context allow-next allow-action-ref)
+        (compile-expr (third form) context allow-next allow-action-ref)))
+
+(defun compile-unchanged-star-expr (form context)
+  (unless (> (length form) 1)
+    (error "UNCHANGED* expects at least one glob pattern, got ~S" form))
+  (let ((seen nil)
+        (clauses nil))
+    (dolist (pattern (rest form))
+      (let* ((pattern-name (dsl-name pattern))
+             (matches (remove-if-not (lambda (variable)
+                                       (wildcard-match-p pattern-name variable))
+                                     (context-variables context))))
+        (unless matches
+          (error "UNCHANGED* pattern matched no declared variables: ~A" pattern-name))
+        (dolist (variable matches)
+          (unless (member variable seen :test #'equal)
+            (push variable seen)
+            (push (list :binary "="
+                        (list :next variable)
+                        (list :var variable))
+                  clauses)))))
+    (list* :nary "and" (nreverse clauses))))
 
 (defun compile-symbol-expr (symbol context allow-next allow-action-ref domain-literals-p)
   (let* ((name (dsl-name symbol))
@@ -416,18 +556,19 @@
 
 (defun compile-operator-expr (form context allow-next allow-action-ref)
   (let* ((op (dsl-name (car form)))
+         (normalized-op (if (string= op "alternate-scenarios") "or" op))
          (args (mapcar (lambda (arg)
                          (compile-expr arg context allow-next allow-action-ref))
                        (cdr form))))
     (cond
-      ((member op '("=" "!=" "<" "<=" ">" ">=" "in" "implies") :test #'equal)
+      ((member normalized-op '("=" "!=" "<" "<=" ">" ">=" "in" "implies") :test #'equal)
        (unless (= (length args) 2)
-         (error "~A expects exactly two arguments, got ~S" op form))
-       (list :binary op (first args) (second args)))
+         (error "~A expects exactly two arguments, got ~S" normalized-op form))
+       (list :binary normalized-op (first args) (second args)))
       (t
        (unless args
-         (error "~A expects at least one argument, got ~S" op form))
-       (list* :nary op args)))))
+         (error "~A expects at least one argument, got ~S" normalized-op form))
+       (list* :nary normalized-op args)))))
 
 (defun spec-ir->json (spec)
   (jobject
@@ -578,8 +719,9 @@
 
 (defparameter *reserved-dsl-head-names*
   '("system" "vars" "domain" "init" "action" "next" "invariant" "property"
-    "quote" "set" "not" "eventually" "forall" "exists"
-    "and" "or" "+" "-" "*" "/" "=" "!=" "<" "<=" ">" ">=" "in" "implies"
+    "vars*" "domain*"
+    "quote" "set" "not" "eventually" "if" "assign" "equals" "unchanged*" "forall" "exists"
+    "and" "or" "alternate-scenarios" "+" "-" "*" "/" "=" "!=" "<" "<=" ">" ">=" "in" "implies"
     "expand"))
 
 (defun dsl-macro-call-p (form)

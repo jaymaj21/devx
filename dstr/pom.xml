@@ -19,6 +19,13 @@
 
     <dependencies>
         <dependency>
+            <groupId>com.jm.cov</groupId>
+            <artifactId>mprewriter-runtime</artifactId>
+            <version>1.0.0</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/../development_tools/CovForDistributedSystems/branch-probe-suite/mprewriter-runtime/target/mprewriter-runtime-1.0.0.jar</systemPath>
+        </dependency>
+        <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
             <version>${jackson.version}</version>

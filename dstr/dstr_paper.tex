@@ -5,6 +5,7 @@
 \setmainfont{Calibri}
 \usepackage[hidelinks]{hyperref}
 \usepackage{enumitem}
+\usepackage{graphicx}
 \usepackage{listings}
 \usepackage{xcolor}
 
@@ -18,7 +19,8 @@
 
 \title{dstr: A Small Language for Systems That Become Graphs}
 \author{Sambuddha Majumder \and Jayanta Majumder}
-\date{\today}
+\date{}
+
 
 \begin{document}
 \maketitle
@@ -66,9 +68,18 @@ place. It is a reusable object for later analysis.
 
 \section{The High-Level Interface}
 
-The primary interface of \texttt{dstr} is a Lisp-style DSL. This choice is not
-an affectation. S-expressions provide exactly the right compromise for a system
-description language:
+The high-level interface of \texttt{dstr} is now presented through two sibling
+surface languages: a Lisp-style DSL and a Tcl-shaped DSL called
+\texttt{tdstr}. Both compile to the same normalized JSON representation. The
+choice to support two front ends is not decorative. It separates semantic
+stability from authoring convenience. Once the core representation is fixed,
+one may admit multiple notations that are optimized for different deployment
+contexts while still preserving a single checker, a single graph-oriented
+workflow, and a single regression target.
+
+The Lisp front end remains the most expressive meta-language for the system.
+This choice is not an affectation. S-expressions provide exactly the right
+compromise for a system description language:
 
 \begin{itemize}[leftmargin=*]
 \item they are compact,
@@ -101,6 +112,56 @@ shorthands rather than mere decoration: they allow families of related actions,
 invariants, or structural patterns to be written once and reused declaratively
 across a model.
 
+Beyond programmable macros, the current Lisp front end now includes several built-in
+surface shorthands aimed at reducing repetitive boilerplate in larger models.
+One may write \texttt{(vars* \_ (p c1 c2) * (market\_status mission\_state))}
+to generate a Cartesian product of variable names such as
+\texttt{p\_market\_status} and \texttt{c2\_mission\_state}. Likewise,
+\texttt{(domain* *\_mission\_state OPEN RELEASED ...)} applies one finite
+domain declaration to every declared variable matching a glob pattern. For
+action predicates, \texttt{(assign value to x)} is accepted as readable sugar
+for \texttt{(= x+ value)}, \texttt{(equals x y)} as sugar for equality,
+\texttt{(unchanged* pattern ...)} as a glob-based frame-condition generator,
+and \texttt{(alternate-scenarios ...)} as a domain-oriented synonym for
+\texttt{or}. An \texttt{if ... then ...} form is also provided; it denotes a
+conjunction of guard and consequence, and when either branch is written as a
+list of sibling expressions that list is interpreted as an implicit
+\texttt{and}. These additions keep the language close to the underlying JSON
+semantics while making large families of similarly shaped state variables
+substantially easier to read and maintain.
+
+The Tcl-shaped front end, \texttt{tdstr}, pursues the same semantic goal
+through a different host-language discipline. Its basic unit is the Tcl word
+and command rather than the Lisp list, but the language remains markedly
+tree-shaped because brace-delimited words preserve internal structure without
+eager evaluation. A minimal specification has the form:
+
+\begin{lstlisting}[language=tcl]
+system light-switch {
+    vars light
+    domain light off on
+    init {= light off}
+    action turn-on {= light off} {= light+ on}
+    action turn-off {= light on} {= light+ off}
+    next {or @turn-on @turn-off}
+    invariant type-ok {in light {set off on}}
+    property eventually-on {eventually {= light on}}
+}
+\end{lstlisting}
+
+This notation is not merely a transliteration of the Lisp syntax. It makes use
+of Tcl's own strengths: braces naturally delimit expressions, commands admit
+ordinary helper procedures, and command substitution allows list-valued helpers
+to be spliced into surrounding clauses. A form such as
+\texttt{\{*\}[unchanged p1 p2 mem]} therefore expands into sibling frame
+conditions without requiring a separate macro system. The \texttt{tdstr} front
+end also provides built-in shorthands parallel to those of the Lisp DSL:
+\texttt{vars*} for Cartesian variable products, \texttt{domain*} for
+glob-directed domain declarations, \texttt{assign}, \texttt{equals},
+\texttt{unchanged*}, \texttt{if ... then ...}, and
+\texttt{alternate-scenarios}. In this respect the two surface languages are not
+competitors so much as alternate presentations of the same modeling idiom.
+
 Two small conventions carry much of the language. First, an unadorned variable
 name such as \texttt{light} or \texttt{lock} denotes that variable's value in
 the current state. A name with the suffix \texttt{+}, such as \texttt{light+}
@@ -125,6 +186,32 @@ emitted as JSON when needed. This preserves a concise authoring language while
 retaining a stable machine-oriented form for checking, tooling, and regression
 tests. The separation is important: it allows the front end to remain pleasant
 without sacrificing semantic clarity or downstream interoperability.
+
+That separation also makes it possible to support more than one pleasant
+authoring notation without fragmenting the semantics. The motivation for the
+Tcl-based sibling language is not that Tcl offers a stronger substrate for DSL
+construction than Common Lisp; on the contrary, Lisp remains the richer and
+more principled environment for language extension. Rather, Tcl combines a
+sufficiently homoiconic command structure with a degree of practical ubiquity
+that is unusually valuable in constrained environments. It is present by
+default on many Unix-like systems, commonly available across Linux
+distributions, and often shipped incidentally even on developer workstations
+through tools such as Git, whose \texttt{git-gui} and \texttt{gitk}
+installations typically bring along a Tcl interpreter. For a lightweight
+modeling front end, this matters. A language that is slightly less elegant as a
+meta-language but far more likely to be installed can be the more useful
+vehicle in practice.
+
+There is a small historical irony here. During the long-running debates over
+extension languages in free software, Tcl was often criticized in comparison
+with Lisp-derived alternatives, including in famously sharp polemics from the
+GNU world. Yet the subsequent ecology of open-source software distributions has
+often favored deployment convenience over theoretical purity. Without making
+that history a central thesis, it is worth noting that Tcl's eventual
+ubiquity---earned through packaging, tooling, and mundane operational
+fitness---makes it a pragmatic companion to the more language-rich Lisp front
+end. The important architectural point is that both front ends normalize to the
+same semantic core.
 
 The macro layer strengthens this separation rather than weakening it. Authors
 are free to use abstraction aggressively at the surface level, but those
@@ -271,6 +358,300 @@ over-constrained nor under-constrained, and that the desired state is indeed
 reachable. The resulting graph is small enough to be grasped as a whole, which
 makes it a useful introductory example both for teaching and for validating the
 surface notation itself.
+
+\subsection{A Product-Structured Market Model}
+
+The newer surface shorthands become more useful when several related financial
+objects share the same fields and transition story. The following excerpt
+models one master instrument record together with two venue-specific listings.
+Each object carries a lifecycle state, a trading-status state, and a reference
+data version. The actions shown here express a stylized but recognizably
+financial workflow: enrichment completes, continuous trading starts, trading is
+paused, trading resumes, and the instrument can ultimately be disabled.
+
+\begin{lstlisting}[language=Lisp]
+(system instrument-lifecycle
+  (vars* _ (master venue1 venue2) * (lifecycle trading_status refdata_version))
+  (domain* *_lifecycle DRAFT ENRICHING READY ACTIVE HALTED DISABLED)
+  (domain* *_trading_status NOT_TRADING TRADING PAUSED DISABLED)
+  (domain* *_refdata_version 1 2)
+  (init
+    (equals master_lifecycle ENRICHING)
+    (equals venue1_lifecycle ENRICHING)
+    (equals venue2_lifecycle ENRICHING)
+    (equals master_trading_status NOT_TRADING)
+    (equals venue1_trading_status NOT_TRADING)
+    (equals venue2_trading_status NOT_TRADING)
+    (equals master_refdata_version 1)
+    (equals venue1_refdata_version 1)
+    (equals venue2_refdata_version 1))
+  (action enrichment-complete
+    (unchanged* *_refdata_version)
+    (alternate-scenarios
+      (if
+        ((equals master_lifecycle ENRICHING)
+         (equals venue1_lifecycle ENRICHING)
+         (equals venue2_lifecycle ENRICHING))
+        then
+        ((assign READY to master_lifecycle)
+         (assign READY to venue1_lifecycle)
+         (assign READY to venue2_lifecycle)
+         (assign NOT_TRADING to master_trading_status)
+         (assign NOT_TRADING to venue1_trading_status)
+         (assign NOT_TRADING to venue2_trading_status)))))
+  (action start-trading
+    (unchanged* *_refdata_version)
+    (if
+      ((equals master_lifecycle READY)
+       (equals venue1_lifecycle READY)
+       (equals venue2_lifecycle READY))
+      then
+      ((assign ACTIVE to master_lifecycle)
+       (assign ACTIVE to venue1_lifecycle)
+       (assign ACTIVE to venue2_lifecycle)
+       (assign TRADING to master_trading_status)
+       (assign TRADING to venue1_trading_status)
+       (assign TRADING to venue2_trading_status))))
+  (action pause-trading
+    (unchanged* *_refdata_version)
+    (if
+      ((equals master_lifecycle ACTIVE)
+       (equals venue1_lifecycle ACTIVE)
+       (equals venue2_lifecycle ACTIVE))
+      then
+      ((assign HALTED to master_lifecycle)
+       (assign HALTED to venue1_lifecycle)
+       (assign HALTED to venue2_lifecycle)
+       (assign PAUSED to master_trading_status)
+       (assign PAUSED to venue1_trading_status)
+       (assign PAUSED to venue2_trading_status))))
+  (action resume-trading
+    (unchanged* *_refdata_version)
+    (if
+      ((equals master_lifecycle HALTED)
+       (equals venue1_lifecycle HALTED)
+       (equals venue2_lifecycle HALTED))
+      then
+      ((assign ACTIVE to master_lifecycle)
+       (assign ACTIVE to venue1_lifecycle)
+       (assign ACTIVE to venue2_lifecycle)
+       (assign TRADING to master_trading_status)
+       (assign TRADING to venue1_trading_status)
+       (assign TRADING to venue2_trading_status))))
+  (action disable-instrument
+    (unchanged* *_refdata_version)
+    (if
+      ((not (equals master_lifecycle DISABLED))
+       (not (equals venue1_lifecycle DISABLED))
+       (not (equals venue2_lifecycle DISABLED)))
+      then
+      ((assign DISABLED to master_lifecycle)
+       (assign DISABLED to venue1_lifecycle)
+       (assign DISABLED to venue2_lifecycle)
+       (assign DISABLED to master_trading_status)
+       (assign DISABLED to venue1_trading_status)
+       (assign DISABLED to venue2_trading_status))))
+  (next
+    (alternate-scenarios
+      @enrichment-complete
+      @start-trading
+      @pause-trading
+      @resume-trading
+      @disable-instrument)))
+\end{lstlisting}
+
+This example is deliberately more repetitive in its underlying semantic shape
+than the switch model, and therefore better illustrates the value of the newer
+surface forms. The \texttt{vars*} and \texttt{domain*} clauses express a common
+``master plus venues'' product structure without hiding the resulting explicit
+state variables. The action bodies combine frame conditions generated by
+\texttt{unchanged*} with branch-oriented business logic written using
+\texttt{if}, \texttt{assign}, and \texttt{alternate-scenarios}. The result is
+still compiled into the same finite explicit-state JSON representation, but the
+authoring notation is closer to the way lifecycle and market-status rules are
+often described in exchange, broker, and reference-data discussions. The same
+family of shorthands is now available in the Tcl-based \texttt{tdstr} front
+end as well, which is useful when one wants this style of concise,
+product-structured specification in environments where a Lisp runtime is not
+readily available.
+
+For comparison, the same model can be written in \texttt{tdstr} as follows:
+
+\begin{lstlisting}[language=tcl]
+system instrument-lifecycle {
+    vars* _ {master venue1 venue2} * {lifecycle trading_status refdata_version}
+
+    domain* *_lifecycle DRAFT ENRICHING READY ACTIVE HALTED DISABLED
+    domain* *_trading_status NOT_TRADING TRADING PAUSED DISABLED
+    domain* *_refdata_version 1 2
+
+    init \
+        {equals master_lifecycle ENRICHING} {equals venue1_lifecycle ENRICHING} {equals venue2_lifecycle ENRICHING} \
+        {equals master_trading_status NOT_TRADING} {equals venue1_trading_status NOT_TRADING} {equals venue2_trading_status NOT_TRADING} \
+        {equals master_refdata_version 1} {equals venue1_refdata_version 1} {equals venue2_refdata_version 1}
+
+    action enrichment-complete \
+        {unchanged* *_refdata_version} \
+        {
+            if
+            {
+                {equals master_lifecycle ENRICHING}
+                {equals venue1_lifecycle ENRICHING}
+                {equals venue2_lifecycle ENRICHING}
+            }
+            then
+            {
+                {assign READY to master_lifecycle}
+                {assign READY to venue1_lifecycle}
+                {assign READY to venue2_lifecycle}
+                {assign NOT_TRADING to master_trading_status}
+                {assign NOT_TRADING to venue1_trading_status}
+                {assign NOT_TRADING to venue2_trading_status}
+            }
+        }
+
+    action start-trading \
+        {unchanged* *_refdata_version} \
+        {
+            if
+            {
+                {equals master_lifecycle READY}
+                {equals venue1_lifecycle READY}
+                {equals venue2_lifecycle READY}
+            }
+            then
+            {
+                {assign ACTIVE to master_lifecycle}
+                {assign ACTIVE to venue1_lifecycle}
+                {assign ACTIVE to venue2_lifecycle}
+                {assign TRADING to master_trading_status}
+                {assign TRADING to venue1_trading_status}
+                {assign TRADING to venue2_trading_status}
+            }
+        }
+
+    action pause-trading \
+        {unchanged* *_refdata_version} \
+        {
+            if
+            {
+                {equals master_lifecycle ACTIVE}
+                {equals venue1_lifecycle ACTIVE}
+                {equals venue2_lifecycle ACTIVE}
+            }
+            then
+            {
+                {assign HALTED to master_lifecycle}
+                {assign HALTED to venue1_lifecycle}
+                {assign HALTED to venue2_lifecycle}
+                {assign PAUSED to master_trading_status}
+                {assign PAUSED to venue1_trading_status}
+                {assign PAUSED to venue2_trading_status}
+            }
+        }
+
+    action resume-trading \
+        {unchanged* *_refdata_version} \
+        {
+            if
+            {
+                {equals master_lifecycle HALTED}
+                {equals venue1_lifecycle HALTED}
+                {equals venue2_lifecycle HALTED}
+            }
+            then
+            {
+                {assign ACTIVE to master_lifecycle}
+                {assign ACTIVE to venue1_lifecycle}
+                {assign ACTIVE to venue2_lifecycle}
+                {assign TRADING to master_trading_status}
+                {assign TRADING to venue1_trading_status}
+                {assign TRADING to venue2_trading_status}
+            }
+        }
+
+    action disable-instrument \
+        {unchanged* *_refdata_version} \
+        {
+            if
+            {
+                {not {equals master_lifecycle DISABLED}}
+                {not {equals venue1_lifecycle DISABLED}}
+                {not {equals venue2_lifecycle DISABLED}}
+            }
+            then
+            {
+                {assign DISABLED to master_lifecycle}
+                {assign DISABLED to venue1_lifecycle}
+                {assign DISABLED to venue2_lifecycle}
+                {assign DISABLED to master_trading_status}
+                {assign DISABLED to venue1_trading_status}
+                {assign DISABLED to venue2_trading_status}
+            }
+        }
+
+    next {
+        alternate-scenarios
+        @enrichment-complete
+        @start-trading
+        @pause-trading
+        @resume-trading
+        @disable-instrument
+    }
+}
+\end{lstlisting}
+
+The comparison is instructive. The Lisp version makes structural abstraction
+and macro-based refactoring especially natural. The Tcl version sacrifices some
+of that metalinguistic power, but in return it uses a reader and runtime that
+are often already present. The two syntaxes nevertheless converge on the same
+authorial conveniences: product-style variable declarations, pattern-directed
+domain clauses, explicit but readable frame conditions, and transition rules
+that can be phrased in a style close to ordinary workflow prose.
+
+Just as importantly, both front ends feed the same graph-export tooling. The
+wrapper scripts \texttt{dstr-to-svg} and \texttt{tdstr-to-svg} compile a source
+model when necessary, emit a normalized JSON specification, derive a Graphviz
+DOT graph, and then render a viewable image such as SVG or PDF. This is not a
+mere presentation nicety. In practice, the intermediate graph is often the
+first artifact shown to reviewers who care less about the authoring notation
+than about reachable operating modes, dead ends, and permitted transitions. It
+also provides a convenient checkpoint when debugging a model: one can inspect
+the generated DOT before asking whether the checker's verdict is surprising.
+For larger models, the wrappers expose truncation options so that graph
+generation can degrade gracefully rather than failing outright under a very
+large universe.
+
+Figure~\ref{fig:instrument-dstr-graph} illustrates this intermediate output for
+the reduced \texttt{instrument-lifecycle-small} sample. In practice, both front
+ends compile to the same normalized JSON form, so the value lies less in
+printing two nearly identical diagrams than in showing one representative graph
+and then moving to a behaviorally different example.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.88\textwidth]{paper-figures/instrument-lifecycle-small-dstr.pdf}
+\caption{Graph export generated through the \texttt{dstr}-side wrapper for the reduced instrument lifecycle model.}
+\label{fig:instrument-dstr-graph}
+\end{figure}
+
+A good contrasting example is \texttt{cas-2proc-race}, a small concurrent model
+of two processes racing to perform \texttt{CAS(mem, 0, id)} on a shared memory
+cell. Each process begins in state \texttt{a0}, moves to \texttt{try}, and can
+attempt the compare-and-swap at most once. If the shared cell still contains
+\texttt{0}, that process moves to \texttt{won} and installs its identifier in
+\texttt{mem}; otherwise it moves to \texttt{lost}. The model therefore captures
+the central safety fact that at most one process can win, while also recording
+the postcondition that the winner must agree with the final memory value. Its
+reachability properties additionally show that each process can participate in
+either role depending on the schedule.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.88\textwidth]{paper-figures/cas-2proc-race.pdf}
+\caption{State graph for the \texttt{cas-2proc-race} model, showing the competing one-shot compare-and-swap attempts and the winner/loser outcomes they induce.}
+\label{fig:cas-2proc-race-graph}
+\end{figure}
 
 \subsection{A Resource Protocol}
 

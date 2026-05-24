@@ -1,6 +1,7 @@
 package org.dstr.cli;
 
 import java.nio.file.Path;
+import com.trading.domain.mprewriter;
 import org.dstr.check.ExplicitStateChecker;
 import org.dstr.model.CheckResult;
 import org.dstr.model.Counterexample;
@@ -14,7 +15,11 @@ public final class DstrCli {
             System.exit(2);
         }
 
-        Spec spec = new SpecParser().parse(Path.of(args[0]));
+        Path specPath = Path.of(args[0]);
+        String specFileName = specPath.getFileName().toString();
+        resetCoverageContext(specFileName);
+
+        Spec spec = new SpecParser().parse(specPath);
         CheckResult result = new ExplicitStateChecker().check(spec);
 
         System.out.println("Spec: " + spec.name());
@@ -33,6 +38,14 @@ public final class DstrCli {
             for (Counterexample ce : result.deadlocks()) {
                 System.out.println("  - path=" + ce.path());
             }
+        }
+    }
+
+    private static void resetCoverageContext(String specFileName) {
+        try {
+            mprewriter.class.getMethod("reset_context_to", String.class).invoke(null, specFileName);
+        } catch (ReflectiveOperationException | SecurityException ignored) {
+            // Older runtime variants do not expose per-spec context reset.
         }
     }
 }

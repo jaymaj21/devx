@@ -76,6 +76,17 @@ Useful options:
 
 - `--all-states` includes unreachable states in dashed gray
 - `--rankdir TB` lays the graph out top-to-bottom instead of left-to-right
+- `--max-states N` truncates very large universes instead of exhausting memory
+
+There are also front-end-aware wrapper scripts:
+
+- `dstr-to-svg.sh` / `dstr-to-svg.bat`
+- `tdstr-to-svg.sh` / `tdstr-to-svg.bat`
+
+These compile a `.dstr` or `.tdstr` source when needed, then emit adjacent
+`.json`, `.dot`, and `.svg` files. They also accept an existing `.json` spec
+directly, which is useful when the normalized form has already been checked in
+or produced elsewhere.
 
 The generated graph is a state-transition visualization:
 
