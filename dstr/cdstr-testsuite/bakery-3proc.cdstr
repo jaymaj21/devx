@@ -1,0 +1,230 @@
+; A bounded 3-process bakery protocol model.
+; Ticket values are restricted to 0..4 to keep the state space finite.
+; Variables:
+; - p1pc, p2pc, p3pc: control states of the three processes.
+;   - a0: idle, not currently trying to enter.
+;   - a1: choosing a ticket number.
+;   - wait: waiting until no competing process has priority.
+;   - cs: inside the critical section.
+; - ch1, ch2, ch3: "choosing" flags for the three processes.
+;   - t: the process is currently choosing a ticket.
+;   - nil: the process is not currently choosing.
+; - n1, n2, n3: bounded bakery ticket numbers for the three processes.
+;   - 0: no outstanding ticket / not competing.
+;   - 1..4: ticket values used to order entry attempts.
+
+(system bakery-3proc
+  (vars p1pc p2pc p3pc ch1 ch2 ch3 n1 n2 n3)
+  (domain p1pc a0 a1 wait cs)
+  (domain p2pc a0 a1 wait cs)
+  (domain p3pc a0 a1 wait cs)
+  (domain ch1 t nil)
+  (domain ch2 t nil)
+  (domain ch3 t nil)
+  (domain n1 0 1 2 3 4)
+  (domain n2 0 1 2 3 4)
+  (domain n3 0 1 2 3 4)
+  (init
+    (= p1pc a0)
+    (= p2pc a0)
+    (= p3pc a0)
+    (= ch1 nil)
+    (= ch2 nil)
+    (= ch3 nil)
+    (= n1 0)
+    (= n2 0)
+    (= n3 0))
+
+  (action p1-start
+    (= p1pc a0)
+    (= p1pc+ a1)
+    (= ch1+ t)
+    (= p2pc+ p2pc)
+    (= p3pc+ p3pc)
+    (= ch2+ ch2)
+    (= ch3+ ch3)
+    (= n1+ n1)
+    (= n2+ n2)
+    (= n3+ n3))
+
+  (action p1-choose
+    (= p1pc a1)
+    (= p1pc+ wait)
+    (= ch1+ nil)
+    (or
+      (and (>= n2 n3) (< n2 4) (= n1+ (+ n2 1)))
+      (and (> n3 n2) (< n3 4) (= n1+ (+ n3 1))))
+    (= p2pc+ p2pc)
+    (= p3pc+ p3pc)
+    (= ch2+ ch2)
+    (= ch3+ ch3)
+    (= n2+ n2)
+    (= n3+ n3))
+
+  (action p1-enter
+    (= p1pc wait)
+    (not ch2)
+    (not ch3)
+    (or (= n2 0) (< n1 n2) (= n1 n2))
+    (or (= n3 0) (< n1 n3) (= n1 n3))
+    (= p1pc+ cs)
+    (= p2pc+ p2pc)
+    (= p3pc+ p3pc)
+    (= ch1+ ch1)
+    (= ch2+ ch2)
+    (= ch3+ ch3)
+    (= n1+ n1)
+    (= n2+ n2)
+    (= n3+ n3))
+
+  (action p1-exit
+    (= p1pc cs)
+    (= p1pc+ a0)
+    (= n1+ 0)
+    (= ch1+ nil)
+    (= p2pc+ p2pc)
+    (= p3pc+ p3pc)
+    (= ch2+ ch2)
+    (= ch3+ ch3)
+    (= n2+ n2)
+    (= n3+ n3))
+
+  (action p2-start
+    (= p2pc a0)
+    (= p2pc+ a1)
+    (= ch2+ t)
+    (= p1pc+ p1pc)
+    (= p3pc+ p3pc)
+    (= ch1+ ch1)
+    (= ch3+ ch3)
+    (= n1+ n1)
+    (= n2+ n2)
+    (= n3+ n3))
+
+  (action p2-choose
+    (= p2pc a1)
+    (= p2pc+ wait)
+    (= ch2+ nil)
+    (or
+      (and (>= n1 n3) (< n1 4) (= n2+ (+ n1 1)))
+      (and (> n3 n1) (< n3 4) (= n2+ (+ n3 1))))
+    (= p1pc+ p1pc)
+    (= p3pc+ p3pc)
+    (= ch1+ ch1)
+    (= ch3+ ch3)
+    (= n1+ n1)
+    (= n3+ n3))
+
+  (action p2-enter
+    (= p2pc wait)
+    (not ch1)
+    (not ch3)
+    (or (= n1 0) (< n2 n1))
+    (or (= n3 0) (< n2 n3) (= n2 n3))
+    (= p2pc+ cs)
+    (= p1pc+ p1pc)
+    (= p3pc+ p3pc)
+    (= ch1+ ch1)
+    (= ch2+ ch2)
+    (= ch3+ ch3)
+    (= n1+ n1)
+    (= n2+ n2)
+    (= n3+ n3))
+
+  (action p2-exit
+    (= p2pc cs)
+    (= p2pc+ a0)
+    (= n2+ 0)
+    (= ch2+ nil)
+    (= p1pc+ p1pc)
+    (= p3pc+ p3pc)
+    (= ch1+ ch1)
+    (= ch3+ ch3)
+    (= n1+ n1)
+    (= n3+ n3))
+
+  (action p3-start
+    (= p3pc a0)
+    (= p3pc+ a1)
+    (= ch3+ t)
+    (= p1pc+ p1pc)
+    (= p2pc+ p2pc)
+    (= ch1+ ch1)
+    (= ch2+ ch2)
+    (= n1+ n1)
+    (= n2+ n2)
+    (= n3+ n3))
+
+  (action p3-choose
+    (= p3pc a1)
+    (= p3pc+ wait)
+    (= ch3+ nil)
+    (or
+      (and (>= n1 n2) (< n1 4) (= n3+ (+ n1 1)))
+      (and (> n2 n1) (< n2 4) (= n3+ (+ n2 1))))
+    (= p1pc+ p1pc)
+    (= p2pc+ p2pc)
+    (= ch1+ ch1)
+    (= ch2+ ch2)
+    (= n1+ n1)
+    (= n2+ n2))
+
+  (action p3-enter
+    (= p3pc wait)
+    (not ch1)
+    (not ch2)
+    (or (= n1 0) (< n3 n1))
+    (or (= n2 0) (< n3 n2))
+    (= p3pc+ cs)
+    (= p1pc+ p1pc)
+    (= p2pc+ p2pc)
+    (= ch1+ ch1)
+    (= ch2+ ch2)
+    (= ch3+ ch3)
+    (= n1+ n1)
+    (= n2+ n2)
+    (= n3+ n3))
+
+  (action p3-exit
+    (= p3pc cs)
+    (= p3pc+ a0)
+    (= n3+ 0)
+    (= ch3+ nil)
+    (= p1pc+ p1pc)
+    (= p2pc+ p2pc)
+    (= ch1+ ch1)
+    (= ch2+ ch2)
+    (= n1+ n1)
+    (= n2+ n2))
+
+  (next
+    (or
+      $p1-start $p1-choose $p1-enter $p1-exit
+      $p2-start $p2-choose $p2-enter $p2-exit
+      $p3-start $p3-choose $p3-enter $p3-exit))
+
+  (invariant mutual-exclusion
+    (not
+      (or
+        (and (= p1pc cs) (= p2pc cs))
+        (and (= p1pc cs) (= p3pc cs))
+        (and (= p2pc cs) (= p3pc cs)))))
+
+  (invariant idle-has-zero-ticket
+    (and
+      (implies (= p1pc a0) (= n1 0))
+      (implies (= p2pc a0) (= n2 0))
+      (implies (= p3pc a0) (= n3 0))))
+
+  (invariant choosing-only-in-a1
+    (and
+      (implies ch1 (= p1pc a1))
+      (implies ch2 (= p2pc a1))
+      (implies ch3 (= p3pc a1))))
+
+  (property p1-can-reach-cs
+    (eventually (= p1pc cs)))
+  (property p2-can-reach-cs
+    (eventually (= p2pc cs)))
+  (property p3-can-reach-cs
+    (eventually (= p3pc cs))))

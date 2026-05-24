@@ -114,13 +114,14 @@ across a model.
 
 Beyond programmable macros, the current Lisp front end now includes several built-in
 surface shorthands aimed at reducing repetitive boilerplate in larger models.
-One may write \texttt{(vars* \_ (p c1 c2) * (market\_status mission\_state))}
+One may write \texttt{(vars* \_ (p c1 c2) * (settlement\_status trade\_state))}
 to generate a Cartesian product of variable names such as
-\texttt{p\_market\_status} and \texttt{c2\_mission\_state}. Likewise,
-\texttt{(domain* *\_mission\_state OPEN RELEASED ...)} applies one finite
+\texttt{p\_settlement\_status} and \texttt{c2\_trade\_state}. Likewise,
+\texttt{(domain* *\_trade\_state OPEN RELEASED ...)} applies one finite
 domain declaration to every declared variable matching a glob pattern. For
-action predicates, \texttt{(assign value to x)} is accepted as readable sugar
-for \texttt{(= x+ value)}, \texttt{(equals x y)} as sugar for equality,
+action predicates, \texttt{(assign value to x)} and
+\texttt{(set x as value)} are accepted as readable sugar for
+\texttt{(= x+ value)}, \texttt{(equals x y)} as sugar for equality,
 \texttt{(unchanged* pattern ...)} as a glob-based frame-condition generator,
 and \texttt{(alternate-scenarios ...)} as a domain-oriented synonym for
 \texttt{or}. An \texttt{if ... then ...} form is also provided; it denotes a
@@ -157,8 +158,8 @@ to be spliced into surrounding clauses. A form such as
 conditions without requiring a separate macro system. The \texttt{tdstr} front
 end also provides built-in shorthands parallel to those of the Lisp DSL:
 \texttt{vars*} for Cartesian variable products, \texttt{domain*} for
-glob-directed domain declarations, \texttt{assign}, \texttt{equals},
-\texttt{unchanged*}, \texttt{if ... then ...}, and
+glob-directed domain declarations, \texttt{assign}, \texttt{set ... as ...},
+\texttt{equals}, \texttt{unchanged*}, \texttt{if ... then ...}, and
 \texttt{alternate-scenarios}. In this respect the two surface languages are not
 competitors so much as alternate presentations of the same modeling idiom.
 
@@ -1077,4 +1078,5 @@ and graph manipulation.
 \bibliography{dstr_paper}
 
 \end{document}
+
 

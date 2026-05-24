@@ -509,6 +509,9 @@ proc ::tdstr::compileExpr {form context allowNext allowActionRef domainLiterals}
         return [list object [list lit [::tdstr::literalNode [lindex $form 1] 1]]]
     }
     if {$head eq "set"} {
+        if {$length == 4 && [::tdstr::dslName [lindex $form 2]] eq "as"} {
+            return [::tdstr::compileSetAs $tail $context $allowNext $allowActionRef]
+        }
         set elements {}
         foreach arg $tail {
             lappend elements [::tdstr::compileExpr $arg $context $allowNext $allowActionRef 0]
@@ -624,15 +627,26 @@ proc ::tdstr::compileAssign {args context allowNext allowActionRef} {
         error "assign expects the form {assign value to variable}"
     }
 
-    set targetToken [lindex $args 2]
+    return [::tdstr::compileNextAssignment [lindex $args 2] [lindex $args 0] $context $allowNext $allowActionRef "assign"]
+}
+
+proc ::tdstr::compileSetAs {args context allowNext allowActionRef} {
+    if {[llength $args] != 3 || [::tdstr::dslName [lindex $args 1]] ne "as"} {
+        error "set-as expects the form {set variable as value}"
+    }
+
+    return [::tdstr::compileNextAssignment [lindex $args 0] [lindex $args 2] $context $allowNext $allowActionRef "set-as"]
+}
+
+proc ::tdstr::compileNextAssignment {targetToken valueForm context allowNext allowActionRef formName} {
     set targetName [::tdstr::dslName $targetToken]
     set variables [dict get $context variables]
     if {[lsearch -exact $variables $targetName] < 0} {
-        error "assign target must be a declared variable name, got $targetToken"
+        error "$formName target must be a declared variable name, got $targetToken"
     }
 
     set left [list object [list next [::tdstr::jsonString $targetName]]]
-    set right [::tdstr::compileExpr [lindex $args 0] $context $allowNext $allowActionRef 0]
+    set right [::tdstr::compileExpr $valueForm $context $allowNext $allowActionRef 0]
     return [list object [list = [::tdstr::jsonArrayNode [list $left $right]]]]
 }
 

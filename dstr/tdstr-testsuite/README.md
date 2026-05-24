@@ -32,6 +32,8 @@ system light-switch {
 - inside `if ... then ...`, a brace block containing multiple sibling
   expressions is treated as an implicit `and`
 - `{assign expr to var}` is shorthand for `{= var+ expr}`
+- `{set var as expr}` is the same next-state assignment sugar as
+  `{assign expr to var}`
 - `{equals left right}` is shorthand for `{= left right}`
 - `{unchanged* glob1 glob2 ...}` expands matching declared variables into an
   `and` of frame conditions like `{= var+ var}`

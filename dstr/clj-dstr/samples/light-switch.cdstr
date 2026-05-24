@@ -1,0 +1,15 @@
+(system light-switch
+  (vars light)
+  (domain light off on)
+  (init (= light off))
+  (action turn-on
+    (= light off)
+    (set light as on))
+  (action turn-off
+    (= light on)
+    (assign off to light))
+  (next (or $turn-on $turn-off))
+  (invariant type-ok
+    (in light (set off on)))
+  (property eventually-on
+    (eventually (= light on))))

@@ -1,0 +1,6 @@
+.gradle/
+build/
+target/
+samples/*.dot
+samples/*.json
+samples/*.svg

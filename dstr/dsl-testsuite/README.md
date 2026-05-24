@@ -12,7 +12,7 @@ JSON specs consumed by the existing Java checker.
   (init (= light off))
   (action turn-on (= light off) (= light+ on))
   (action turn-off (= light on) (= light+ off))
-  (next (or @turn-on @turn-off))
+  (next (or $turn-on $turn-off))
   (invariant type-ok (in light (set off on)))
   (property eventually-on (eventually (= light on))))
 ```
@@ -21,7 +21,8 @@ JSON specs consumed by the existing Java checker.
 
 - plain declared variable names refer to current-state variables
 - symbols ending in `+` refer to next-state variables, for example `light+`
-- symbols beginning with `@` refer to actions in `next`, for example `@turn-on`
+- symbols beginning with `$` refer to actions in `next`, for example
+  `$turn-on`; the older `@turn-on` form is still accepted
 - `(expand macro-name arg...)` expands a predefined or top-level `defmacro`
   before parsing continues
 - `(%macro-name arg...)` is shorthand for `(expand macro-name arg...)`
@@ -92,6 +93,8 @@ without requiring user macros:
   every declared variable whose name matches the glob pattern
 - `(equals x y)` is a synonym for `(= x y)`
 - `(assign value to x)` means `(= x+ value)`
+- `(set x as value)` is the same next-state assignment sugar as
+  `(assign value to x)`
 - `(if condition then consequence)` means `(and condition consequence)`
 - `(if ((equals x open) (equals y open)) then ((assign closed to x) ...))`
   treats each branch body as an implicit conjunction when it is a list of
