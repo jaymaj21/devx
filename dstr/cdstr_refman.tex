@@ -18,7 +18,7 @@
 
 \lstdefinelanguage{CDSTR}{
   morekeywords={system,vars,vars*,domain,domain*,init,action,next,invariant,property,
-    defn,defmacro,include,quote,set,not,eventually,if,then,assign,to,as,equals,
+    defn,defmacro,include,load-java-enums,load-proto-enums,quote,set,not,eventually,if,then,assign,to,as,equals,
     unchanged*,forall,exists,and,or,alternate-scenarios,implies,in,let,list,fn,map},
   sensitive=true,
   morecomment=[l]{;},
@@ -187,6 +187,9 @@ consequences:
 \item Parenthesized forms are ordinary Clojure lists.
 \item Clojure \texttt{defn} and \texttt{defmacro} can appear before the
   \texttt{system} form.
+\item \texttt{include}, \texttt{load-java-enums}, and
+  \texttt{load-proto-enums} can also appear before \texttt{system}; relative
+  paths are resolved from the current CDSTR file.
 \item Clojure comments beginning with \texttt{;} are available.
 \item Symbols such as \texttt{light+} and \texttt{\$turn-on} are legal Clojure
   symbols and are interpreted by the CDSTR compiler.
@@ -219,7 +222,8 @@ The top-level system clauses are:
 \begin{description}
 \item[\texttt{vars}] Declare state variables.
 \item[\texttt{vars*}] Declare a Cartesian product of variable names.
-\item[\texttt{domain}] Declare one finite domain.
+\item[\texttt{domain}] Declare one finite domain.  A single
+  \texttt{\$EnumName} value expands to the symbols loaded from a Java enum type.
 \item[\texttt{domain*}] Declare domains for variables matching a glob pattern.
 \item[\texttt{init}] Define initial-state predicate.
 \item[\texttt{action}] Define a named transition predicate.
@@ -281,6 +285,51 @@ The DSL operators include \texttt{=}, \texttt{!=}, \texttt{<}, \texttt{<=},
 (= allowed (set p1 p2 p3))
 \end{lstlisting}
 
+\subsection{Domains from Java Enums}
+
+\texttt{load-java-enums} accepts one or more Java files or directories before
+the \texttt{system} form.  Directories are searched recursively.  The enum
+scanner is lightweight and intended for conventional declarations with
+comma-separated constants, including comments and whitespace.
+
+\begin{lstlisting}[language=CDSTR]
+(load-java-enums "src/main/java")
+
+(system lifecycle-model
+  (vars state)
+  (domain state $Lifecycle)
+  (init (= state "NEW"))
+  (action activate
+    (= state "NEW")
+    (set state as "READY"))
+  (next $activate))
+\end{lstlisting}
+
+CDSTR preserves Clojure string literals exactly, so the Java constants
+\texttt{NEW} and \texttt{READY} are shown as upper-case strings here.
+
+\subsection{Domains from Protocol Buffer Enums}
+
+\texttt{load-proto-enums} accepts one or more \texttt{.proto} files or
+directories before the \texttt{system} form.  Directories are searched
+recursively.  The parser recognizes entries of the form \texttt{NAME = number;}
+and ignores comments, enum options, reserved declarations, and option values.
+
+\begin{lstlisting}[language=CDSTR]
+(load-proto-enums "src/main/proto")
+
+(system order-model
+  (vars status)
+  (domain status $OrderStatus)
+  (init (= status ORDER_STATUS_NEW))
+  (action ready
+    (= status ORDER_STATUS_NEW)
+    (set status as ORDER_STATUS_READY))
+  (next $ready))
+\end{lstlisting}
+
+CDSTR preserves the protobuf enum symbol spelling shown in the source file.
+
 \subsection{Quantifiers}
 
 \begin{lstlisting}[language=CDSTR]
@@ -313,6 +362,48 @@ value:
 (assign on to light)
 (set light as on)
 \end{lstlisting}
+
+\subsection{Unconditional Transitions}
+
+An action body is a conjunction of its forms.  For an unconditional transition,
+write the next-state assignments directly:
+
+\begin{lstlisting}[language=CDSTR]
+(action reset
+  (assign IDLE to pc)
+  (set count as 0)
+  (assign false to busy))
+\end{lstlisting}
+
+The same transition can be written with explicit next-state equalities:
+
+\begin{lstlisting}[language=CDSTR]
+(action reset
+  (= pc+ IDLE)
+  (= count+ 0)
+  (= busy+ false))
+\end{lstlisting}
+
+Frame variables that should not change:
+
+\begin{lstlisting}[language=CDSTR]
+(action reset
+  (assign IDLE to pc)
+  (set count as 0)
+  (unchanged owner mode))
+\end{lstlisting}
+
+or use glob-based frame sugar:
+
+\begin{lstlisting}[language=CDSTR]
+(action reset
+  (assign IDLE to pc)
+  (set count as 0)
+  (unchanged* *_status *_version))
+\end{lstlisting}
+
+If an action does not constrain a next-state variable, the checker may consider
+all values in that variable's domain as possible successor values.
 
 \subsection{Equality Alias}
 
@@ -407,7 +498,8 @@ those clauses into the containing action body.
 \end{lstlisting}
 
 Relative include paths are resolved against the directory of the current
-\texttt{.cdstr} file.
+\texttt{.cdstr} file.  The Java and proto enum loaders use the same
+relative-path rule.
 
 \section{Product Variables and Large Models}
 

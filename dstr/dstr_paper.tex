@@ -8,6 +8,8 @@
 \usepackage{graphicx}
 \usepackage{listings}
 \usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric}
 
 \lstset{
   basicstyle=\ttfamily\small,
@@ -17,7 +19,7 @@
   showstringspaces=false
 }
 
-\title{dstr: A Small Language for Systems That Become Graphs}
+\title{DSTR: A DSL for Describing States and Transitions for Graph-Based Reasoning}
 \author{Sambuddha Majumder \and Jayanta Majumder}
 \date{}
 
@@ -622,6 +624,52 @@ the generated DOT before asking whether the checker's verdict is surprising.
 For larger models, the wrappers expose truncation options so that graph
 generation can degrade gracefully rather than failing outright under a very
 large universe.
+
+Figure~\ref{fig:dstr-tooling-flow} summarizes the \texttt{dstr}-side flow. The
+Lisp front end is only the authoring layer: it compiles \texttt{model.dstr} to
+the normalized JSON representation. From there the workflow deliberately
+branches. The Java application is the main model checker, producing the
+authoritative report about reachable states, explored transitions, invariants,
+deadlocks, and reachability-style properties. The graph-export path is a
+second consumer of the same JSON. It produces a DOT graph that can be rendered
+with Graphviz, but the DOT file is also a reusable machine-readable graph for
+downstream tools such as \texttt{greggle} and \texttt{gruggle}.
+
+\begin{figure}[htbp]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  node distance=1.2cm and 1.4cm,
+  box/.style={draw, rounded corners, align=center, minimum width=2.7cm,
+    minimum height=0.85cm, fill=blue!5},
+  tool/.style={draw, rounded corners, align=center, minimum width=2.7cm,
+    minimum height=0.85cm, fill=green!6},
+  arr/.style={-{Latex[length=2mm]}, thick}
+]
+\node[box] (src) {\texttt{model.dstr}\\DSTR source};
+\node[tool, right=of src] (compiler) {\texttt{dstr-dsl-compiler.lisp}\\SBCL script};
+\node[box, right=of compiler] (json) {\texttt{model.json}\\normalized spec};
+\node[tool, below left=of json] (checker) {Java DSTR app\\\texttt{DstrCli}};
+\node[box, below=of checker] (report) {check report\\invariants, deadlocks\\properties};
+\node[tool, below right=of json] (dot) {\texttt{spec-to-dot.js}\\visualizer};
+\node[box, below=of dot] (dotfile) {\texttt{model.dot}\\state graph};
+\node[tool, below=of dotfile] (graphviz) {Graphviz \texttt{dot}};
+\node[box, below=of graphviz] (svg) {\texttt{model.svg}};
+\node[tool, right=of dotfile] (gg) {\texttt{greggle}\\\texttt{gruggle}};
+\draw[arr] (src) -- (compiler);
+\draw[arr] (compiler) -- (json);
+\draw[arr] (json) -- (checker);
+\draw[arr] (checker) -- (report);
+\draw[arr] (json) -- (dot);
+\draw[arr] (dot) -- (dotfile);
+\draw[arr] (dotfile) -- (graphviz);
+\draw[arr] (dotfile) -- (gg);
+\draw[arr] (graphviz) -- (svg);
+\end{tikzpicture}
+}
+\caption{The \texttt{dstr} tooling flow. The normalized JSON specification is shared by the Java checker and by the graph-export path; the generated DOT graph may be rendered or passed to graph interrogation and manipulation tools.}
+\label{fig:dstr-tooling-flow}
+\end{figure}
 
 Figure~\ref{fig:instrument-dstr-graph} illustrates this intermediate output for
 the reduced \texttt{instrument-lifecycle-small} sample. In practice, both front

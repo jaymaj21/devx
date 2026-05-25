@@ -18,7 +18,7 @@
 
 \lstdefinelanguage{DSTR}{
   morekeywords={system,vars,vars*,domain,domain*,init,action,next,invariant,property,
-    defmacro,defun,load,quote,set,not,eventually,if,then,assign,to,as,equals,
+    defmacro,defun,load,load-java-enums,load-proto-enums,quote,set,not,eventually,if,then,assign,to,as,equals,
     unchanged*,forall,exists,and,or,alternate-scenarios,implies,in},
   sensitive=true,
   morecomment=[l]{;},
@@ -237,7 +237,8 @@ top-level helper forms.
 \item[\texttt{(vars* sep (a...) * (b...))}] Declares the Cartesian product of
   two name groups, joining each pair with \texttt{sep}.
 \item[\texttt{(domain v value...)}] Gives \texttt{v} a finite domain.  Multiple
-  values are emitted as a set.
+  values are emitted as a set.  A single \texttt{\$EnumName} value expands to
+  the symbols loaded from a Java enum type.
 \item[\texttt{(domain* glob value...)}] Applies the domain to every declared
   variable whose name matches the glob pattern.
 \item[\texttt{(init expr...)}] Defines the initial-state predicate.
@@ -309,6 +310,54 @@ JavaScript graph evaluator.
 In a \texttt{domain} clause, a sequence of values is automatically treated as a
 set.  Use \texttt{(set ...)} when a set is needed inside an expression.
 
+\subsection{Domains from Java Enums}
+
+Java enum declarations can be loaded before the \texttt{system} form.  Each
+argument to \texttt{load-java-enums} may be a \texttt{.java} file or a directory;
+directories are searched recursively for Java source files.  The enum scanner is
+intentionally lightweight and is aimed at ordinary declarations such as
+\texttt{public enum Lifecycle \{ NEW, READY, DISABLED \}}.
+
+\begin{lstlisting}[language=DSTR]
+(load-java-enums "src/main/java")
+
+(system lifecycle-model
+  (vars state)
+  (domain state $Lifecycle)
+  (init (= state new))
+  (action activate
+    (= state new)
+    (set state as ready))
+  (next $activate))
+\end{lstlisting}
+
+DSTR normalizes symbols to lower-case strings, so Java constants such as
+\texttt{NEW} and \texttt{READY} are used as \texttt{new} and \texttt{ready} in
+the model.
+
+\subsection{Domains from Protocol Buffer Enums}
+
+Protocol buffer enum declarations can be loaded before the \texttt{system} form
+with \texttt{load-proto-enums}.  Arguments may be \texttt{.proto} files or
+directories, and directories are searched recursively.  The loader recognizes
+ordinary protobuf enum entries of the form \texttt{NAME = number;} and ignores
+enum options, reserved declarations, comments, and option values.
+
+\begin{lstlisting}[language=DSTR]
+(load-proto-enums "src/main/proto")
+
+(system order-model
+  (vars status)
+  (domain status $OrderStatus)
+  (init (= status order_status_new))
+  (action ready
+    (= status order_status_new)
+    (set status as order_status_ready))
+  (next $ready))
+\end{lstlisting}
+
+As with Java enums, DSTR normalizes protobuf enum symbols to lower-case strings.
+
 \subsection{Quantifiers}
 
 \begin{lstlisting}[language=DSTR]
@@ -345,6 +394,50 @@ These three forms are equivalent in an action body:
 
 They all assert equality between the next state of \texttt{light} and the value
 \texttt{on}.
+
+\subsection{Unconditional Transitions}
+
+An action does not need an \texttt{if ... then ...} guard.  If a transition is
+unconditional, write the next-state assignments directly in the action body:
+
+\begin{lstlisting}[language=DSTR]
+(action reset
+  (assign IDLE to pc)
+  (set count as 0)
+  (assign nil to busy))
+\end{lstlisting}
+
+This is equivalent to writing the next-state equalities explicitly:
+
+\begin{lstlisting}[language=DSTR]
+(action reset
+  (= pc+ IDLE)
+  (= count+ 0)
+  (= busy+ nil))
+\end{lstlisting}
+
+If some variables should stay unchanged, include frame conditions in the same
+action body:
+
+\begin{lstlisting}[language=DSTR]
+(action reset
+  (assign IDLE to pc)
+  (set count as 0)
+  (!unchanged owner mode))
+\end{lstlisting}
+
+or with glob-based sugar:
+
+\begin{lstlisting}[language=DSTR]
+(action reset
+  (assign IDLE to pc)
+  (set count as 0)
+  (unchanged* *_status *_version))
+\end{lstlisting}
+
+Any next-state variable left unconstrained by an action may take any value in
+its domain in the candidate successor state, so deterministic-looking actions
+should assign or frame every relevant variable.
 
 \subsection{Equality Alias}
 
@@ -401,9 +494,10 @@ matched by the glob patterns:
 
 \section{Macros and Helper Functions}
 
-DSTR permits top-level \texttt{defmacro}, \texttt{defun}, and \texttt{load}
-forms before the \texttt{system}.  Relative \texttt{load} paths are resolved
-against the current \texttt{.dstr} file's directory.
+DSTR permits top-level \texttt{defmacro}, \texttt{defun}, \texttt{load},
+\texttt{load-java-enums}, and \texttt{load-proto-enums} forms before the
+\texttt{system}.  Relative paths are resolved against the current
+\texttt{.dstr} file's directory.
 
 \subsection{Expansion Forms}
 

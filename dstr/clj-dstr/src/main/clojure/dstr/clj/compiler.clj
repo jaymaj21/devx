@@ -7,6 +7,7 @@
 (def ^:dynamic *compiled-system* nil)
 (def ^:dynamic *source-dir* nil)
 (def ^:dynamic *input-ns* nil)
+(def ^:dynamic *java-enums* (atom {}))
 
 (def clause-heads
   '#{vars vars* domain domain* init action next invariant property})
@@ -41,6 +42,130 @@
                    file
                    (io/file (or *source-dir* ".") path))]
     (load-file (.getPath resolved))))
+
+(defn resolve-source-path [path]
+  (let [file (io/file path)]
+    (if (.isAbsolute file)
+      file
+      (io/file (or *source-dir* ".") path))))
+
+(defn strip-java-comments [text]
+  (let [length (count text)]
+    (loop [index 0
+           out (StringBuilder.)]
+      (if (>= index length)
+        (str out)
+        (let [ch (.charAt text index)
+              next-ch (when (< (inc index) length) (.charAt text (inc index)))]
+          (cond
+            (and (= ch \/) (= next-ch \/))
+            (recur (loop [i (+ index 2)]
+                     (if (and (< i length) (not (#{\newline \return} (.charAt text i))))
+                       (recur (inc i))
+                       i))
+                   out)
+
+            (and (= ch \/) (= next-ch \*))
+            (recur (loop [i (+ index 2)]
+                     (if (and (< (inc i) length)
+                              (not (and (= (.charAt text i) \*)
+                                        (= (.charAt text (inc i)) \/))))
+                       (recur (inc i))
+                       (+ i 2)))
+                   out)
+
+            :else
+            (do
+              (.append out ch)
+              (recur (inc index) out))))))))
+
+(defn matching-brace-index [text open-index]
+  (loop [index open-index
+         depth 0]
+    (when (< index (count text))
+      (let [ch (.charAt text index)
+            next-depth (cond
+                         (= ch \{) (inc depth)
+                         (= ch \}) (dec depth)
+                         :else depth)]
+        (if (zero? next-depth)
+          index
+          (recur (inc index) next-depth))))))
+
+(defn parse-java-enum-constants [body]
+  (let [prefix (first (str/split body #";" 2))]
+    (->> (str/split prefix #",")
+         (map str/trim)
+         (keep #(second (re-find #"^([A-Za-z_$][A-Za-z0-9_$]*)" %)))
+         vec)))
+
+(defn parse-java-enums [text]
+  (let [matcher (re-matcher #"(?s)\benum\s+([A-Za-z_$][A-Za-z0-9_$]*)" text)]
+    (loop [entries {}]
+      (if (.find matcher)
+        (let [enum-name (.group matcher 1)
+              brace-index (str/index-of text "{" (.end matcher))]
+          (if-let [end-index (and brace-index (matching-brace-index text brace-index))]
+            (recur (assoc entries enum-name
+                          (parse-java-enum-constants
+                           (subs text (inc brace-index) end-index))))
+            (recur entries)))
+        entries))))
+
+(defn load-java-enums-from-file [file]
+  (when (.endsWith (.getName file) ".java")
+    (swap! *java-enums* merge
+           (parse-java-enums (strip-java-comments (slurp file))))))
+
+(defn parse-proto-enum-constants [body]
+  (->> (str/split body #";")
+       (map str/trim)
+       (keep (fn [statement]
+               (when-let [[_ value] (re-find #"^([A-Za-z_$][A-Za-z0-9_$]*)\s*=" statement)]
+                 (when-not (#{"option" "reserved"} (str/lower-case value))
+                   value))))
+       vec))
+
+(defn parse-proto-enums [text]
+  (let [matcher (re-matcher #"(?s)\benum\s+([A-Za-z_$][A-Za-z0-9_$]*)" text)]
+    (loop [entries {}]
+      (if (.find matcher)
+        (let [enum-name (.group matcher 1)
+              brace-index (str/index-of text "{" (.end matcher))]
+          (if-let [end-index (and brace-index (matching-brace-index text brace-index))]
+            (recur (assoc entries enum-name
+                          (parse-proto-enum-constants
+                           (subs text (inc brace-index) end-index))))
+            (recur entries)))
+        entries))))
+
+(defn load-proto-enums-from-file [file]
+  (when (.endsWith (.getName file) ".proto")
+    (swap! *java-enums* merge
+           (parse-proto-enums (strip-java-comments (slurp file))))))
+
+(defn load-enums [kind extension loader paths]
+  (when (empty? paths)
+    (throw (ex-info (str "load-" kind "-enums expects at least one file or directory") {})))
+  (doseq [path paths
+          :let [file (resolve-source-path path)]]
+    (cond
+      (.isDirectory file)
+      (doseq [candidate (file-seq file)]
+        (when (.isFile candidate)
+          (loader candidate)))
+
+      (.exists file)
+      (loader file)
+
+      :else
+      (throw (ex-info (str (str/capitalize kind) " enum path not found") {:path (.getPath file)})))))
+
+(defn load-java-enums [& paths]
+  (load-enums "java" ".java" load-java-enums-from-file paths))
+
+(defn load-proto-enums [& paths]
+  (load-enums "proto" ".proto" load-proto-enums-from-file paths))
 
 (defn dsl-name [value]
   (cond
@@ -157,6 +282,8 @@
    :locals #{}})
 
 (declare compile-expr)
+(declare java-enum-domain-token?)
+(declare java-enum-domain)
 
 (defn compile-body [forms ctx allow-next? allow-action-ref?]
   (when (empty? forms)
@@ -166,9 +293,27 @@
     {"and" (mapv #(compile-expr % ctx allow-next? allow-action-ref?) forms)}))
 
 (defn compile-domain [body]
-  (if (and (= 1 (count body)) (seq? (first body)))
+  (cond
+    (and (= 1 (count body)) (java-enum-domain-token? (first body)))
+    (java-enum-domain (first body))
+
+    (and (= 1 (count body)) (seq? (first body)))
     (compile-expr (first body) (context [] []) false false)
+
+    :else
     {"set" (mapv #(compile-expr % (context [] []) false false :domain-literal? true) body)}))
+
+(defn java-enum-domain-token? [value]
+  (and (symbol? value)
+       (str/starts-with? (name value) "$")
+       (> (count (name value)) 1)))
+
+(defn java-enum-domain [token]
+  (let [enum-name (subs (name token) 1)
+        values (get @*java-enums* enum-name)]
+    (when-not values
+      (throw (ex-info "Unknown Java enum domain reference" {:enum enum-name})))
+    {"set" (mapv (fn [value] {"lit" value}) values)}))
 
 (defn parse-domain-star [args variables domains]
   (when (empty? variables)
@@ -501,10 +646,11 @@
     (binding [*compiled-system* nil
               *source-dir* (.getParentFile (.getAbsoluteFile input-file))
               *input-ns* target-ns
+              *java-enums* (atom {})
               *ns* target-ns]
       (clojure.core/refer 'clojure.core)
       (clojure.core/refer 'dstr.clj.compiler
-                          :only '[system same unchanged include next-var-symbol])
+                          :only '[system same unchanged include load-java-enums load-proto-enums next-var-symbol])
       (load-file (.getPath input-file))
       (when-not *compiled-system*
         (throw (ex-info "Input must contain a top-level system form" {:input input})))

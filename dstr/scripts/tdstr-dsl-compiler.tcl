@@ -110,10 +110,11 @@ proc ::tdstr::newEnv {inputFile} {
         rawNext {} \
         rawInvariants {} \
         rawProperties {} \
+        javaEnums {} \
         compiledSpec ""]
     set ${ns}::state $state
 
-    foreach command {system vars vars* domain domain* init action next invariant property same unchanged} {
+    foreach command {system vars vars* domain domain* init action next invariant property same unchanged load-java-enums load-proto-enums} {
         proc ${ns}::${command} {args} [format {eval [linsert $args 0 ::tdstr::%s {%s}]} $command $ns]
     }
     proc ${ns}::source {path} [format {::tdstr::envSource {%s} $path} $ns]
@@ -362,6 +363,238 @@ proc ::tdstr::unchanged {ns args} {
     return $clauses
 }
 
+proc ::tdstr::load-java-enums {ns args} {
+    if {[llength $args] == 0} {
+        error "load-java-enums expects at least one Java file or directory"
+    }
+    foreach path $args {
+        ::tdstr::loadJavaEnumsFromPath $ns [::tdstr::resolveEnvPath $ns $path]
+    }
+    return ""
+}
+
+proc ::tdstr::load-proto-enums {ns args} {
+    if {[llength $args] == 0} {
+        error "load-proto-enums expects at least one proto file or directory"
+    }
+    foreach path $args {
+        ::tdstr::loadProtoEnumsFromPath $ns [::tdstr::resolveEnvPath $ns $path]
+    }
+    return ""
+}
+
+proc ::tdstr::resolveEnvPath {ns path} {
+    set stack [::tdstr::stateGet $ns sourceDirStack {}]
+    if {[llength $stack] == 0} {
+        set base [::tdstr::stateGet $ns currentDir [pwd]]
+    } else {
+        set base [lindex $stack end]
+    }
+    if {[file pathtype $path] eq "absolute"} {
+        return [file normalize $path]
+    }
+    return [file normalize [file join $base $path]]
+}
+
+proc ::tdstr::loadJavaEnumsFromPath {ns path} {
+    if {[file isdirectory $path]} {
+        foreach file [::tdstr::recursiveJavaFiles $path] {
+            ::tdstr::loadJavaEnumsFromFile $ns $file
+        }
+        return
+    }
+    if {[file exists $path]} {
+        ::tdstr::loadJavaEnumsFromFile $ns $path
+        return
+    }
+    error "Java enum path not found: $path"
+}
+
+proc ::tdstr::loadProtoEnumsFromPath {ns path} {
+    if {[file isdirectory $path]} {
+        foreach file [::tdstr::recursiveFilesWithExtension $path ".proto"] {
+            ::tdstr::loadProtoEnumsFromFile $ns $file
+        }
+        return
+    }
+    if {[file exists $path]} {
+        ::tdstr::loadProtoEnumsFromFile $ns $path
+        return
+    }
+    error "Proto enum path not found: $path"
+}
+
+proc ::tdstr::recursiveJavaFiles {dir} {
+    return [::tdstr::recursiveFilesWithExtension $dir ".java"]
+}
+
+proc ::tdstr::recursiveFilesWithExtension {dir extension} {
+    set result {}
+    foreach entry [glob -nocomplain -directory $dir *] {
+        if {[file isdirectory $entry]} {
+            set result [concat $result [::tdstr::recursiveFilesWithExtension $entry $extension]]
+        } elseif {[string equal -nocase [file extension $entry] $extension]} {
+            lappend result [file normalize $entry]
+        }
+    }
+    return $result
+}
+
+proc ::tdstr::loadJavaEnumsFromFile {ns path} {
+    if {![string equal -nocase [file extension $path] ".java"]} {
+        return
+    }
+    set channel [open $path r]
+    set content [read $channel]
+    close $channel
+    foreach enum [::tdstr::parseJavaEnums [::tdstr::stripJavaComments $content]] {
+        set name [string tolower [lindex $enum 0]]
+        set values {}
+        foreach value [lindex $enum 1] {
+            lappend values [string tolower $value]
+        }
+        set javaEnums [::tdstr::stateGet $ns javaEnums {}]
+        dict set javaEnums $name $values
+        ::tdstr::stateSet $ns javaEnums $javaEnums
+    }
+}
+
+proc ::tdstr::loadProtoEnumsFromFile {ns path} {
+    if {![string equal -nocase [file extension $path] ".proto"]} {
+        return
+    }
+    set channel [open $path r]
+    set content [read $channel]
+    close $channel
+    foreach enum [::tdstr::parseProtoEnums [::tdstr::stripJavaComments $content]] {
+        set name [string tolower [lindex $enum 0]]
+        set values {}
+        foreach value [lindex $enum 1] {
+            lappend values [string tolower $value]
+        }
+        set javaEnums [::tdstr::stateGet $ns javaEnums {}]
+        dict set javaEnums $name $values
+        ::tdstr::stateSet $ns javaEnums $javaEnums
+    }
+}
+
+proc ::tdstr::stripJavaComments {text} {
+    set out ""
+    set i 0
+    set len [string length $text]
+    while {$i < $len} {
+        set ch [string index $text $i]
+        set next [expr {$i + 1 < $len ? [string index $text [expr {$i + 1}]] : ""}]
+        if {$ch eq "/" && $next eq "/"} {
+            incr i 2
+            while {$i < $len && [string first [string index $text $i] "\n\r"] < 0} {
+                incr i
+            }
+        } elseif {$ch eq "/" && $next eq "*"} {
+            incr i 2
+            while {$i + 1 < $len && !([string index $text $i] eq "*" && [string index $text [expr {$i + 1}]] eq "/")} {
+                incr i
+            }
+            incr i 2
+        } else {
+            append out $ch
+            incr i
+        }
+    }
+    return $out
+}
+
+proc ::tdstr::parseJavaEnums {text} {
+    set result {}
+    set start 0
+    while {[regexp -indices -start $start {enum[ \t\r\n]+([A-Za-z_$][A-Za-z0-9_$]*)} $text match nameRange]} {
+        set enumName [string range $text [lindex $nameRange 0] [lindex $nameRange 1]]
+        set searchFrom [expr {[lindex $match 1] + 1}]
+        set bracePos [string first "\{" $text $searchFrom]
+        if {$bracePos < 0} {
+            set start $searchFrom
+            continue
+        }
+        set endPos [::tdstr::findMatchingBrace $text $bracePos]
+        if {$endPos < 0} {
+            set start [expr {$bracePos + 1}]
+            continue
+        }
+        set body [string range $text [expr {$bracePos + 1}] [expr {$endPos - 1}]]
+        lappend result [list $enumName [::tdstr::parseJavaEnumConstants $body]]
+        set start [expr {$endPos + 1}]
+    }
+    return $result
+}
+
+proc ::tdstr::findMatchingBrace {text openIndex} {
+    set depth 0
+    for {set i $openIndex} {$i < [string length $text]} {incr i} {
+        set ch [string index $text $i]
+        if {$ch eq "\{"} {
+            incr depth
+        } elseif {$ch eq "\}"} {
+            incr depth -1
+            if {$depth == 0} {
+                return $i
+            }
+        }
+    }
+    return -1
+}
+
+proc ::tdstr::parseJavaEnumConstants {body} {
+    set semi [string first ";" $body]
+    if {$semi >= 0} {
+        set body [string range $body 0 [expr {$semi - 1}]]
+    }
+    set values {}
+    foreach part [split $body ,] {
+        set trimmed [string trim $part]
+        if {[regexp {^([A-Za-z_$][A-Za-z0-9_$]*)} $trimmed -> value]} {
+            lappend values $value
+        }
+    }
+    return $values
+}
+
+proc ::tdstr::parseProtoEnums {text} {
+    set result {}
+    set start 0
+    while {[regexp -indices -start $start {(^|[^A-Za-z0-9_$])enum[ \t\r\n]+([A-Za-z_$][A-Za-z0-9_$]*)} $text match _ nameRange]} {
+        set enumName [string range $text [lindex $nameRange 0] [lindex $nameRange 1]]
+        set searchFrom [expr {[lindex $match 1] + 1}]
+        set bracePos [string first "\{" $text $searchFrom]
+        if {$bracePos < 0} {
+            set start $searchFrom
+            continue
+        }
+        set endPos [::tdstr::findMatchingBrace $text $bracePos]
+        if {$endPos < 0} {
+            set start [expr {$bracePos + 1}]
+            continue
+        }
+        set body [string range $text [expr {$bracePos + 1}] [expr {$endPos - 1}]]
+        lappend result [list $enumName [::tdstr::parseProtoEnumConstants $body]]
+        set start [expr {$endPos + 1}]
+    }
+    return $result
+}
+
+proc ::tdstr::parseProtoEnumConstants {body} {
+    set values {}
+    foreach statement [split $body ";"] {
+        set trimmed [string trim $statement]
+        if {[regexp {^([A-Za-z_$][A-Za-z0-9_$]*)[ \t\r\n]*=} $trimmed -> value]} {
+            set lowered [string tolower $value]
+            if {$lowered ne "option" && $lowered ne "reserved"} {
+                lappend values $value
+            }
+        }
+    }
+    return $values
+}
+
 proc ::tdstr::finalizeSystem {ns} {
     set name [::tdstr::dslName [::tdstr::stateGet $ns systemName ""]]
     set variables [::tdstr::stateGet $ns variables {}]
@@ -371,6 +604,7 @@ proc ::tdstr::finalizeSystem {ns} {
     set rawNext [::tdstr::stateGet $ns rawNext {}]
     set rawInvariants [::tdstr::stateGet $ns rawInvariants {}]
     set rawProperties [::tdstr::stateGet $ns rawProperties {}]
+    set javaEnums [::tdstr::stateGet $ns javaEnums {}]
 
     if {[llength $variables] == 0} {
         error "system requires a vars clause"
@@ -397,7 +631,7 @@ proc ::tdstr::finalizeSystem {ns} {
         lappend actionNames $actionName
     }
 
-    set context [dict create variables $variables actions $actionNames locals {}]
+    set context [dict create variables $variables actions $actionNames locals {} javaEnums $javaEnums]
 
     set domainPairs {}
     foreach variable $variables {
@@ -461,6 +695,9 @@ proc ::tdstr::finalizeSystem {ns} {
 }
 
 proc ::tdstr::compileDomain {forms context} {
+    if {[llength $forms] == 1 && [::tdstr::javaEnumDomainTokenP [lindex $forms 0]]} {
+        return [::tdstr::compileJavaEnumDomain [lindex $forms 0] $context]
+    }
     if {[llength $forms] == 1 && [::tdstr::looksLikeExprList [lindex $forms 0]]} {
         return [::tdstr::compileExpr [lindex $forms 0] $context 0 0 0]
     }
@@ -468,6 +705,24 @@ proc ::tdstr::compileDomain {forms context} {
     set elements {}
     foreach form $forms {
         lappend elements [::tdstr::compileExpr $form $context 0 0 1]
+    }
+    return [list object [list set [::tdstr::jsonArrayNode $elements]]]
+}
+
+proc ::tdstr::javaEnumDomainTokenP {token} {
+    set name [::tdstr::dslName $token]
+    return [expr {[string length $name] > 1 && [string index $name 0] eq "@"}]
+}
+
+proc ::tdstr::compileJavaEnumDomain {token context} {
+    set enumName [string range [::tdstr::dslName $token] 1 end]
+    set javaEnums [dict get $context javaEnums]
+    if {![dict exists $javaEnums $enumName]} {
+        error "Unknown Java enum domain reference @$enumName"
+    }
+    set elements {}
+    foreach value [dict get $javaEnums $enumName] {
+        lappend elements [list object [list lit [::tdstr::jsonString $value]]]
     }
     return [list object [list set [::tdstr::jsonArrayNode $elements]]]
 }

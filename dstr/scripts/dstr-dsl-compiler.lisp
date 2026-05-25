@@ -21,6 +21,8 @@
   invariants
   properties)
 
+(defparameter *java-enums* (make-hash-table :test #'equal))
+
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defun next-var-symbol (symbol)
     (unless (symbolp symbol)
@@ -100,12 +102,13 @@
         (compile-one-file file output-file)))))
 
 (defun compile-one-file (input-file output)
-  (let* ((output-file (if output
-                          (pathname output)
-                          (make-pathname :defaults input-file :type "json")))
-         (form (load-top-level-forms input-file))
-         (ir (parse-system-form form))
-         (json-tree (spec-ir->json ir)))
+  (let ((*java-enums* (make-hash-table :test #'equal)))
+    (let* ((output-file (if output
+                            (pathname output)
+                            (make-pathname :defaults input-file :type "json")))
+           (form (load-top-level-forms input-file))
+           (ir (parse-system-form form))
+           (json-tree (spec-ir->json ir)))
     (ensure-directories-exist output-file)
     (with-open-file (stream output-file
                             :direction :output
@@ -113,7 +116,7 @@
                             :if-does-not-exist :create)
       (write-json json-tree stream 0)
       (terpri stream))
-    (format t "Wrote ~A~%" output-file)))
+      (format t "Wrote ~A~%" output-file))))
 
 (defun read-all-forms (path)
   (with-open-file (stream path :direction :input)
@@ -145,12 +148,225 @@
     ((and (consp form) (symbol-name= (car form) "load"))
      (eval-load-form form source-path base-dir)
      system-form)
+    ((and (consp form) (symbol-name= (car form) "load-java-enums"))
+     (eval-load-java-enums-form form source-path base-dir)
+     system-form)
+    ((and (consp form) (symbol-name= (car form) "load-proto-enums"))
+     (eval-load-proto-enums-form form source-path base-dir)
+     system-form)
     ((and (consp form) (symbol-name= (car form) "system"))
      (when system-form
        (error "File ~A must contain exactly one top-level SYSTEM form" source-path))
      form)
     (t
      (error "Unsupported top-level form in ~A: ~S" source-path form))))
+
+(defun eval-load-java-enums-form (form source-path base-dir)
+  (unless (> (length form) 1)
+    (error "LOAD-JAVA-ENUMS in ~A expects at least one file or directory, got ~S" source-path form))
+  (dolist (designator (rest form))
+    (load-java-enums-from-path (load-target-pathname designator base-dir))))
+
+(defun eval-load-proto-enums-form (form source-path base-dir)
+  (unless (> (length form) 1)
+    (error "LOAD-PROTO-ENUMS in ~A expects at least one file or directory, got ~S" source-path form))
+  (dolist (designator (rest form))
+    (load-proto-enums-from-path (load-target-pathname designator base-dir))))
+
+(defun load-java-enums-from-path (path)
+  (load-enums-from-path path "java" #'load-java-enums-from-file "Java enum path not found"))
+
+(defun load-proto-enums-from-path (path)
+  (load-enums-from-path path "proto" #'load-proto-enums-from-file "Proto enum path not found"))
+
+(defun load-enums-from-path (path extension loader not-found-message)
+  (let ((directory (or (uiop:directory-exists-p path)
+                       (uiop:directory-exists-p
+                        (uiop:ensure-directory-pathname path)))))
+    (cond
+      (directory
+       (dolist (file (recursive-files-with-extension (uiop:ensure-directory-pathname directory) extension))
+         (funcall loader file)))
+      ((probe-file path)
+       (funcall loader path))
+      (t
+       (error "~A: ~A" not-found-message path)))))
+
+(defun recursive-files-with-extension (directory extension)
+  (append
+   (remove-if-not (lambda (file)
+                    (string-equal (pathname-type file) extension))
+                  (uiop:directory-files directory))
+   (mapcan (lambda (subdirectory)
+             (recursive-files-with-extension subdirectory extension))
+           (uiop:subdirectories directory))))
+
+(defun load-java-enums-from-file (path)
+  (when (string-equal (pathname-type path) "java")
+    (let ((content (strip-java-comments (read-file-string path))))
+      (dolist (entry (parse-java-enums content path))
+        (setf (gethash (car entry) *java-enums*) (cdr entry))))))
+
+(defun load-proto-enums-from-file (path)
+  (when (string-equal (pathname-type path) "proto")
+    (let ((content (strip-java-comments (read-file-string path))))
+      (dolist (entry (parse-proto-enums content path))
+        (setf (gethash (car entry) *java-enums*) (cdr entry))))))
+
+(defun read-file-string (path)
+  (with-open-file (stream path :direction :input)
+    (let ((contents (make-string (file-length stream))))
+      (read-sequence contents stream)
+      contents)))
+
+(defun strip-java-comments (text)
+  (with-output-to-string (out)
+    (loop with i = 0
+          while (< i (length text))
+          do (cond
+               ((and (< (1+ i) (length text))
+                     (char= (char text i) #\/)
+                     (char= (char text (1+ i)) #\/))
+                (incf i 2)
+                (loop while (and (< i (length text))
+                                 (not (member (char text i) '(#\Newline #\Return))))
+                      do (incf i)))
+               ((and (< (1+ i) (length text))
+                     (char= (char text i) #\/)
+                     (char= (char text (1+ i)) #\*))
+                (incf i 2)
+                (loop while (and (< (1+ i) (length text))
+                                 (not (and (char= (char text i) #\*)
+                                           (char= (char text (1+ i)) #\/))))
+                      do (incf i))
+                (incf i 2))
+               (t
+                (write-char (char text i) out)
+                (incf i))))))
+
+(defun parse-java-enums (text path)
+  (declare (ignore path))
+  (let ((entries nil)
+        (start 0))
+    (loop for enum-pos = (search "enum" text :start2 start :test #'char-equal)
+          while enum-pos
+          do (if (java-enum-keyword-at-p text enum-pos)
+                 (let* ((name-start (skip-java-whitespace text (+ enum-pos 4)))
+                        (name-end (scan-java-identifier-end text name-start))
+                        (enum-name (and name-end (subseq text name-start name-end)))
+                        (brace-pos (and enum-name (position #\{ text :start name-end)))
+                        (brace-end (and brace-pos (find-matching-brace text brace-pos))))
+                   (when (and enum-name brace-pos brace-end)
+                     (push (cons (string-downcase enum-name)
+                                 (mapcar #'string-downcase
+                                         (parse-java-enum-constants
+                                          (subseq text (1+ brace-pos) brace-end))))
+                           entries)
+                     (setf start (1+ brace-end)))
+                   (unless (and enum-name brace-pos brace-end)
+                     (setf start (+ enum-pos 4))))
+                 (setf start (+ enum-pos 4))))
+    (nreverse entries)))
+
+(defun java-enum-keyword-at-p (text index)
+  (let ((before (and (> index 0) (char text (1- index))))
+        (after-index (+ index 4)))
+    (and (or (null before) (not (java-identifier-char-p before)))
+         (< after-index (length text))
+         (member (char text after-index)
+                 '(#\Space #\Tab #\Return #\Newline)))))
+
+(defun skip-java-whitespace (text index)
+  (loop while (and (< index (length text))
+                   (member (char text index)
+                           '(#\Space #\Tab #\Return #\Newline)))
+        do (incf index))
+  index)
+
+(defun java-identifier-char-p (ch)
+  (or (alphanumericp ch) (member ch '(#\_ #\$))))
+
+(defun scan-java-identifier-end (text start)
+  (when (and (< start (length text))
+             (or (alpha-char-p (char text start))
+                 (member (char text start) '(#\_ #\$))))
+    (loop with i = (1+ start)
+          while (and (< i (length text))
+                     (java-identifier-char-p (char text i)))
+          do (incf i)
+          finally (return i))))
+
+(defun find-matching-brace (text open-index)
+  (loop with depth = 0
+        for i from open-index below (length text)
+        for ch = (char text i)
+        do (cond
+             ((char= ch #\{) (incf depth))
+             ((char= ch #\})
+              (decf depth)
+              (when (zerop depth)
+                (return i))))))
+
+(defun parse-java-enum-constants (body)
+  (let* ((constant-region (subseq body 0 (or (position #\; body) (length body))))
+         (tokens nil))
+    (dolist (part (split-string-on-char constant-region #\,))
+      (let* ((trimmed (string-trim '(#\Space #\Tab #\Return #\Newline) part))
+             (end (scan-java-identifier-end trimmed 0)))
+        (when end
+          (push (subseq trimmed 0 end) tokens))))
+    (nreverse tokens)))
+
+(defun parse-proto-enums (text path)
+  (declare (ignore path))
+  (let ((entries nil)
+        (start 0))
+    (loop for enum-pos = (search "enum" text :start2 start :test #'char-equal)
+          while enum-pos
+          do (if (java-enum-keyword-at-p text enum-pos)
+                 (let* ((name-start (skip-java-whitespace text (+ enum-pos 4)))
+                        (name-end (scan-java-identifier-end text name-start))
+                        (enum-name (and name-end (subseq text name-start name-end)))
+                        (brace-pos (and enum-name (position #\{ text :start name-end)))
+                        (brace-end (and brace-pos (find-matching-brace text brace-pos))))
+                   (when (and enum-name brace-pos brace-end)
+                     (push (cons (string-downcase enum-name)
+                                 (mapcar #'string-downcase
+                                         (parse-proto-enum-constants
+                                          (subseq text (1+ brace-pos) brace-end))))
+                           entries)
+                     (setf start (1+ brace-end)))
+                   (unless (and enum-name brace-pos brace-end)
+                     (setf start (+ enum-pos 4))))
+                 (setf start (+ enum-pos 4))))
+    (nreverse entries)))
+
+(defun parse-proto-enum-constants (body)
+  (let ((tokens nil))
+    (dolist (statement (split-string-on-char body #\;))
+      (let* ((trimmed (string-trim '(#\Space #\Tab #\Return #\Newline) statement))
+             (end (scan-java-identifier-end trimmed 0))
+             (eq-pos (and end (position #\= trimmed :start end))))
+        (when (and end
+                   (not (member (string-downcase (subseq trimmed 0 end))
+                                '("option" "reserved")
+                                :test #'string=))
+                   eq-pos
+                   (= (skip-java-whitespace trimmed end) eq-pos))
+          (push (subseq trimmed 0 end) tokens))))
+    (nreverse tokens)))
+
+(defun split-string-on-char (text delimiter)
+  (let ((parts nil)
+        (start 0))
+    (loop for pos = (position delimiter text :start start)
+          do (if pos
+                 (progn
+                   (push (subseq text start pos) parts)
+                   (setf start (1+ pos)))
+                 (progn
+                   (push (subseq text start) parts)
+                   (return (nreverse parts)))))))
 
 (defun eval-load-form (form source-path base-dir)
   (unless (= (length form) 2)
@@ -341,21 +557,39 @@
   (let ((variable-name (dsl-name var)))
     (unless body
       (error "DOMAIN for ~A requires at least one value or expression" variable-name))
-    (if (and (= (length body) 1)
-             (consp (first body)))
-        (compile-expr (first body)
-                      (make-context nil nil)
-                      nil
-                      nil
-                      :domain-literals-p nil)
-        (list* :set
-               (mapcar (lambda (item)
-                         (compile-expr item
-                                       (make-context nil nil)
-                                       nil
-                                       nil
-                                       :domain-literals-p t))
-                       body)))))
+    (cond
+      ((and (= (length body) 1)
+            (java-enum-domain-token-p (first body)))
+       (java-enum-domain-ir (first body)))
+      ((and (= (length body) 1)
+            (consp (first body)))
+       (compile-expr (first body)
+                     (make-context nil nil)
+                     nil
+                     nil
+                     :domain-literals-p nil))
+      (t
+       (list* :set
+              (mapcar (lambda (item)
+                        (compile-expr item
+                                      (make-context nil nil)
+                                      nil
+                                      nil
+                                      :domain-literals-p t))
+                      body))))))
+
+(defun java-enum-domain-token-p (value)
+  (and (symbolp value)
+       (let ((name (symbol-name value)))
+         (and (> (length name) 1)
+              (char= (char name 0) #\$)))))
+
+(defun java-enum-domain-ir (token)
+  (let* ((enum-name (string-downcase (subseq (symbol-name token) 1)))
+         (values (gethash enum-name *java-enums*)))
+    (unless values
+      (error "Unknown Java enum domain reference $~A" enum-name))
+    (list* :set (mapcar (lambda (value) (list :lit value)) values))))
 
 (defun parse-domain-star-clause (tail variables domains)
   (unless variables
