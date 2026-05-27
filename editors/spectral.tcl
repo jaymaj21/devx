@@ -91,8 +91,130 @@ if {[catch {package require struct::set}]} {
 
 if {[catch {package require struct::list}]} {
     namespace eval struct::list {}
-    proc struct::list::longestCommonSubsequence {a b} { return {} }
-    proc struct::list::lcsInvertMerge {lcs a b} { return [list $a $b] }
+    proc spectral_struct_list_longestCommonSubsequence {a b} {
+        set n [llength $a]
+        set m [llength $b]
+
+        for {set i 0} {$i <= $n} {incr i} {
+            set score($i,$m) 0
+        }
+        for {set j 0} {$j <= $m} {incr j} {
+            set score($n,$j) 0
+        }
+
+        for {set i [expr {$n - 1}]} {$i >= 0} {incr i -1} {
+            set ai [lindex $a $i]
+            for {set j [expr {$m - 1}]} {$j >= 0} {incr j -1} {
+                if {$ai eq [lindex $b $j]} {
+                    set score($i,$j) [expr {$score([expr {$i + 1}],[expr {$j + 1}]) + 1}]
+                } elseif {$score([expr {$i + 1}],$j) >= $score($i,[expr {$j + 1}])} {
+                    set score($i,$j) $score([expr {$i + 1}],$j)
+                } else {
+                    set score($i,$j) $score($i,[expr {$j + 1}])
+                }
+            }
+        }
+
+        set idx1 {}
+        set idx2 {}
+        set i 0
+        set j 0
+        while {$i < $n && $j < $m} {
+            if {[lindex $a $i] eq [lindex $b $j]} {
+                lappend idx1 $i
+                lappend idx2 $j
+                incr i
+                incr j
+            } elseif {$score([expr {$i + 1}],$j) >= $score($i,[expr {$j + 1}])} {
+                incr i
+            } else {
+                incr j
+            }
+        }
+        return [list $idx1 $idx2]
+    }
+    proc spectral_struct_list_lcsInvertMerge {lcs len1 len2} {
+        set result {}
+        set last1 -1
+        set last2 -1
+        set idx1 [lindex $lcs 0]
+        set idx2 [lindex $lcs 1]
+
+        foreach a $idx1 b $idx2 {
+            set empty1 [expr {($a - $last1) <= 1}]
+            set empty2 [expr {($b - $last2) <= 1}]
+
+            if {$empty1 && $empty2} {
+                set type --
+                foreach {type left right} [lindex $result end] break
+                if {[string match unchanged $type]} {
+                    lset left end $a
+                    lset right end $b
+                    lset result end [list unchanged $left $right]
+                } else {
+                    lappend result [list unchanged [list $a $a] [list $b $b]]
+                }
+            } else {
+                if {$empty1} {
+                    incr last2
+                    incr b -1
+                    lappend result [list added [list $last1 $a] [list $last2 $b]]
+                    incr b
+                } elseif {$empty2} {
+                    incr last1
+                    incr a -1
+                    lappend result [list deleted [list $last1 $a] [list $last2 $b]]
+                    incr a
+                } else {
+                    incr last1
+                    incr a -1
+                    incr last2
+                    incr b -1
+                    lappend result [list changed [list $last1 $a] [list $last2 $b]]
+                    incr a
+                    incr b
+                }
+                lappend result [list unchanged [list $a $a] [list $b $b]]
+            }
+            set last1 $a
+            set last2 $b
+        }
+
+        set empty1 [expr {($len1 - $last1) <= 1}]
+        set empty2 [expr {($len2 - $last2) <= 1}]
+
+        if {$empty1 && $empty2} {
+            return $result
+        } elseif {$empty1} {
+            incr last2
+            incr len2 -1
+            lappend result [list added [list $last1 $len1] [list $last2 $len2]]
+        } elseif {$empty2} {
+            incr last1
+            incr len1 -1
+            lappend result [list deleted [list $last1 $len1] [list $last2 $len2]]
+        } else {
+            incr last1
+            incr len1 -1
+            incr last2
+            incr len2 -1
+            lappend result [list changed [list $last1 $len1] [list $last2 $len2]]
+        }
+        return $result
+    }
+    proc struct::list {subcmd args} {
+        switch -exact -- $subcmd {
+            longestCommonSubsequence {
+                return [uplevel 1 [::list spectral_struct_list_longestCommonSubsequence {*}$args]]
+            }
+            lcsInvertMerge {
+                return [uplevel 1 [::list spectral_struct_list_lcsInvertMerge {*}$args]]
+            }
+            default {
+                return -code error "unknown or ambiguous subcommand \"$subcmd\""
+            }
+        }
+    }
     package provide struct::list 1.0
 }
 
@@ -7645,48 +7767,69 @@ function popupWithLineNumber(txt, popupid,linenum)
 
 function popupTsv(txt, popupid)
 {
-  var generator=window.open('',popupid,',resizable=false,height=800,width=1000,titlebar=0,toolbar=0');
-  var doc = generator.document;
-  doc.write("<html><head>");
-  doc.write("<style type=\"text/css\">");
-  doc.write("\nbody { background-color: white ;  color: black;  }"); 
-  doc.write("\ntable,th,td {border: 1px solid white; border-collapse: collapse; font-family: 'Lucida Console', 'Courier New', monospace; font-size: 10}"); 
-  doc.write("\nth, td {background-color: #96D4D4;}")
-  doc.write("</style></head>");
-  doc.write("<body id='body1'>");
-  doc.write("</body></html>");
-  generator.focus();
-  
+    var generator = window.open(
+        '',
+        popupid,
+        'resizable=false,height=800,width=1000,titlebar=0,toolbar=0'
+    );
 
-  var table = doc.createElement('TABLE');
-  var tbody = doc.createElement('TBODY');
-  table.appendChild(tbody);
-  var lines=txt.split("\n");
-  for(var i=0,l;l=lines[i];i++){
-    var fields=l.split("\t");
-    if(fields.length==0) return;
-    var tr=doc.createElement('TR');
-    for(var j=0,f;f=fields[j];j++){
-      var td=doc.createElement('TD');
-      if(f[0]=='"') {
-         f = f.substr(1); 
-      }
-      if(f.substr(-1) == '\n' || f.substr(-1) == '\r') {
-          f = f.substr(0,f.length-1);
-      }
-      if(f.substr(-1) == '\n' || f.substr(-1) == '\r') {
-          f = f.substr(0,f.length-1);
-      }
-      if(f.substr(-1) == '"') {
-          f = f.substr(0,f.length-1);
-      }
-      td.innerHTML = f;
-      tr.appendChild(td);
+    var doc = generator.document;
+
+    doc.write("<html><head>");
+    doc.write("<style type=\"text/css\">");
+    doc.write("\nbody { background-color: white; color: black; }");
+    doc.write("\ntable, th, td { border: 1px solid white; border-collapse: collapse; font-family: 'Lucida Console', 'Courier New', monospace; font-size: 10px; }");
+    doc.write("\nth, td { background-color: #96D4D4; }");
+    doc.write("</style></head>");
+    doc.write("<body id='body1'>");
+    doc.write("</body></html>");
+
+    generator.focus();
+
+    var table = doc.createElement('TABLE');
+    var tbody = doc.createElement('TBODY');
+
+    table.appendChild(tbody);
+
+    var lines = txt.split("\n");
+
+    for (var i = 0; i < lines.length; i++) {
+        var l = lines[i];
+
+        if (!l) continue;
+
+        var fields = l.split("\t");
+        var tr = doc.createElement('TR');
+
+        for (var j = 0; j < fields.length; j++) {
+            var f = fields[j];
+            var td = doc.createElement('TD');
+
+            if (f[0] === ' ') {
+                f = f.substr(1);
+            }
+
+            if (f.substr(-1) === '\n' || f.substr(-1) === '\r') {
+                f = f.substr(0, f.length - 1);
+            }
+
+            if (f.substr(-1) === '\n' || f.substr(-1) === '\r') {
+                f = f.substr(0, f.length - 1);
+            }
+
+            if (f.substr(-1) === '"') {
+                f = f.substr(0, f.length - 1);
+            }
+
+            td.innerHTML = f;
+            tr.appendChild(td);
+        }
+
+        tbody.appendChild(tr);
     }
-    tbody.appendChild(tr);
-  }
-  doc.getElementById('body1').appendChild(table);
-  doc.close();
+
+    doc.getElementById('body1').appendChild(table);
+    doc.close();
 }
 
 function popupHtml (txt, popupid)
