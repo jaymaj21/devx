@@ -1,0 +1,49 @@
+source "cas-macro-lib.tcl"
+
+proc p1_actions {} {
+    action p1-start {*}[start_attempt p1pc p2pc]
+    action p1-cas-success {= p1pc try} {= mem 0} {= p1pc+ won} {*}[preserve p2pc] {= mem+ 1}
+    action p1-cas-fail {= p1pc try} {!= mem 0} {= p1pc+ lost} {*}[preserve p2pc mem]
+}
+
+proc p2_actions {} {
+    action p2-start {*}[start_attempt p2pc p1pc]
+    action p2-cas-success {= p2pc try} {= mem 0} {= p2pc+ won} {*}[preserve p1pc] {= mem+ 2}
+    action p2-cas-fail {= p2pc try} {!= mem 0} {= p2pc+ lost} {*}[preserve p1pc mem]
+}
+
+system cas-2proc-race {
+    vars p1pc p2pc mem
+    domain p1pc a0 try won lost
+    domain p2pc a0 try won lost
+    domain mem 0 1 2
+
+    init {= p1pc a0} {= p2pc a0} {= mem 0}
+
+    p1_actions
+    p2_actions
+
+    next {
+        or
+        @p1-start @p1-cas-success @p1-cas-fail
+        @p2-start @p2-cas-success @p2-cas-fail
+    }
+
+    invariant at-most-one-winner {
+        not
+        {and {= p1pc won} {= p2pc won}}
+    }
+
+    invariant winner-matches-memory {
+        and
+        {implies {= p1pc won} {= mem 1}}
+        {implies {= p2pc won} {= mem 2}}
+        {implies {= mem 1} {not {= p2pc won}}}
+        {implies {= mem 2} {not {= p1pc won}}}
+    }
+
+    property p1-can-win {eventually {= p1pc won}}
+    property p2-can-win {eventually {= p2pc won}}
+    property p1-can-lose {eventually {= p1pc lost}}
+    property p2-can-lose {eventually {= p2pc lost}}
+}

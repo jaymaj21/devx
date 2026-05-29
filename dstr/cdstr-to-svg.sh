@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-Usage: dstr-to-svg.sh input.dstr|input.json [spec-to-dot options]
+Usage: cdstr-to-svg.sh input.cdstr|input.json [spec-to-dot options]
 Produces input.json, input.dot, and input.svg next to the source file, or reuses an existing .json input directly.
 Extra arguments are passed directly to spec-to-dot.js.
 Useful option: --max-states N to truncate very large universes.
@@ -31,11 +31,11 @@ if [[ ! -f "$input" ]]; then
 fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-compiler="$script_dir/scripts/dstr-dsl-compiler.lisp"
+cdstr_project="$script_dir/clj-dstr"
 spec_to_dot="$script_dir/scripts/spec-to-dot.js"
 
-if [[ ! -f "$compiler" ]]; then
-  echo "Error: compiler script not found: $compiler" >&2
+if [[ ! -f "$cdstr_project/pom.xml" ]]; then
+  echo "Error: clj-dstr Maven project not found: $cdstr_project" >&2
   exit 1
 fi
 
@@ -45,16 +45,18 @@ if [[ ! -f "$spec_to_dot" ]]; then
 fi
 
 input_dir="$(cd "$(dirname "$input")" && pwd)"
+input_abs="$input_dir/$(basename "$input")"
 input_stem="$(basename "${input%.*}")"
 json_out="$input_dir/$input_stem.json"
 dot_out="$input_dir/$input_stem.dot"
 svg_out="$input_dir/$input_stem.svg"
 
 if [[ "${input##*.}" != "json" ]]; then
-  sbcl --script "$compiler" "$input" "$json_out"
+  mvn -q -f "$cdstr_project/pom.xml" compile exec:java "-Dexec.args=$input_abs $json_out"
 else
-  json_out="$input"
+  json_out="$input_abs"
 fi
+
 node "$spec_to_dot" "$json_out" "$dot_out" "$@"
 dot -Tsvg "$dot_out" -o "$svg_out"
 

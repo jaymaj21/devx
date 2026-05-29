@@ -19,7 +19,7 @@ set "DOT_OUT=%INPUT_DIR%%INPUT_STEM%.dot"
 set "SVG_OUT=%INPUT_DIR%%INPUT_STEM%.svg"
 
 set "SCRIPT_DIR=%~dp0"
-set "COMPILER=%SCRIPT_DIR%scripts\dstr-dsl-compiler.lisp"
+set "COMPILER=%SCRIPT_DIR%scripts\tdstr-dsl-compiler.tcl"
 set "SPEC_TO_DOT=%SCRIPT_DIR%scripts\spec-to-dot.js"
 
 if not exist "%COMPILER%" (
@@ -70,7 +70,7 @@ goto :usage_error
 if /I "%INPUT_EXT%"==".json" (
   set "JSON_OUT=%INPUT%"
 ) else (
-  sbcl --script "%COMPILER%" "%INPUT%" "%JSON_OUT%"
+  tclsh "%COMPILER%" "%INPUT%" "%JSON_OUT%"
   if errorlevel 1 exit /b %errorlevel%
 )
 
@@ -86,10 +86,11 @@ echo Wrote %SVG_OUT%
 exit /b 0
 
 :usage
-echo Usage: %~n0 input.dstr^|input.json [--all-states] [--rankdir TB^|LR] [--max-states N] 1>&2
+echo Usage: %~n0 input.tdstr^|input.json [--all-states] [--rankdir TB^|LR] [--max-states N] 1>&2
 echo Produces input.json, input.dot, and input.svg next to the source file, or reuses an existing .json input directly. 1>&2
+echo Useful option: --max-states N to truncate very large universes. 1>&2
 exit /b 0
 
 :usage_error
-echo Usage: %~n0 input.dstr^|input.json [--all-states] [--rankdir TB^|LR] [--max-states N] 1>&2
+echo Usage: %~n0 input.tdstr^|input.json [--all-states] [--rankdir TB^|LR] [--max-states N] 1>&2
 exit /b 1

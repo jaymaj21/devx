@@ -1,0 +1,36 @@
+system tla-die-hard {
+    vars big small
+    domain big 0 1 2 3 4 5
+    domain small 0 1 2 3
+    init {= big 0} {= small 0}
+
+    action fill-small-jug {= small+ 3} [same big]
+    action fill-big-jug {= big+ 5} [same small]
+    action empty-small-jug {= small+ 0} [same big]
+    action empty-big-jug {= big+ 0} [same small]
+
+    action small-to-big {
+        or
+        {and {< {+ big small} 5} {= big+ {+ big small}} {= small+ 0}}
+        {and {>= {+ big small} 5} {= big+ 5} {= small+ {- small {- 5 big}}}}
+    }
+
+    action big-to-small {
+        or
+        {and {< {+ big small} 3} {= small+ {+ big small}} {= big+ 0}}
+        {and {>= {+ big small} 3} {= small+ 3} {= big+ {- big {- 3 small}}}}
+    }
+
+    next {
+        or
+        @fill-small-jug
+        @fill-big-jug
+        @empty-small-jug
+        @empty-big-jug
+        @small-to-big
+        @big-to-small
+    }
+
+    invariant type-ok {in big {set 0 1 2 3 4 5}} {in small {set 0 1 2 3}}
+    property can-measure-four-gallons {eventually {= big 4}}
+}

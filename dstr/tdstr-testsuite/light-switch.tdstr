@@ -1,0 +1,10 @@
+system light-switch {
+    vars light
+    domain light off on
+    init {= light off}
+    action turn-on {= light off} {= light+ on}
+    action turn-off {= light on} {= light+ off}
+    next {or @turn-on @turn-off}
+    invariant type-ok {in light {set off on}}
+    property eventually-on {eventually {= light on}}
+}

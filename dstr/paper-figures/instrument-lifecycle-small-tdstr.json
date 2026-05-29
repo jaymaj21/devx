@@ -1,0 +1,703 @@
+{
+  "name": "instrument-lifecycle-small",
+  "variables": [
+    "master_lifecycle",
+    "master_trading_status",
+    "master_refdata_version",
+    "venue1_lifecycle",
+    "venue1_trading_status",
+    "venue1_refdata_version"
+  ],
+  "domains": {
+    "master_lifecycle": {
+      "set": [
+        {
+          "lit": "enriching"
+        },
+        {
+          "lit": "ready"
+        },
+        {
+          "lit": "active"
+        },
+        {
+          "lit": "halted"
+        },
+        {
+          "lit": "disabled"
+        }
+      ]
+    },
+    "master_trading_status": {
+      "set": [
+        {
+          "lit": "not_trading"
+        },
+        {
+          "lit": "trading"
+        },
+        {
+          "lit": "paused"
+        },
+        {
+          "lit": "disabled"
+        }
+      ]
+    },
+    "master_refdata_version": {
+      "set": [
+        {
+          "lit": 1
+        }
+      ]
+    },
+    "venue1_lifecycle": {
+      "set": [
+        {
+          "lit": "enriching"
+        },
+        {
+          "lit": "ready"
+        },
+        {
+          "lit": "active"
+        },
+        {
+          "lit": "halted"
+        },
+        {
+          "lit": "disabled"
+        }
+      ]
+    },
+    "venue1_trading_status": {
+      "set": [
+        {
+          "lit": "not_trading"
+        },
+        {
+          "lit": "trading"
+        },
+        {
+          "lit": "paused"
+        },
+        {
+          "lit": "disabled"
+        }
+      ]
+    },
+    "venue1_refdata_version": {
+      "set": [
+        {
+          "lit": 1
+        }
+      ]
+    }
+  },
+  "init": {
+    "and": [
+      {
+        "=": [
+          {
+            "var": "master_lifecycle"
+          },
+          {
+            "lit": "enriching"
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "venue1_lifecycle"
+          },
+          {
+            "lit": "enriching"
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "master_trading_status"
+          },
+          {
+            "lit": "not_trading"
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "venue1_trading_status"
+          },
+          {
+            "lit": "not_trading"
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "master_refdata_version"
+          },
+          {
+            "lit": 1
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "venue1_refdata_version"
+          },
+          {
+            "lit": 1
+          }
+        ]
+      }
+    ]
+  },
+  "actions": [
+    {
+      "name": "enrichment-complete",
+      "body": {
+        "and": [
+          {
+            "and": [
+              {
+                "=": [
+                  {
+                    "next": "master_refdata_version"
+                  },
+                  {
+                    "var": "master_refdata_version"
+                  }
+                ]
+              },
+              {
+                "=": [
+                  {
+                    "next": "venue1_refdata_version"
+                  },
+                  {
+                    "var": "venue1_refdata_version"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "and": [
+              {
+                "and": [
+                  {
+                    "=": [
+                      {
+                        "var": "master_lifecycle"
+                      },
+                      {
+                        "lit": "enriching"
+                      }
+                    ]
+                  },
+                  {
+                    "=": [
+                      {
+                        "var": "venue1_lifecycle"
+                      },
+                      {
+                        "lit": "enriching"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "=": [
+                      {
+                        "next": "master_lifecycle"
+                      },
+                      {
+                        "lit": "ready"
+                      }
+                    ]
+                  },
+                  {
+                    "=": [
+                      {
+                        "next": "venue1_lifecycle"
+                      },
+                      {
+                        "lit": "ready"
+                      }
+                    ]
+                  },
+                  {
+                    "=": [
+                      {
+                        "next": "master_trading_status"
+                      },
+                      {
+                        "lit": "not_trading"
+                      }
+                    ]
+                  },
+                  {
+                    "=": [
+                      {
+                        "next": "venue1_trading_status"
+                      },
+                      {
+                        "lit": "not_trading"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "start-trading",
+      "body": {
+        "and": [
+          {
+            "and": [
+              {
+                "=": [
+                  {
+                    "next": "master_refdata_version"
+                  },
+                  {
+                    "var": "master_refdata_version"
+                  }
+                ]
+              },
+              {
+                "=": [
+                  {
+                    "next": "venue1_refdata_version"
+                  },
+                  {
+                    "var": "venue1_refdata_version"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "and": [
+              {
+                "and": [
+                  {
+                    "=": [
+                      {
+                        "var": "master_lifecycle"
+                      },
+                      {
+                        "lit": "ready"
+                      }
+                    ]
+                  },
+                  {
+                    "=": [
+                      {
+                        "var": "venue1_lifecycle"
+                      },
+                      {
+                        "lit": "ready"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "=": [
+                      {
+                        "next": "master_lifecycle"
+                      },
+                      {
+                        "lit": "active"
+                      }
+                    ]
+                  },
+                  {
+                    "=": [
+                      {
+                        "next": "venue1_lifecycle"
+                      },
+                      {
+                        "lit": "active"
+                      }
+                    ]
+                  },
+                  {
+                    "=": [
+                      {
+                        "next": "master_trading_status"
+                      },
+                      {
+                        "lit": "trading"
+                      }
+                    ]
+                  },
+                  {
+                    "=": [
+                      {
+                        "next": "venue1_trading_status"
+                      },
+                      {
+                        "lit": "trading"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "pause-trading",
+      "body": {
+        "and": [
+          {
+            "and": [
+              {
+                "=": [
+                  {
+                    "next": "master_refdata_version"
+                  },
+                  {
+                    "var": "master_refdata_version"
+                  }
+                ]
+              },
+              {
+                "=": [
+                  {
+                    "next": "venue1_refdata_version"
+                  },
+                  {
+                    "var": "venue1_refdata_version"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "and": [
+              {
+                "and": [
+                  {
+                    "=": [
+                      {
+                        "var": "master_lifecycle"
+                      },
+                      {
+                        "lit": "active"
+                      }
+                    ]
+                  },
+                  {
+                    "=": [
+                      {
+                        "var": "venue1_lifecycle"
+                      },
+                      {
+                        "lit": "active"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "=": [
+                      {
+                        "next": "master_lifecycle"
+                      },
+                      {
+                        "lit": "halted"
+                      }
+                    ]
+                  },
+                  {
+                    "=": [
+                      {
+                        "next": "venue1_lifecycle"
+                      },
+                      {
+                        "lit": "halted"
+                      }
+                    ]
+                  },
+                  {
+                    "=": [
+                      {
+                        "next": "master_trading_status"
+                      },
+                      {
+                        "lit": "paused"
+                      }
+                    ]
+                  },
+                  {
+                    "=": [
+                      {
+                        "next": "venue1_trading_status"
+                      },
+                      {
+                        "lit": "paused"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "resume-trading",
+      "body": {
+        "and": [
+          {
+            "and": [
+              {
+                "=": [
+                  {
+                    "next": "master_refdata_version"
+                  },
+                  {
+                    "var": "master_refdata_version"
+                  }
+                ]
+              },
+              {
+                "=": [
+                  {
+                    "next": "venue1_refdata_version"
+                  },
+                  {
+                    "var": "venue1_refdata_version"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "and": [
+              {
+                "and": [
+                  {
+                    "=": [
+                      {
+                        "var": "master_lifecycle"
+                      },
+                      {
+                        "lit": "halted"
+                      }
+                    ]
+                  },
+                  {
+                    "=": [
+                      {
+                        "var": "venue1_lifecycle"
+                      },
+                      {
+                        "lit": "halted"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "=": [
+                      {
+                        "next": "master_lifecycle"
+                      },
+                      {
+                        "lit": "active"
+                      }
+                    ]
+                  },
+                  {
+                    "=": [
+                      {
+                        "next": "venue1_lifecycle"
+                      },
+                      {
+                        "lit": "active"
+                      }
+                    ]
+                  },
+                  {
+                    "=": [
+                      {
+                        "next": "master_trading_status"
+                      },
+                      {
+                        "lit": "trading"
+                      }
+                    ]
+                  },
+                  {
+                    "=": [
+                      {
+                        "next": "venue1_trading_status"
+                      },
+                      {
+                        "lit": "trading"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "disable-instrument",
+      "body": {
+        "and": [
+          {
+            "and": [
+              {
+                "=": [
+                  {
+                    "next": "master_refdata_version"
+                  },
+                  {
+                    "var": "master_refdata_version"
+                  }
+                ]
+              },
+              {
+                "=": [
+                  {
+                    "next": "venue1_refdata_version"
+                  },
+                  {
+                    "var": "venue1_refdata_version"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "and": [
+              {
+                "and": [
+                  {
+                    "not": {
+                      "=": [
+                        {
+                          "var": "master_lifecycle"
+                        },
+                        {
+                          "lit": "disabled"
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "not": {
+                      "=": [
+                        {
+                          "var": "venue1_lifecycle"
+                        },
+                        {
+                          "lit": "disabled"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "=": [
+                      {
+                        "next": "master_lifecycle"
+                      },
+                      {
+                        "lit": "disabled"
+                      }
+                    ]
+                  },
+                  {
+                    "=": [
+                      {
+                        "next": "venue1_lifecycle"
+                      },
+                      {
+                        "lit": "disabled"
+                      }
+                    ]
+                  },
+                  {
+                    "=": [
+                      {
+                        "next": "master_trading_status"
+                      },
+                      {
+                        "lit": "disabled"
+                      }
+                    ]
+                  },
+                  {
+                    "=": [
+                      {
+                        "next": "venue1_trading_status"
+                      },
+                      {
+                        "lit": "disabled"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "next": {
+    "or": [
+      {
+        "actionRef": "enrichment-complete"
+      },
+      {
+        "actionRef": "start-trading"
+      },
+      {
+        "actionRef": "pause-trading"
+      },
+      {
+        "actionRef": "resume-trading"
+      },
+      {
+        "actionRef": "disable-instrument"
+      }
+    ]
+  },
+  "invariants": [],
+  "properties": []
+}

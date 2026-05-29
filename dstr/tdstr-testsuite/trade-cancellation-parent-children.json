@@ -1,0 +1,437 @@
+{
+  "name": "trade-cancellation-parent-children",
+  "variables": [
+    "p_mission_state",
+    "c1_mission_state",
+    "c2_mission_state"
+  ],
+  "domains": {
+    "p_mission_state": {
+      "set": [
+        {
+          "lit": "open"
+        },
+        {
+          "lit": "released"
+        },
+        {
+          "lit": "settled"
+        },
+        {
+          "lit": "booked"
+        },
+        {
+          "lit": "cancelled"
+        },
+        {
+          "lit": "partially_settled"
+        },
+        {
+          "lit": "partially_booked"
+        },
+        {
+          "lit": "cancel_requested"
+        }
+      ]
+    },
+    "c1_mission_state": {
+      "set": [
+        {
+          "lit": "open"
+        },
+        {
+          "lit": "released"
+        },
+        {
+          "lit": "settled"
+        },
+        {
+          "lit": "booked"
+        },
+        {
+          "lit": "cancelled"
+        },
+        {
+          "lit": "partially_settled"
+        },
+        {
+          "lit": "partially_booked"
+        },
+        {
+          "lit": "cancel_requested"
+        }
+      ]
+    },
+    "c2_mission_state": {
+      "set": [
+        {
+          "lit": "open"
+        },
+        {
+          "lit": "released"
+        },
+        {
+          "lit": "settled"
+        },
+        {
+          "lit": "booked"
+        },
+        {
+          "lit": "cancelled"
+        },
+        {
+          "lit": "partially_settled"
+        },
+        {
+          "lit": "partially_booked"
+        },
+        {
+          "lit": "cancel_requested"
+        }
+      ]
+    }
+  },
+  "init": {
+    "and": [
+      {
+        "=": [
+          {
+            "var": "p_mission_state"
+          },
+          {
+            "lit": "open"
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "c1_mission_state"
+          },
+          {
+            "lit": "open"
+          }
+        ]
+      },
+      {
+        "=": [
+          {
+            "var": "c2_mission_state"
+          },
+          {
+            "lit": "open"
+          }
+        ]
+      }
+    ]
+  },
+  "actions": [
+    {
+      "name": "trade-cancellation",
+      "body": {
+        "and": [
+          {
+            "lit": true
+          },
+          {
+            "or": [
+              {
+                "and": [
+                  {
+                    "and": [
+                      {
+                        "=": [
+                          {
+                            "var": "p_mission_state"
+                          },
+                          {
+                            "lit": "open"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "var": "c1_mission_state"
+                          },
+                          {
+                            "lit": "open"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "var": "c2_mission_state"
+                          },
+                          {
+                            "lit": "open"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "and": [
+                      {
+                        "=": [
+                          {
+                            "next": "p_mission_state"
+                          },
+                          {
+                            "lit": "cancelled"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "next": "c1_mission_state"
+                          },
+                          {
+                            "lit": "cancelled"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "next": "c2_mission_state"
+                          },
+                          {
+                            "lit": "cancelled"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "and": [
+                      {
+                        "=": [
+                          {
+                            "var": "p_mission_state"
+                          },
+                          {
+                            "lit": "released"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "var": "c1_mission_state"
+                          },
+                          {
+                            "lit": "released"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "var": "c2_mission_state"
+                          },
+                          {
+                            "lit": "released"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "and": [
+                      {
+                        "=": [
+                          {
+                            "next": "p_mission_state"
+                          },
+                          {
+                            "lit": "cancel_requested"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "next": "c1_mission_state"
+                          },
+                          {
+                            "lit": "cancel_requested"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "next": "c2_mission_state"
+                          },
+                          {
+                            "lit": "cancel_requested"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "and": [
+                      {
+                        "=": [
+                          {
+                            "var": "p_mission_state"
+                          },
+                          {
+                            "lit": "booked"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "var": "c1_mission_state"
+                          },
+                          {
+                            "lit": "booked"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "var": "c2_mission_state"
+                          },
+                          {
+                            "lit": "booked"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "and": [
+                      {
+                        "=": [
+                          {
+                            "next": "p_mission_state"
+                          },
+                          {
+                            "var": "p_mission_state"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "next": "c1_mission_state"
+                          },
+                          {
+                            "var": "c1_mission_state"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "next": "c2_mission_state"
+                          },
+                          {
+                            "var": "c2_mission_state"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "and": [
+                  {
+                    "and": [
+                      {
+                        "=": [
+                          {
+                            "var": "p_mission_state"
+                          },
+                          {
+                            "lit": "cancelled"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "var": "c1_mission_state"
+                          },
+                          {
+                            "lit": "cancelled"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "var": "c2_mission_state"
+                          },
+                          {
+                            "lit": "cancelled"
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "and": [
+                      {
+                        "=": [
+                          {
+                            "next": "p_mission_state"
+                          },
+                          {
+                            "var": "p_mission_state"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "next": "c1_mission_state"
+                          },
+                          {
+                            "var": "c1_mission_state"
+                          }
+                        ]
+                      },
+                      {
+                        "=": [
+                          {
+                            "next": "c2_mission_state"
+                          },
+                          {
+                            "var": "c2_mission_state"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "next": {
+    "actionRef": "trade-cancellation"
+  },
+  "invariants": [],
+  "properties": []
+}

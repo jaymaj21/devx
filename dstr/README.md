@@ -76,6 +76,29 @@ Useful options:
 
 - `--all-states` includes unreachable states in dashed gray
 - `--rankdir TB` lays the graph out top-to-bottom instead of left-to-right
+- `--max-states N` truncates very large universes instead of exhausting memory
+
+There are also front-end-aware wrapper scripts:
+
+- `dstr-to-svg.sh` / `dstr-to-svg.bat`
+- `tdstr-to-svg.sh` / `tdstr-to-svg.bat`
+- `cdstr-to-svg.sh` / `cdstr-to-svg.bat`
+
+These compile a `.dstr`, `.tdstr`, or `.cdstr` source when needed, then emit
+adjacent `.json`, `.dot`, and `.svg` files. They also accept an existing
+`.json` spec directly, which is useful when the normalized form has already
+been checked in or produced elsewhere.
+
+For Clojure-fronted models, `cdstr.sh` / `cdstr.bat` provide a simple compile
+command:
+
+```bash
+./cdstr.sh clj-dstr/samples/light-switch.cdstr
+```
+
+```powershell
+.\cdstr.bat clj-dstr\samples\light-switch.cdstr
+```
 
 The generated graph is a state-transition visualization:
 

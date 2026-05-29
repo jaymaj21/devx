@@ -13,6 +13,9 @@ function main() {
   const options = {
     includeAllStates: false,
     rankdir: "TB",
+    maxStates: null,
+    forceCompact: false,
+    noLegend: false,
   };
   const positional = [];
 
@@ -20,12 +23,23 @@ function main() {
     const arg = args[i];
     if (arg === "--all-states") {
       options.includeAllStates = true;
+    } else if (arg === "--compact") {
+      options.forceCompact = true;
+    } else if (arg === "--no-legend") {
+      options.noLegend = true;
     } else if (arg === "--rankdir") {
       const value = args[i + 1];
       if (!value) {
         fail("--rankdir expects a value such as LR or TB");
       }
       options.rankdir = value;
+      i += 1;
+    } else if (arg === "--max-states") {
+      const value = args[i + 1];
+      if (!value || !/^\d+$/.test(value) || Number(value) <= 0) {
+        fail("--max-states expects a positive integer");
+      }
+      options.maxStates = Number(value);
       i += 1;
     } else if (arg.startsWith("--")) {
       fail(`Unknown option: ${arg}`);
@@ -54,7 +68,7 @@ function main() {
 }
 
 function printUsage() {
-  console.error("Usage: node scripts/spec-to-dot.js <spec.json> [output.dot] [--all-states] [--rankdir TB|LR]");
+  console.error("Usage: node scripts/spec-to-dot.js <spec.json> [output.dot] [--all-states] [--compact] [--no-legend] [--rankdir TB|LR] [--max-states N]");
 }
 
 function fail(message) {
@@ -74,7 +88,8 @@ function validateSpec(spec) {
 }
 
 function buildGraph(spec, options) {
-  const universe = enumerateStates(spec);
+  const universeInfo = enumerateStates(spec, options);
+  const universe = universeInfo.states;
   const actionMap = new Map(spec.actions.map((action) => [action.name, action.body]));
   const reachable = new Set();
   const queue = [];
@@ -204,17 +219,22 @@ function buildGraph(spec, options) {
     edges,
     initialStates,
     reachableCount: reachable.size,
-    totalStates: universe.length,
+    totalStates: universeInfo.estimatedTotal,
+    enumeratedStates: universe.length,
+    universeTruncated: universeInfo.truncated,
+    maxStates: options.maxStates,
+    projectedOutVariables: universeInfo.projectedOutVariables,
     deadlockCount: deadlocks.size,
     invariantFailureCount: invariantFailures.size,
     propertySummaries,
     actionNames: spec.actions.map((action) => action.name),
     includeAllStates: options.includeAllStates,
-    compact: nodes.length > 20 || edges.length > 50,
+    compact: options.forceCompact || nodes.length > 20 || edges.length > 50,
   };
 }
 
-function enumerateStates(spec) {
+function enumerateStates(spec, options) {
+  const relevantVariables = collectRelevantVariables(spec);
   const domains = spec.variables.map((variable) => {
     if (!(variable in spec.domains)) {
       fail(`Missing domain for variable: ${variable}`);
@@ -229,22 +249,69 @@ function enumerateStates(spec) {
     return Array.from(setValues.values());
   });
 
+  if (domains.some((domain) => domain.length === 0)) {
+    return {
+      states: [],
+      estimatedTotal: 0,
+      truncated: false,
+      projectedOutVariables: spec.variables.filter((variable) => !relevantVariables.has(variable)),
+    };
+  }
+
+  const enumeratedVariables = spec.variables.filter((variable) => relevantVariables.has(variable));
+  const projectedOutVariables = spec.variables.filter((variable) => !relevantVariables.has(variable));
+  const domainMap = new Map(spec.variables.map((variable, index) => [variable, domains[index]]));
+  const fixedValues = new Map(projectedOutVariables.map((variable) => [variable, domainMap.get(variable)[0]]));
+
   const states = [];
-  buildStates(spec.variables, domains, 0, {}, states);
-  return states;
+  const enumeratedDomains = enumeratedVariables.map((variable) => domainMap.get(variable));
+  const estimatedTotal = estimateUniverseSize(enumeratedDomains);
+  const limit = options.maxStates;
+  const completed = buildStates(spec.variables, enumeratedVariables, enumeratedDomains, 0, {}, fixedValues, states, limit);
+  return {
+    states,
+    estimatedTotal,
+    truncated: !completed,
+    projectedOutVariables,
+  };
 }
 
-function buildStates(variables, domains, index, partial, out) {
-  if (index === variables.length) {
-    out.push({ ...partial });
-    return;
+function buildStates(allVariables, enumeratedVariables, domains, index, partial, fixedValues, out, limit) {
+  if (limit !== null && out.length >= limit) {
+    return false;
+  }
+  if (index === enumeratedVariables.length) {
+    const state = {};
+    for (const variable of allVariables) {
+      if (Object.prototype.hasOwnProperty.call(partial, variable)) {
+        state[variable] = partial[variable];
+      } else {
+        state[variable] = fixedValues.get(variable);
+      }
+    }
+    out.push(state);
+    return limit === null || out.length < limit;
   }
 
-  const variable = variables[index];
+  const variable = enumeratedVariables[index];
   for (const value of domains[index]) {
     partial[variable] = value;
-    buildStates(variables, domains, index + 1, partial, out);
+    if (!buildStates(allVariables, enumeratedVariables, domains, index + 1, partial, fixedValues, out, limit)) {
+      return false;
+    }
   }
+  return true;
+}
+
+function estimateUniverseSize(domains) {
+  let total = 1;
+  for (const domain of domains) {
+    total *= domain.length;
+    if (!Number.isFinite(total) || total > Number.MAX_SAFE_INTEGER) {
+      return Infinity;
+    }
+  }
+  return total;
 }
 
 function evaluateProperty(spec, property, universe, reachable, actionMap) {
@@ -439,13 +506,13 @@ function renderDot(graph, options) {
   lines.push(`  edge [fontname="Helvetica", fontsize=${graph.compact ? 9 : 10}, color="#6d597a"];`);
   lines.push('  "__start__" [shape=point, width=0.2, color="#2a9d8f", fillcolor="#2a9d8f", label=""];');
 
-  if (graph.compact) {
+  if (graph.compact && !options.noLegend) {
     lines.push(`  "__legend__" [shape=note, fontname="Helvetica", fontsize=10, color="#6c757d", fillcolor="#f8f9fa", label=${escapeAttr(buildLegendLabel(graph))}];`);
   }
 
   for (const node of graph.nodes) {
     const attrs = [];
-    attrs.push(`label=${escapeAttr(buildNodeLabel(graph.variables, node.state, node))}`);
+    attrs.push(`label=${escapeAttr(buildNodeLabel(graph.variables, node.state, node, graph.compact))}`);
     attrs.push(`tooltip=${escapeAttr(node.key)}`);
 
     if (!node.reachable) {
@@ -473,21 +540,31 @@ function renderDot(graph, options) {
     lines.push(`  "__start__" -> ${quoteId(nodeId(key))} [color="#2a9d8f", penwidth=2];`);
   }
 
-  if (graph.compact && graph.nodes.length > 0) {
+  if (graph.compact && !options.noLegend && graph.nodes.length > 0) {
     lines.push(`  "__legend__" -> ${quoteId(graph.nodes[0].id)} [style="invis"];`);
   }
 
   for (const edge of graph.edges) {
     const labels = Array.from(edge.labels).sort();
-    lines.push(`  ${quoteId(nodeId(edge.from))} -> ${quoteId(nodeId(edge.to))} [label=${escapeAttr(labels.join(" | "))}];`);
+    const renderedLabels = graph.compact
+      ? labels.map(abbreviateActionLabel)
+      : labels;
+    lines.push(`  ${quoteId(nodeId(edge.from))} -> ${quoteId(nodeId(edge.to))} [label=${escapeAttr(renderedLabels.join(" | "))}];`);
   }
 
   lines.push("}");
   return `${lines.join("\n")}\n`;
 }
 
-function buildNodeLabel(variables, state, node) {
-  const lines = [node.displayId, ...variables.map((variable) => `${variable} = ${valueText(state[variable])}`)];
+function buildNodeLabel(variables, state, node, compact = false) {
+  const lines = [node.displayId];
+
+  if (compact) {
+    lines.push(...buildCompactStateLines(variables, state));
+  } else {
+    lines.push(...variables.map((variable) => `${variable} = ${valueText(state[variable])}`));
+  }
+
   if (node.initial) lines.push("init");
   if (node.deadlock) lines.push("deadlock");
   if (node.invariantFailures.length > 0) {
@@ -497,14 +574,69 @@ function buildNodeLabel(variables, state, node) {
   return lines.join("\n");
 }
 
+function buildCompactStateLines(variables, state) {
+  const grouped = new Map();
+
+  for (const variable of variables) {
+    const parts = variable.split("_");
+    if (parts.length >= 2) {
+      const objectName = parts[0];
+      const fieldName = parts.slice(1).join("_");
+      if (!grouped.has(objectName)) {
+        grouped.set(objectName, []);
+      }
+      grouped.get(objectName).push(`${abbreviateFieldName(fieldName)}=${valueText(state[variable])}`);
+    } else {
+      grouped.set(variable, [`=${valueText(state[variable])}`]);
+    }
+  }
+
+  return Array.from(grouped.entries()).map(([objectName, entries]) => `${objectName}: ${entries.join(", ")}`);
+}
+
+function abbreviateFieldName(fieldName) {
+  return fieldName
+    .split("_")
+    .map((part) => part.length <= 4 ? part : part.slice(0, 4))
+    .join(".");
+}
+
+function abbreviateActionLabel(label) {
+  const known = new Map([
+    ["enrichment-complete", "enrich"],
+    ["start-trading", "start"],
+    ["pause-trading", "pause"],
+    ["resume-trading", "resume"],
+    ["disable-instrument", "disable"],
+  ]);
+
+  if (known.has(label)) {
+    return known.get(label);
+  }
+
+  return label
+    .split(/[-_]/)
+    .map((part) => part.length <= 6 ? part : part.slice(0, 6))
+    .join("-");
+}
+
 function buildGraphLabel(graph) {
   const summary = [
     `${graph.name}`,
-    `reachable ${graph.reachableCount}/${graph.totalStates} states`,
+    graph.universeTruncated
+      ? `reachable ${graph.reachableCount}/${graph.enumeratedStates} enumerated states`
+      : `reachable ${graph.reachableCount}/${graph.totalStates} states`,
     `${graph.edges.length} visible transitions`,
     `${graph.deadlockCount} deadlocks`,
     `${graph.invariantFailureCount} invariant-bad states`,
   ];
+
+  if (graph.universeTruncated) {
+    summary.push(`truncated to first ${graph.enumeratedStates} of ${formatCount(graph.totalStates)} states`);
+  }
+  if (graph.projectedOutVariables.length > 0) {
+    summary.push(`projected out ${graph.projectedOutVariables.length} frame-only vars`);
+  }
 
   if (graph.compact) {
     summary.push("see legend for actions and properties");
@@ -527,6 +659,12 @@ function buildLegendLabel(graph) {
   const lines = ["Legend"];
   lines.push("green = initial, amber = deadlock, red = invariant violation");
   lines.push("each node label starts with a short state id");
+  if (graph.universeTruncated) {
+    lines.push(`truncated: first ${graph.enumeratedStates} of ${formatCount(graph.totalStates)} states`);
+  }
+  if (graph.projectedOutVariables.length > 0) {
+    lines.push(`projected out: ${graph.projectedOutVariables.join(", ")}`);
+  }
 
   if (graph.actionNames.length === 0) {
     lines.push("actions: none");
@@ -543,6 +681,108 @@ function buildLegendLabel(graph) {
   }
 
   return lines.join("\n");
+}
+
+function formatCount(value) {
+  return value === Infinity ? "Infinity" : String(value);
+}
+
+function collectRelevantVariables(spec) {
+  const declared = new Set(spec.variables);
+  const relevant = new Set();
+
+  collectRelevantVariablesFromExpr(spec.init, declared, relevant);
+  collectRelevantVariablesFromExpr(spec.next, declared, relevant);
+  for (const action of spec.actions) {
+    collectRelevantVariablesFromExpr(action.body, declared, relevant);
+  }
+  for (const invariant of spec.invariants) {
+    collectRelevantVariablesFromExpr(invariant.body, declared, relevant);
+  }
+  for (const property of spec.properties) {
+    collectRelevantVariablesFromExpr(property.body, declared, relevant);
+  }
+
+  return relevant;
+}
+
+function collectRelevantVariablesFromExpr(expr, declared, relevant) {
+  if (expr === null || typeof expr !== "object" || Array.isArray(expr)) {
+    return;
+  }
+  if ("lit" in expr) {
+    return;
+  }
+  if ("var" in expr) {
+    if (declared.has(expr.var)) {
+      relevant.add(expr.var);
+    }
+    return;
+  }
+  if ("next" in expr) {
+    if (declared.has(expr.next)) {
+      relevant.add(expr.next);
+    }
+    return;
+  }
+  if ("actionRef" in expr) {
+    return;
+  }
+  if ("set" in expr) {
+    for (const element of expr.set) {
+      collectRelevantVariablesFromExpr(element, declared, relevant);
+    }
+    return;
+  }
+  if ("forall" in expr || "exists" in expr) {
+    const quantifier = "forall" in expr ? "forall" : "exists";
+    const payload = expr[quantifier];
+    collectRelevantVariablesFromExpr(payload.in, declared, relevant);
+    collectRelevantVariablesFromExpr(payload.body, declared, relevant);
+    return;
+  }
+  if ("not" in expr) {
+    collectRelevantVariablesFromExpr(expr.not, declared, relevant);
+    return;
+  }
+  if ("eventually" in expr) {
+    collectRelevantVariablesFromExpr(expr.eventually, declared, relevant);
+    return;
+  }
+  for (const op of ["and", "or", "+", "-", "*", "/"]) {
+    if (op in expr) {
+      for (const arg of expr[op]) {
+        collectRelevantVariablesFromExpr(arg, declared, relevant);
+      }
+      return;
+    }
+  }
+  for (const op of ["=", "!=", "<", "<=", ">", ">=", "in", "implies"]) {
+    if (op in expr) {
+      if (op === "=" && isUnchangedEquality(expr[op])) {
+        return;
+      }
+      collectRelevantVariablesFromExpr(expr[op][0], declared, relevant);
+      collectRelevantVariablesFromExpr(expr[op][1], declared, relevant);
+      return;
+    }
+  }
+}
+
+function isUnchangedEquality(args) {
+  if (!Array.isArray(args) || args.length !== 2) {
+    return false;
+  }
+  return isMatchingNowNextPair(args[0], args[1]) || isMatchingNowNextPair(args[1], args[0]);
+}
+
+function isMatchingNowNextPair(left, right) {
+  return left && right
+    && typeof left === "object"
+    && typeof right === "object"
+    && "next" in left
+    && "var" in right
+    && left.next === right.var;
 }
 
 function formatExpr(expr) {

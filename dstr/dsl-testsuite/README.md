@@ -12,7 +12,7 @@ JSON specs consumed by the existing Java checker.
   (init (= light off))
   (action turn-on (= light off) (= light+ on))
   (action turn-off (= light on) (= light+ off))
-  (next (or @turn-on @turn-off))
+  (next (or $turn-on $turn-off))
   (invariant type-ok (in light (set off on)))
   (property eventually-on (eventually (= light on))))
 ```
@@ -21,7 +21,8 @@ JSON specs consumed by the existing Java checker.
 
 - plain declared variable names refer to current-state variables
 - symbols ending in `+` refer to next-state variables, for example `light+`
-- symbols beginning with `@` refer to actions in `next`, for example `@turn-on`
+- symbols beginning with `$` refer to actions in `next`, for example
+  `$turn-on`; the older `@turn-on` form is still accepted
 - `(expand macro-name arg...)` expands a predefined or top-level `defmacro`
   before parsing continues
 - `(%macro-name arg...)` is shorthand for `(expand macro-name arg...)`
@@ -38,7 +39,9 @@ JSON specs consumed by the existing Java checker.
 - `(defun name (args...) ...)`
 - `(load "relative-or-absolute-path.lisp")`
 - `(vars ...)`
+- `(vars* separator (group1 ...) * (group2 ...))`
 - `(domain var value...)`
+- `(domain* glob-pattern value...)`
 - `(init expr...)`
 - `(action name expr...)`
 - `(next expr...)`
@@ -80,9 +83,33 @@ Predefined helper macros include:
 - `(!unchanged x y z)` which expands to sibling clauses ` (= x+ x)`, ` (= y+ y)`,
   ` (= z+ z)` in the surrounding body
 
+The front end now also supports a few readability-oriented surface shorthands
+without requiring user macros:
+
+- `(vars* _ (p c1 c2) * (market_status mission_state))`
+  expands to variables such as `p_market_status`, `p_mission_state`,
+  `c1_market_status`, and so on
+- `(domain* *_mission_version 1 2 3 4)` applies one domain declaration to
+  every declared variable whose name matches the glob pattern
+- `(equals x y)` is a synonym for `(= x y)`
+- `(assign value to x)` means `(= x+ value)`
+- `(set x as value)` is the same next-state assignment sugar as
+  `(assign value to x)`
+- `(if condition then consequence)` means `(and condition consequence)`
+- `(if ((equals x open) (equals y open)) then ((assign closed to x) ...))`
+  treats each branch body as an implicit conjunction when it is a list of
+  sibling expressions
+- `(unchanged* *_status *_version)` expands to conjunctions of the form
+  `(= var+ var)` for every matching declared variable
+- `(alternate-scenarios ...)` is a synonym for `(or ...)`
+
 Files may also contain top-level `defmacro` forms before the `system` form. See
 `cas-2proc-race.dstr` for an example of `!...` splicing shorthand and a helper
-macro library.
+macro library, and `trade-cancellation-parent-children.dstr` for a larger
+example that uses the new product, glob, and transition-oriented shorthands.
+The financial lifecycle samples `instrument-lifecycle.dstr` and
+`instrument-lifecycle-small.dstr` show the same shorthands in a market-data /
+trading-status setting.
 
 Top-level `defun` is also supported so that macros can call helper functions at
 expansion time, and top-level `load` is supported for importing macro libraries.

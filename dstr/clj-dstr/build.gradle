@@ -1,0 +1,29 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'org.dstr'
+version = '0.1.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+dependencies {
+    implementation 'org.clojure:clojure:1.12.0'
+}
+
+sourceSets {
+    main {
+        resources {
+            srcDir 'src/main/clojure'
+        }
+    }
+}
+
+application {
+    mainClass = 'org.dstr.clj.CdstrShell'
+}

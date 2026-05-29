@@ -9,7 +9,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.dstr.ast.BinaryExpr;
 import org.dstr.ast.Expr;
+import org.dstr.ast.LiteralExpr;
+import org.dstr.ast.NAryExpr;
+import org.dstr.ast.QuantifiedExpr;
+import org.dstr.ast.SetExpr;
+import org.dstr.ast.UnaryExpr;
+import org.dstr.ast.VarExpr;
 import org.dstr.eval.EvaluationContext;
 import org.dstr.eval.ExprEvaluator;
 import org.dstr.model.CheckResult;
@@ -85,11 +92,31 @@ public final class ExplicitStateChecker {
 
     public List<State> enumerateStates(Spec spec) {
         List<String> vars = spec.variables();
-        List<List<Object>> domains = vars.stream()
-                .map(v -> materializeDomain(spec, v))
+        Map<String, List<Object>> domainValues = new LinkedHashMap<>();
+        for (String variable : vars) {
+            List<Object> values = materializeDomain(spec, variable);
+            if (values.isEmpty()) {
+                return List.of();
+            }
+            domainValues.put(variable, values);
+        }
+
+        Set<String> relevantVariables = collectRelevantVariables(spec);
+        List<String> enumeratedVars = vars.stream()
+                .filter(relevantVariables::contains)
+                .toList();
+        Map<String, Object> fixedValues = new LinkedHashMap<>();
+        for (String variable : vars) {
+            if (!relevantVariables.contains(variable)) {
+                fixedValues.put(variable, domainValues.get(variable).get(0));
+            }
+        }
+
+        List<List<Object>> domains = enumeratedVars.stream()
+                .map(domainValues::get)
                 .toList();
         List<State> results = new ArrayList<>();
-        buildStates(vars, domains, 0, new LinkedHashMap<>(), results);
+        buildStates(spec, enumeratedVars, domains, 0, new LinkedHashMap<>(), fixedValues, results);
         return results;
     }
 
@@ -105,18 +132,102 @@ public final class ExplicitStateChecker {
         return set.stream().collect(Collectors.toList());
     }
 
-    private void buildStates(List<String> vars, List<List<Object>> domains, int index,
-                             Map<String, Object> partial, List<State> out) {
+    private void buildStates(Spec spec, List<String> vars, List<List<Object>> domains, int index,
+                             Map<String, Object> partial, Map<String, Object> fixedValues, List<State> out) {
         if (index == vars.size()) {
-            out.add(new State(partial));
+            Map<String, Object> fullState = new LinkedHashMap<>();
+            for (String variable : spec.variables()) {
+                if (partial.containsKey(variable)) {
+                    fullState.put(variable, partial.get(variable));
+                } else {
+                    fullState.put(variable, fixedValues.get(variable));
+                }
+            }
+            out.add(new State(fullState));
             return;
         }
         String var = vars.get(index);
         for (Object value : domains.get(index)) {
             Map<String, Object> nextPartial = new LinkedHashMap<>(partial);
             nextPartial.put(var, value);
-            buildStates(vars, domains, index + 1, nextPartial, out);
+            buildStates(spec, vars, domains, index + 1, nextPartial, fixedValues, out);
         }
+    }
+
+    private Set<String> collectRelevantVariables(Spec spec) {
+        Set<String> declaredVariables = new LinkedHashSet<>(spec.variables());
+        Set<String> relevantVariables = new LinkedHashSet<>();
+
+        collectRelevantVariables(spec.init(), declaredVariables, relevantVariables);
+        collectRelevantVariables(spec.next(), declaredVariables, relevantVariables);
+        for (NamedExpr action : spec.actions()) {
+            collectRelevantVariables(action.body(), declaredVariables, relevantVariables);
+        }
+        for (NamedExpr invariant : spec.invariants()) {
+            collectRelevantVariables(invariant.body(), declaredVariables, relevantVariables);
+        }
+        for (NamedExpr property : spec.properties()) {
+            collectRelevantVariables(property.body(), declaredVariables, relevantVariables);
+        }
+
+        return relevantVariables;
+    }
+
+    private void collectRelevantVariables(Expr expr, Set<String> declaredVariables, Set<String> relevantVariables) {
+        if (expr instanceof LiteralExpr) {
+            return;
+        }
+        if (expr instanceof VarExpr varExpr) {
+            if (declaredVariables.contains(varExpr.name())) {
+                relevantVariables.add(varExpr.name());
+            }
+            return;
+        }
+        if (expr instanceof UnaryExpr unaryExpr) {
+            collectRelevantVariables(unaryExpr.arg(), declaredVariables, relevantVariables);
+            return;
+        }
+        if (expr instanceof BinaryExpr binaryExpr) {
+            if (isUnchangedClause(binaryExpr)) {
+                return;
+            }
+            collectRelevantVariables(binaryExpr.left(), declaredVariables, relevantVariables);
+            collectRelevantVariables(binaryExpr.right(), declaredVariables, relevantVariables);
+            return;
+        }
+        if (expr instanceof NAryExpr nAryExpr) {
+            for (Expr arg : nAryExpr.args()) {
+                collectRelevantVariables(arg, declaredVariables, relevantVariables);
+            }
+            return;
+        }
+        if (expr instanceof SetExpr setExpr) {
+            for (Expr element : setExpr.elements()) {
+                collectRelevantVariables(element, declaredVariables, relevantVariables);
+            }
+            return;
+        }
+        if (expr instanceof QuantifiedExpr quantifiedExpr) {
+            collectRelevantVariables(quantifiedExpr.domain(), declaredVariables, relevantVariables);
+            collectRelevantVariables(quantifiedExpr.body(), declaredVariables, relevantVariables);
+        }
+    }
+
+    private boolean isUnchangedClause(BinaryExpr binaryExpr) {
+        if (!"=".equals(binaryExpr.op())) {
+            return false;
+        }
+        return isMatchingNowNextPair(binaryExpr.left(), binaryExpr.right())
+                || isMatchingNowNextPair(binaryExpr.right(), binaryExpr.left());
+    }
+
+    private boolean isMatchingNowNextPair(Expr left, Expr right) {
+        if (!(left instanceof VarExpr leftVar) || !(right instanceof VarExpr rightVar)) {
+            return false;
+        }
+        return leftVar.phase() == VarExpr.Phase.NEXT
+                && rightVar.phase() == VarExpr.Phase.NOW
+                && leftVar.name().equals(rightVar.name());
     }
 
     private List<State> buildPath(State target, Map<State, State> predecessor) {

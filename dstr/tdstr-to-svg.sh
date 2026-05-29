@@ -3,7 +3,7 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-Usage: dstr-to-svg.sh input.dstr|input.json [spec-to-dot options]
+Usage: tdstr-to-svg.sh input.tdstr|input.json [spec-to-dot options]
 Produces input.json, input.dot, and input.svg next to the source file, or reuses an existing .json input directly.
 Extra arguments are passed directly to spec-to-dot.js.
 Useful option: --max-states N to truncate very large universes.
@@ -31,7 +31,7 @@ if [[ ! -f "$input" ]]; then
 fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-compiler="$script_dir/scripts/dstr-dsl-compiler.lisp"
+compiler="$script_dir/scripts/tdstr-dsl-compiler.tcl"
 spec_to_dot="$script_dir/scripts/spec-to-dot.js"
 
 if [[ ! -f "$compiler" ]]; then
@@ -51,7 +51,7 @@ dot_out="$input_dir/$input_stem.dot"
 svg_out="$input_dir/$input_stem.svg"
 
 if [[ "${input##*.}" != "json" ]]; then
-  sbcl --script "$compiler" "$input" "$json_out"
+  tclsh "$compiler" "$input" "$json_out"
 else
   json_out="$input"
 fi

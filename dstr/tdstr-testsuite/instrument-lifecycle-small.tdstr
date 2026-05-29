@@ -1,0 +1,108 @@
+# Reduced sibling of instrument-lifecycle intended for graph rendering.
+
+system instrument-lifecycle-small {
+    vars* _ {master venue1} * {lifecycle trading_status refdata_version}
+
+    domain* *_lifecycle ENRICHING READY ACTIVE HALTED DISABLED
+    domain* *_trading_status NOT_TRADING TRADING PAUSED DISABLED
+    domain* *_refdata_version 1
+
+    init \
+        {equals master_lifecycle ENRICHING} {equals venue1_lifecycle ENRICHING} \
+        {equals master_trading_status NOT_TRADING} {equals venue1_trading_status NOT_TRADING} \
+        {equals master_refdata_version 1} {equals venue1_refdata_version 1}
+
+    action enrichment-complete \
+        {unchanged* *_refdata_version} \
+        {
+            if
+            {
+                {equals master_lifecycle ENRICHING}
+                {equals venue1_lifecycle ENRICHING}
+            }
+            then
+            {
+                {assign READY to master_lifecycle}
+                {assign READY to venue1_lifecycle}
+                {assign NOT_TRADING to master_trading_status}
+                {assign NOT_TRADING to venue1_trading_status}
+            }
+        }
+
+    action start-trading \
+        {unchanged* *_refdata_version} \
+        {
+            if
+            {
+                {equals master_lifecycle READY}
+                {equals venue1_lifecycle READY}
+            }
+            then
+            {
+                {assign ACTIVE to master_lifecycle}
+                {assign ACTIVE to venue1_lifecycle}
+                {assign TRADING to master_trading_status}
+                {assign TRADING to venue1_trading_status}
+            }
+        }
+
+    action pause-trading \
+        {unchanged* *_refdata_version} \
+        {
+            if
+            {
+                {equals master_lifecycle ACTIVE}
+                {equals venue1_lifecycle ACTIVE}
+            }
+            then
+            {
+                {assign HALTED to master_lifecycle}
+                {assign HALTED to venue1_lifecycle}
+                {assign PAUSED to master_trading_status}
+                {assign PAUSED to venue1_trading_status}
+            }
+        }
+
+    action resume-trading \
+        {unchanged* *_refdata_version} \
+        {
+            if
+            {
+                {equals master_lifecycle HALTED}
+                {equals venue1_lifecycle HALTED}
+            }
+            then
+            {
+                {assign ACTIVE to master_lifecycle}
+                {assign ACTIVE to venue1_lifecycle}
+                {assign TRADING to master_trading_status}
+                {assign TRADING to venue1_trading_status}
+            }
+        }
+
+    action disable-instrument \
+        {unchanged* *_refdata_version} \
+        {
+            if
+            {
+                {not {equals master_lifecycle DISABLED}}
+                {not {equals venue1_lifecycle DISABLED}}
+            }
+            then
+            {
+                {assign DISABLED to master_lifecycle}
+                {assign DISABLED to venue1_lifecycle}
+                {assign DISABLED to master_trading_status}
+                {assign DISABLED to venue1_trading_status}
+            }
+        }
+
+    next {
+        alternate-scenarios
+        @enrichment-complete
+        @start-trading
+        @pause-trading
+        @resume-trading
+        @disable-instrument
+    }
+}

@@ -1,0 +1,29 @@
+digraph "cas-2proc-race" {
+  graph [rankdir="TB", labelloc="t", label="cas-2proc-race\nreachable 10/48 states\n12 visible transitions\n2 deadlocks\n0 invariant-bad states\nactions: p1-start, p1-cas-success, p1-cas-fail, p2-start, p2-cas-success, p2-cas-fail\nproperties: p1-can-win=true, p2-can-win=true, p1-can-lose=true, p2-can-lose=true", fontname="Helvetica", overlap="false", splines="true", nodesep="0.3", ranksep="0.6"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, margin="0.18,0.12", color="#355070", fillcolor="#f8f9fb"];
+  edge [fontname="Helvetica", fontsize=10, color="#6d597a"];
+  "__start__" [shape=point, width=0.2, color="#2a9d8f", fillcolor="#2a9d8f", label=""];
+  "n_5b5b2270317063222c226130225d2c5b2270327063222c226130225d2c5b226d656d222c305d5d" [label="s0\np1pc = \"a0\"\np2pc = \"a0\"\nmem = 0\ninit", tooltip="[[\"p1pc\",\"a0\"],[\"p2pc\",\"a0\"],[\"mem\",0]]", fillcolor="#d8f3dc", color="#2d6a4f", penwidth=2];
+  "n_5b5b2270317063222c226130225d2c5b2270327063222c22747279225d2c5b226d656d222c305d5d" [label="s1\np1pc = \"a0\"\np2pc = \"try\"\nmem = 0", tooltip="[[\"p1pc\",\"a0\"],[\"p2pc\",\"try\"],[\"mem\",0]]"];
+  "n_5b5b2270317063222c226130225d2c5b2270327063222c22776f6e225d2c5b226d656d222c325d5d" [label="s2\np1pc = \"a0\"\np2pc = \"won\"\nmem = 2", tooltip="[[\"p1pc\",\"a0\"],[\"p2pc\",\"won\"],[\"mem\",2]]"];
+  "n_5b5b2270317063222c22747279225d2c5b2270327063222c226130225d2c5b226d656d222c305d5d" [label="s3\np1pc = \"try\"\np2pc = \"a0\"\nmem = 0", tooltip="[[\"p1pc\",\"try\"],[\"p2pc\",\"a0\"],[\"mem\",0]]"];
+  "n_5b5b2270317063222c22747279225d2c5b2270327063222c22747279225d2c5b226d656d222c305d5d" [label="s4\np1pc = \"try\"\np2pc = \"try\"\nmem = 0", tooltip="[[\"p1pc\",\"try\"],[\"p2pc\",\"try\"],[\"mem\",0]]"];
+  "n_5b5b2270317063222c22747279225d2c5b2270327063222c22776f6e225d2c5b226d656d222c325d5d" [label="s5\np1pc = \"try\"\np2pc = \"won\"\nmem = 2", tooltip="[[\"p1pc\",\"try\"],[\"p2pc\",\"won\"],[\"mem\",2]]"];
+  "n_5b5b2270317063222c22776f6e225d2c5b2270327063222c226130225d2c5b226d656d222c315d5d" [label="s6\np1pc = \"won\"\np2pc = \"a0\"\nmem = 1", tooltip="[[\"p1pc\",\"won\"],[\"p2pc\",\"a0\"],[\"mem\",1]]"];
+  "n_5b5b2270317063222c22776f6e225d2c5b2270327063222c22747279225d2c5b226d656d222c315d5d" [label="s7\np1pc = \"won\"\np2pc = \"try\"\nmem = 1", tooltip="[[\"p1pc\",\"won\"],[\"p2pc\",\"try\"],[\"mem\",1]]"];
+  "n_5b5b2270317063222c22776f6e225d2c5b2270327063222c226c6f7374225d2c5b226d656d222c315d5d" [label="s8\np1pc = \"won\"\np2pc = \"lost\"\nmem = 1\ndeadlock", tooltip="[[\"p1pc\",\"won\"],[\"p2pc\",\"lost\"],[\"mem\",1]]", fillcolor="#fff3bf", color="#e67700", penwidth=2];
+  "n_5b5b2270317063222c226c6f7374225d2c5b2270327063222c22776f6e225d2c5b226d656d222c325d5d" [label="s9\np1pc = \"lost\"\np2pc = \"won\"\nmem = 2\ndeadlock", tooltip="[[\"p1pc\",\"lost\"],[\"p2pc\",\"won\"],[\"mem\",2]]", fillcolor="#fff3bf", color="#e67700", penwidth=2];
+  "__start__" -> "n_5b5b2270317063222c226130225d2c5b2270327063222c226130225d2c5b226d656d222c305d5d" [color="#2a9d8f", penwidth=2];
+  "n_5b5b2270317063222c226130225d2c5b2270327063222c226130225d2c5b226d656d222c305d5d" -> "n_5b5b2270317063222c226130225d2c5b2270327063222c22747279225d2c5b226d656d222c305d5d" [label="p2-start"];
+  "n_5b5b2270317063222c226130225d2c5b2270327063222c226130225d2c5b226d656d222c305d5d" -> "n_5b5b2270317063222c22747279225d2c5b2270327063222c226130225d2c5b226d656d222c305d5d" [label="p1-start"];
+  "n_5b5b2270317063222c226130225d2c5b2270327063222c22747279225d2c5b226d656d222c305d5d" -> "n_5b5b2270317063222c226130225d2c5b2270327063222c22776f6e225d2c5b226d656d222c325d5d" [label="p2-cas-success"];
+  "n_5b5b2270317063222c226130225d2c5b2270327063222c22747279225d2c5b226d656d222c305d5d" -> "n_5b5b2270317063222c22747279225d2c5b2270327063222c22747279225d2c5b226d656d222c305d5d" [label="p1-start"];
+  "n_5b5b2270317063222c22747279225d2c5b2270327063222c226130225d2c5b226d656d222c305d5d" -> "n_5b5b2270317063222c22747279225d2c5b2270327063222c22747279225d2c5b226d656d222c305d5d" [label="p2-start"];
+  "n_5b5b2270317063222c22747279225d2c5b2270327063222c226130225d2c5b226d656d222c305d5d" -> "n_5b5b2270317063222c22776f6e225d2c5b2270327063222c226130225d2c5b226d656d222c315d5d" [label="p1-cas-success"];
+  "n_5b5b2270317063222c226130225d2c5b2270327063222c22776f6e225d2c5b226d656d222c325d5d" -> "n_5b5b2270317063222c22747279225d2c5b2270327063222c22776f6e225d2c5b226d656d222c325d5d" [label="p1-start"];
+  "n_5b5b2270317063222c22747279225d2c5b2270327063222c22747279225d2c5b226d656d222c305d5d" -> "n_5b5b2270317063222c22747279225d2c5b2270327063222c22776f6e225d2c5b226d656d222c325d5d" [label="p2-cas-success"];
+  "n_5b5b2270317063222c22747279225d2c5b2270327063222c22747279225d2c5b226d656d222c305d5d" -> "n_5b5b2270317063222c22776f6e225d2c5b2270327063222c22747279225d2c5b226d656d222c315d5d" [label="p1-cas-success"];
+  "n_5b5b2270317063222c22776f6e225d2c5b2270327063222c226130225d2c5b226d656d222c315d5d" -> "n_5b5b2270317063222c22776f6e225d2c5b2270327063222c22747279225d2c5b226d656d222c315d5d" [label="p2-start"];
+  "n_5b5b2270317063222c22747279225d2c5b2270327063222c22776f6e225d2c5b226d656d222c325d5d" -> "n_5b5b2270317063222c226c6f7374225d2c5b2270327063222c22776f6e225d2c5b226d656d222c325d5d" [label="p1-cas-fail"];
+  "n_5b5b2270317063222c22776f6e225d2c5b2270327063222c22747279225d2c5b226d656d222c315d5d" -> "n_5b5b2270317063222c22776f6e225d2c5b2270327063222c226c6f7374225d2c5b226d656d222c315d5d" [label="p2-cas-fail"];
+}
