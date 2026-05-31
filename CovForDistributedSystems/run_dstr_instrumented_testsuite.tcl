@@ -4,13 +4,13 @@
 # dstr/test-suite/specs against an already running code-analytics server.
 #
 # Usage:
-#   tclsh run_dstr_instrumented_testsuite.tcl ?startId? ?appId? ?instanceId?
+#   tclsh run_dstr_instrumented_testsuite.tcl ?startId? ?appId? ?instanceId? ?specGlob?
 #
 # Top-level proc for easy reuse:
-#   run_dstr_specs_to_code_analytics ?startId? ?appId? ?instanceId?
+#   run_dstr_specs_to_code_analytics ?startId? ?appId? ?instanceId? ?specGlob?
 
 proc usage {} {
-    puts stderr "Usage: tclsh run_dstr_specs_to_code_analytics.tcl ?startId? ?appId? ?instanceId?"
+    puts stderr "Usage: tclsh run_dstr_instrumented_testsuite.tcl ?startId? ?appId? ?instanceId? ?specGlob?"
     exit 2
 }
 
@@ -60,8 +60,8 @@ proc select_artifact {pattern} {
     return [file normalize $newest]
 }
 
-proc spec_files {specDir} {
-    set specs [glob -nocomplain -directory $specDir *.json]
+proc spec_files {specDir {specGlob "*.json"}} {
+    set specs [glob -nocomplain -directory $specDir $specGlob]
     return [lsort $specs]
 }
 
@@ -88,7 +88,7 @@ proc instrument_dstr_jar {instrumentScript startId jarPath repoRoot} {
     return $output
 }
 
-proc run_dstr_specs_to_code_analytics {{startId 10001} {appId 410} {instanceId 1}} {
+proc run_dstr_specs_to_code_analytics {{startId 10001} {appId 410} {instanceId 1} {specGlob "*.json"}} {
     set repoRoot [file normalize [file dirname [info script]]]
     set dstrRoot [file normalize [file join $repoRoot .. .. dstr]]
     set specDir [file join $dstrRoot test-suite specs]
@@ -101,9 +101,9 @@ proc run_dstr_specs_to_code_analytics {{startId 10001} {appId 410} {instanceId 1
     set jacksonCore [resolve_required_file [file join $home .m2 repository com fasterxml jackson core jackson-core 2.21.0 jackson-core-2.21.0.jar] "jackson-core jar"]
     set jacksonAnnotations [resolve_required_file [file join $home .m2 repository com fasterxml jackson core jackson-annotations 2.21 jackson-annotations-2.21.jar] "jackson-annotations jar"]
 
-    set specs [spec_files $specDir]
+    set specs [spec_files $specDir $specGlob]
     if {[llength $specs] == 0} {
-        error "No JSON specs found in $specDir"
+        error "No JSON specs matched $specGlob in $specDir"
     }
 
     puts "Instrumenting dstr jar if needed: $dstrJar"
@@ -140,13 +140,14 @@ proc run_dstr_specs_to_code_analytics {{startId 10001} {appId 410} {instanceId 1
 }
 
 if {[info exists argv0] && [file normalize [info script]] eq [file normalize $argv0]} {
-    if {[llength $argv] > 3} {
+    if {[llength $argv] > 4} {
         usage
     }
 
     set startId 10001
     set appId 410
     set instanceId 1
+    set specGlob "*.json"
 
     if {[llength $argv] >= 1} {
         set startId [lindex $argv 0]
@@ -157,8 +158,11 @@ if {[info exists argv0] && [file normalize [info script]] eq [file normalize $ar
     if {[llength $argv] >= 3} {
         set instanceId [lindex $argv 2]
     }
+    if {[llength $argv] >= 4} {
+        set specGlob [lindex $argv 3]
+    }
 
-    if {[catch {run_dstr_specs_to_code_analytics $startId $appId $instanceId} err]} {
+    if {[catch {run_dstr_specs_to_code_analytics $startId $appId $instanceId $specGlob} err]} {
         puts stderr $err
         exit 1
     }
