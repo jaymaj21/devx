@@ -4941,6 +4941,50 @@ proc insertMedia {w} {
 }
 
 array set general_filenames {};
+
+proc bind_note_button_context_menu {btn fname {remaining_retries 20}} {
+    if {![winfo exists $btn]} {
+        if {$remaining_retries > 0} {
+            after 250 [list bind_note_button_context_menu $btn $fname [expr {$remaining_retries - 1}]]
+        }
+        return 0
+    }
+
+    bind $btn <ButtonPress-3> [list showNoteMenu $btn $fname]
+    bind $btn <ButtonPress-2> [list showNoteMenu $btn $fname]
+    catch {setTooltip $btn $fname}
+    return 1
+}
+
+proc heal_note_button_bindings {{verbose 1}} {
+    global general_filenames;
+
+    set healed 0
+    set pending 0
+    foreach btn [array names general_filenames] {
+        set fname $general_filenames($btn)
+        if {[winfo exists $btn]} {
+            set right_click [bind $btn <ButtonPress-3>]
+            set middle_click [bind $btn <ButtonPress-2>]
+            if {[string first showNoteMenu $right_click] < 0 ||
+                [string first showNoteMenu $middle_click] < 0} {
+                if {[bind_note_button_context_menu $btn $fname 0]} {
+                    incr healed
+                }
+            }
+        } else {
+            incr pending
+            after 250 [list bind_note_button_context_menu $btn $fname 20]
+        }
+    }
+
+    set msg "heal_note_button_bindings: healed $healed, pending $pending, total [array size general_filenames]"
+    if {$verbose} {
+        catch {addToStatus $msg}
+    }
+    return $msg
+}
+
 proc insertFileReference {w} {
     set types {
        {{All Files}      {.*}   }
@@ -4955,8 +4999,7 @@ proc insertFileReference {w} {
     set btn $w.[randString];
     $w window create $pos -create " button $btn  -text F -relief flat -command \{showFile \"$fname\"\} -background #ccd3f7 -activebackground #a78737 -padx 0 -pady 0  -font {Consolas 10}";
     after 1000 "setTooltip $btn \{$fname\}";
-    after 2000 "bind $btn <ButtonPress-3> \{showNoteMenu $btn \"$fname\"\}" 
-    after 2000 "bind $btn <ButtonPress-2> \{showNoteMenu $btn \"$fname\"\}" 
+    after 2000 [list bind_note_button_context_menu $btn $fname]
     set general_filenames($btn) $fname;
 }
 
@@ -4965,8 +5008,7 @@ proc add_file_at {pos fname} {
     set btn .t.[randString];
     .t window create $pos -create " button $btn  -text F -relief flat -command \{showFile \"$fname\"\} -background #ccd3f7 -activebackground #a78737 -padx 0 -pady 0  -font {Consolas 10}";
     after 1000 "catch \"setTooltip $btn \\\{$fname\\\}\"";
-    after 2000 "catch \"bind $btn <ButtonPress-3> \\\{showNoteMenu $btn \\\"$fname\\\"\\\}\"" 
-    after 2000 "catch \"bind $btn <ButtonPress-2> \\\{showNoteMenu $btn \\\"$fname\\\"\\\}\"" 
+    after 2000 [list bind_note_button_context_menu $btn $fname]
     set general_filenames($btn) $fname;
 }
 
@@ -4992,9 +5034,7 @@ proc actually_add_note {w args} {
 
     .t window create $pos -create " button $btn  -text N -relief flat -command \"showFile \\\"$fname\\\"\" -background #ccd3f7 -activebackground #a78737 -padx 0 -pady 0 -font {Consolas 10}" ;
 
-    after 2000 "catch \"bind $btn <ButtonPress-3> \\\{showNoteMenu $btn \\\"$fname\\\"\\\}\"" 
-    after 2000 "catch \"bind $btn <ButtonPress-2> \\\{showNoteMenu $btn \\\"$fname\\\"\\\}\"" 
-    after 2000 "catch \"setTooltip $btn \\\"$fname\\\"\"";
+    after 2000 [list bind_note_button_context_menu $btn $fname]
     set general_filenames($btn) $fname;
     return 1;
 }
@@ -5017,10 +5057,7 @@ proc create_note {pos txt} {
 
     .t window create $pos -create " button $btn  -text N -relief flat -command \"showFile \\\"$fname\\\"\" -background #ccd3f7 -activebackground #a78737 -padx 0 -pady 0 -font {Consolas 10} " ;
 
-
-    after 2000 "catch \"bind $btn <ButtonPress-3> \\\{showNoteMenu $btn \\\"$fname\\\"\\\}\""
-    after 2000 "catch \"bind $btn <ButtonPress-2> \\\{showNoteMenu $btn \\\"$fname\\\"\\\}\""
-    after 2000 "catch \"setTooltip $btn \\\"$fname\\\"\"";
+    after 2000 [list bind_note_button_context_menu $btn $fname]
     set general_filenames($btn) $fname;
     return "";
 }
@@ -6320,9 +6357,7 @@ proc insert_note_button {pos txt} {
 
     ####after 2000 "bind $btn <ButtonPress-3> \"showFileInExplorer \\\"$fname\\\"\"";
     
-    after 2000 "bind $btn <ButtonPress-3> \{showNoteMenu $btn \"$fname\"\}"
-    after 2000 "bind $btn <ButtonPress-2> \{showNoteMenu $btn \"$fname\"\}"
-    after 2000 "catch \"setTooltip $btn \\\"$fname\\\"\"";
+    after 2000 [list bind_note_button_context_menu $btn $fname]
     set general_filenames($btn) $fname;
     update;
     return $fname;
@@ -6351,9 +6386,7 @@ proc insertGeneralFile {w pos fname symb} {
     set btn $w.[randString];
     $w window create $pos -create " button $btn  -text $symb -relief flat -command \"showFile \\\"$fname\\\"\" -background #ccd3f7 -activebackground #a78737  -padx 0 -pady 0  -font {Consolas 10}";
 
-    after 2000 "bind $btn <ButtonPress-3> \{showNoteMenu $btn \"$fname\"\}"
-    after 2000 "bind $btn <ButtonPress-2> \{showNoteMenu $btn \"$fname\"\}"
-    after 2000 "catch \"setTooltip $btn \\\"$fname\\\"\"";
+    after 2000 [list bind_note_button_context_menu $btn $fname]
     set general_filenames($btn) $fname;
     return $btn;
 }
@@ -19535,6 +19568,7 @@ add_spectral_alias  selendl;
 add_spectral_alias  set_hl_font;
 add_spectral_alias  load_html;
 add_spectral_alias  create_note;
+add_spectral_alias  heal_note_button_bindings;
 add_spectral_alias  insert_text;
 add_spectral_alias  delete_notes_in_files;
 add_spectral_alias  save_html_files;

@@ -7733,7 +7733,8 @@ function _newSpectralSvgText(svg, localPt, textValue = 'text') {
   return textEl;
 }
 
-function add_svg_text() {
+function _insertSpectralSvgTextOnClick(textValue = 'text') {
+  const label = String(textValue);
   setStatus('Click a point inside an SVG to insert text (Esc to cancel)…');
 
   return startSvgPointPicker((svgId, pt) => {
@@ -7744,7 +7745,7 @@ function add_svg_text() {
     }
 
     const localPt = _clientPointToSvgPoint(svg, pt.x, pt.y);
-    const textEl = _newSpectralSvgText(svg, localPt, 'text');
+    const textEl = _newSpectralSvgText(svg, localPt, label);
 
     setStatus(`Inserted SVG text at (${localPt.x.toFixed(1)}, ${localPt.y.toFixed(1)}).`);
     return textEl;
@@ -7752,6 +7753,14 @@ function add_svg_text() {
     container: '#editor',
     onEscape: () => setStatus('Canceled SVG text insertion.')
   });
+}
+
+function add_svg_text() {
+  _insertSpectralSvgTextOnClick('text');
+}
+
+function svgtext(textValue = 'text') {
+  _insertSpectralSvgTextOnClick(textValue);
 }
 
 function delete_svg_text() {
