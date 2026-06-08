@@ -526,9 +526,57 @@ set default_highlight "";
 set modified 0;
 set default_background white;
 set default_foreground black;
+set suppress_modified_events 0;
+set suppress_clean_modified_events 0;
 catch { set default_font [registry get $regroot default_font]};
 #catch { set default_background [registry get $regroot default_background]};
 #catch { set default_foreground [registry get $regroot default_foreground]};
+
+proc beginProgrammaticTextChange {} {
+    global suppress_modified_events;
+    incr suppress_modified_events;
+}
+
+proc finishProgrammaticTextChange {{w .t} {clean 1}} {
+    global suppress_modified_events;
+    global suppress_clean_modified_events;
+    global modified;
+
+    if {$suppress_modified_events > 0} {
+        incr suppress_modified_events -1;
+    }
+    if {$suppress_modified_events == 0 && $clean} {
+        set suppress_clean_modified_events 1;
+        set modified 0;
+        catch {$w edit reset};
+        catch {$w edit modified 0};
+        updateModifiedStatus;
+        after idle {set suppress_clean_modified_events 0};
+    }
+}
+
+proc endProgrammaticTextChange {{w .t} {clean 1}} {
+    after idle [list finishProgrammaticTextChange $w $clean];
+}
+
+proc markTextClean {{w .t}} {
+    global suppress_clean_modified_events;
+    global modified;
+    set suppress_clean_modified_events 1;
+    set modified 0;
+    catch {$w edit reset};
+    catch {$w edit modified 0};
+    updateModifiedStatus;
+    after idle {set suppress_clean_modified_events 0};
+}
+
+proc markTextModified {{w .t}} {
+    global modified;
+    if {$w eq ".t" || $w eq ".t.t"} {
+        set modified 1;
+        updateModifiedStatus;
+    }
+}
 
 rename exit jaao;
 proc exit {} {
@@ -1441,6 +1489,16 @@ pack .bottomFrame.position -side right;
 proc checkForSave {} {
    global modified;
    global current_file;
+   global suppress_modified_events;
+   global suppress_clean_modified_events;
+
+   if {$suppress_modified_events == 0 && !$suppress_clean_modified_events} {
+       catch {
+           if {[.t edit modified]} {
+               set modified 1;
+           }
+       }
+   }
 
    if {$modified} {
        focus .
@@ -1451,8 +1509,7 @@ proc checkForSave {} {
        set result [tk_messageBox -title "Save Modifications?" -message $msg -icon question -type yesno];
        if {$result == yes} { 
          saveFile .t 
-         set modified 0;
-         updateModifiedStatus;
+         markTextClean .t;
        }
    } 
 }
@@ -2516,6 +2573,34 @@ proc negateColor {mycolor} {
     return $myresult;
  }
 
+ proc randomLightHighlightColor {} {
+    set h [expr {6.0 * rand()}]
+    set i [expr {int($h)}]
+    if {$i > 5} {
+        set i 5
+    }
+    set f [expr {$h - $i}]
+    set s [expr {0.32 + 0.23 * rand()}]
+    set v [expr {0.94 + 0.06 * rand()}]
+    set p [expr {$v * (1.0 - $s)}]
+    set q [expr {$v * (1.0 - $s * $f)}]
+    set t [expr {$v * (1.0 - $s * (1.0 - $f))}]
+
+    switch -- $i {
+        0 { set r $v; set g $t; set b $p }
+        1 { set r $q; set g $v; set b $p }
+        2 { set r $p; set g $v; set b $t }
+        3 { set r $p; set g $q; set b $v }
+        4 { set r $t; set g $p; set b $v }
+        default { set r $v; set g $p; set b $q }
+    }
+
+    return [format "#%02x%02x%02x" \
+        [expr {int(255 * $r)}] \
+        [expr {int(255 * $g)}] \
+        [expr {int(255 * $b)}]]
+ }
+
  proc colorCode {mycolor} {
    foreach {redcolor greencolor bluecolor} [winfo rgb . $mycolor] break
    set colormax [lindex [winfo rgb . white] 0]
@@ -2630,6 +2715,194 @@ proc negateAll {invert_tags} {
 
 }
 
+set popup_search_default_bg "#fff2a8";
+set popup_search_default_fg "#000000";
+
+proc add_popup_text_search_controls {w txtwidget} {
+    global default_font;
+    global popup_search_default_bg;
+    global popup_search_default_fg;
+    global popup_search_bg;
+    global popup_search_fg;
+    global popup_search_text;
+    global popup_search_last;
+    global popup_search_pos;
+    global popup_search_tag;
+    global popup_search_current_tag;
+    global popup_search_tags;
+
+    set bar $w.searchFrame;
+    frame $bar;
+
+    set popup_search_bg($txtwidget) $popup_search_default_bg;
+    set popup_search_fg($txtwidget) $popup_search_default_fg;
+    set popup_search_text($txtwidget) "";
+    set popup_search_last($txtwidget) "";
+    set popup_search_pos($txtwidget) -1;
+    set popup_search_tag($txtwidget) "";
+    set popup_search_current_tag($txtwidget) "";
+    set popup_search_tags($txtwidget) {};
+
+    label $bar.label -text "Find:" -font $default_font;
+    entry $bar.search -width 32 -textvariable popup_search_text($txtwidget) -font $default_font;
+    button $bar.bg -text "BG" -background $popup_search_bg($txtwidget) \
+        -command [list popup_search_choose_color $bar bg $txtwidget] -font $default_font;
+    button $bar.fg -text "FG" -foreground $popup_search_fg($txtwidget) \
+        -command [list popup_search_choose_color $bar fg $txtwidget] -font $default_font;
+    button $bar.clear -text "Clear" -command [list popup_search_clear $txtwidget] -font $default_font;
+
+    pack $bar.label -side left;
+    pack $bar.search -side left -fill x -expand yes;
+    pack $bar.bg -side left;
+    pack $bar.fg -side left;
+    pack $bar.clear -side left;
+    pack $bar -side top -fill x;
+
+    bind $bar.search <Return> [list popup_search_next $txtwidget]
+    bind $bar.search <KP_Enter> [list popup_search_next $txtwidget]
+
+    return $bar;
+}
+
+proc popup_search_choose_color {bar which txtwidget} {
+    global popup_search_bg;
+    global popup_search_fg;
+
+    if {$which == "bg"} {
+        set initial $popup_search_bg($txtwidget);
+        set title "Choose Search Background";
+    } else {
+        set initial $popup_search_fg($txtwidget);
+        set title "Choose Search Foreground";
+    }
+
+    set newColor [tk_chooseColor -initialcolor $initial -title $title];
+    if {$newColor == ""} {
+        return;
+    }
+
+    if {$which == "bg"} {
+        set popup_search_bg($txtwidget) $newColor;
+        $bar.bg configure -background $newColor;
+    } else {
+        set popup_search_fg($txtwidget) $newColor;
+        $bar.fg configure -foreground $newColor;
+    }
+
+    popup_search_rehighlight $txtwidget;
+}
+
+proc popup_search_clear {txtwidget} {
+    global popup_search_text;
+    global popup_search_last;
+    global popup_search_pos;
+    global popup_search_tag;
+    global popup_search_current_tag;
+    global popup_search_tags;
+
+    set popup_search_text($txtwidget) "";
+    set popup_search_last($txtwidget) "";
+    set popup_search_pos($txtwidget) -1;
+    foreach tag $popup_search_tags($txtwidget) {
+        catch {$txtwidget tag delete $tag};
+    }
+    set popup_search_tag($txtwidget) "";
+    set popup_search_current_tag($txtwidget) "";
+    set popup_search_tags($txtwidget) {};
+}
+
+proc popup_search_rehighlight {txtwidget} {
+    global popup_search_bg;
+    global popup_search_fg;
+    global popup_search_tag;
+    global popup_search_current_tag;
+
+    if {$popup_search_tag($txtwidget) == ""} {
+        popup_search_next $txtwidget;
+        return;
+    }
+
+    $txtwidget tag configure $popup_search_tag($txtwidget) \
+        -background $popup_search_bg($txtwidget) -foreground $popup_search_fg($txtwidget);
+    $txtwidget tag configure $popup_search_current_tag($txtwidget) \
+        -background $popup_search_bg($txtwidget) -foreground $popup_search_fg($txtwidget) -underline 1;
+}
+
+proc popup_search_next {txtwidget} {
+    global popup_search_text;
+    global popup_search_last;
+    global popup_search_pos;
+    global popup_search_bg;
+    global popup_search_fg;
+    global popup_search_tag;
+    global popup_search_current_tag;
+    global popup_search_tags;
+
+    if {![winfo exists $txtwidget]} {
+        return;
+    }
+
+    set needle $popup_search_text($txtwidget);
+    if {$needle == ""} {
+        popup_search_clear $txtwidget;
+        return;
+    }
+
+    set same_search [expr {$needle == $popup_search_last($txtwidget)}];
+    if {!$same_search} {
+        set popup_search_last($txtwidget) $needle;
+        set popup_search_pos($txtwidget) -1;
+        set popup_search_tag($txtwidget) "popup_search_hit_[randString]";
+        set popup_search_current_tag($txtwidget) "popup_search_current_[randString]";
+        lappend popup_search_tags($txtwidget) $popup_search_tag($txtwidget) $popup_search_current_tag($txtwidget);
+    }
+
+    if {$popup_search_tag($txtwidget) == ""} {
+        set popup_search_tag($txtwidget) "popup_search_hit_[randString]";
+        set popup_search_current_tag($txtwidget) "popup_search_current_[randString]";
+        lappend popup_search_tags($txtwidget) $popup_search_tag($txtwidget) $popup_search_current_tag($txtwidget);
+    }
+
+    set hit_tag $popup_search_tag($txtwidget);
+    set current_tag $popup_search_current_tag($txtwidget);
+
+    $txtwidget tag remove $hit_tag 1.0 end;
+    $txtwidget tag remove $current_tag 1.0 end;
+    $txtwidget tag configure $hit_tag -background $popup_search_bg($txtwidget) -foreground $popup_search_fg($txtwidget);
+    $txtwidget tag configure $current_tag -background $popup_search_bg($txtwidget) -foreground $popup_search_fg($txtwidget) -underline 1;
+
+    set ranges {};
+    set cur 1.0;
+    while 1 {
+        set pos [$txtwidget search -count matchlen -- $needle $cur end];
+        if {$pos == ""} {
+            break;
+        }
+        if {$matchlen <= 0} {
+            break;
+        }
+        set endpos [$txtwidget index "$pos + $matchlen chars"];
+        lappend ranges $pos $endpos;
+        $txtwidget tag add $hit_tag $pos $endpos;
+        set cur $endpos;
+    }
+
+    set occurrence_count [expr {[llength $ranges] / 2}];
+    if {$occurrence_count == 0} {
+        bell;
+        return;
+    }
+
+    set popup_search_pos($txtwidget) [expr {($popup_search_pos($txtwidget) + 1) % $occurrence_count}];
+    set current_start [lindex $ranges [expr {$popup_search_pos($txtwidget) * 2}]];
+    set current_end [lindex $ranges [expr {$popup_search_pos($txtwidget) * 2 + 1}]];
+
+    $txtwidget tag add $current_tag $current_start $current_end;
+    $txtwidget tag raise $current_tag;
+    $txtwidget mark set insert $current_start;
+    $txtwidget see $current_start;
+}
+
 
 proc show_text_input {base data title inputfn width height other_checkboxes clientdata}  {
    
@@ -2648,6 +2921,8 @@ proc show_text_input {base data title inputfn width height other_checkboxes clie
     $w.input insert 1.0 $data;
 
     [$w.input component label] configure -font $default_font;
+    set txtwidget [$w.input component text];
+    add_popup_text_search_controls $w $txtwidget;
 
     button $w.ok -text OK -command "if \{\[$inputfn $w $clientdata\] != 0\} \{destroy $w;\}" -font $default_font
     button $w.cancel -text Cancel -command "destroy $w" -font $default_font
@@ -2661,8 +2936,6 @@ proc show_text_input {base data title inputfn width height other_checkboxes clie
     pack $w.ok -side bottom -fill x
     pack $w.cancel -side bottom -fill x
     
-    set txtwidget [$w.input component text];  
-  
     bind $txtwidget  <Control-m> "
      matchBracket $txtwidget;
      break;
@@ -3174,11 +3447,7 @@ proc openFile {w args} {
 
     loadOverview;
     ctext::linemapUpdate $w;
-    global modified;
-    set modified 0;
-    .t edit reset;
-    .t edit modified 0;
-    updateModifiedStatus;
+    markTextClean .t;
 }
 
 proc loadOverview {} {
@@ -3210,9 +3479,7 @@ proc saveFile {w} {
      set cmd_to_editor 0;
      saveAll $w $current_file;
     
-    global modified;
-    set modified 0;
-    updateModifiedStatus;
+    markTextClean $w;
     
     global file_lastmod;
     set file_lastmod [file mtime $current_file];
@@ -3234,9 +3501,7 @@ proc saveFileAs {w} {
         return;
     }
 
-    global modified;
-    set modified 0;
-    updateModifiedStatus;
+    markTextClean $w;
 
     set current_file $fname;
     global title_prefix;
@@ -3267,8 +3532,7 @@ proc saveAll {w fname} {
      saveToTextFile $w $fname;
      saveToHltFile $w "$fname.hlt";
  
-    global modified;
-    set modified 0;
+    markTextClean $w;
     
 }
 
@@ -3277,13 +3541,20 @@ proc loadFromTextFile {w fname} {
     global rotate;
     global cmd_to_editor;
     set cmd_to_editor 0;
+    beginProgrammaticTextChange;
     
-    set fp [open $fname r];
-    fconfigure $fp -encoding utf-8
-    set cont [read $fp];
-    close $fp;
-    .t fastdelete 0.0 end
-    $w insert end $cont;
+    set err [catch {
+        set fp [open $fname r];
+        fconfigure $fp -encoding utf-8
+        set cont [read $fp];
+        close $fp;
+        .t fastdelete 0.0 end
+        $w insert end $cont;
+    } msg];
+    endProgrammaticTextChange $w 1;
+    if {$err} {
+        error $msg;
+    }
     array unset last_search;
     array unset rotate;
 }
@@ -3574,7 +3845,14 @@ proc loadFromFile {w} {
     fconfigure $fp -encoding utf-8
     set cont [read $fp];
     close $fp;
-    text:restore $w $cont
+    beginProgrammaticTextChange;
+    set err [catch {
+        text:restore $w $cont
+    } msg];
+    endProgrammaticTextChange $w 1;
+    if {$err} {
+        error $msg;
+    }
     
     array unset last_search;
     array unset rotate;
@@ -3615,9 +3893,17 @@ proc loadFromHltFile {w args} {
     set cont [read $fp];
     close $fp;
     set cont [trimMergeConflict $cont];
-    $w configure -undo 0;
-    hlt:restore $w $cont loadingFromFile;
-    $w configure -undo 1;
+    beginProgrammaticTextChange;
+    set err [catch {
+        $w configure -undo 0;
+        hlt:restore $w $cont loadingFromFile;
+        $w configure -undo 1;
+    } msg];
+    endProgrammaticTextChange $w 1;
+    if {$err} {
+        catch {$w configure -undo 1};
+        error $msg;
+    }
    
     
     global file_lastmod;
@@ -3691,6 +3977,7 @@ proc edit:close {{load_old_text 1}} {
 
 proc edit:closeNoAsk {{load_old_text 1}} {
     
+    beginProgrammaticTextChange;
 
     #Reset the viewpoints list
     global viewpoints;
@@ -3740,9 +4027,9 @@ proc edit:closeNoAsk {{load_old_text 1}} {
         }
     }
 
-    global modified;
-    set modified 0;
+    markTextClean .t;
     update;
+    endProgrammaticTextChange .t 1;
     return "";
 }
 
@@ -9251,6 +9538,7 @@ proc showOutputFile {file_name type name highlight_lines} {
         -font {Courier 10} -setgrid 1 -highlightthickness 0 \
         -padx 4 -pady 2 -takefocus 0 -bg white -fg black -insertbackground blue ;
     .popup_${type}.t tag configure attention -background #ccd4f7
+    add_popup_text_search_controls .popup_${type} .popup_${type}.t;
     pack .popup_${type}.t -in .popup_${type}.textFrame -expand y -fill both -padx 1
     pack .popup_${type}.textFrame -expand yes -fill both
 
@@ -9328,6 +9616,7 @@ proc showOutput {txt type name highlight_lines} {
         -font {Courier 10} -setgrid 1 -highlightthickness 0 \
         -padx 4 -pady 2 -takefocus 0 -bg white -fg black -insertbackground blue ;
     .popup_${type}.t tag configure attention -background #ccd4f7
+    add_popup_text_search_controls .popup_${type} .popup_${type}.t;
     pack .popup_${type}.t -in .popup_${type}.textFrame -expand y -fill both -padx 1
     pack .popup_${type}.textFrame -expand yes -fill both
     .popup_${type}.t insert end $txt;
@@ -14193,10 +14482,7 @@ proc highlightCurrent {textwidget pos} {
         global highlight_colors;
         set tagname "";
         if {$default_highlight == ""} {
-        set r [expr { int(100 * rand() + 150) }]
-        set g [expr { int(100 * rand() + 150) }]
-        set b [expr { int(100 * rand() + 150) }]
-        set col [format "#%02x%02x%02x" $r $g $b];
+        set col [randomLightHighlightColor];
         if {$background_code == "#000000"} {
            set col [negateColor $col];
         }
@@ -14271,6 +14557,9 @@ proc highlightCurrent {textwidget pos} {
        }
     } msg;
     
+    if {$occurrence_count > 0} {
+        markTextModified $textwidget;
+    }
     addToStatus "\n${occurrence_count} occurrences\n"
     #puts stderr $msg;
     update;
@@ -14325,10 +14614,7 @@ proc highlightCurrentBarebones {textwidget pos} {
         }
 
         if {$default_highlight eq ""} {
-            set r [expr {int(56 * rand() + 180)}]
-            set g [expr {int(56 * rand() + 180)}]
-            set b [expr {int(56 * rand() + 180)}]
-            set col [format "#%02x%02x%02x" $r $g $b]
+            set col [randomLightHighlightColor]
             set tagname "U[randString]"
             $textwidget tag configure $tagname -background $col
             lappend highlight_colors $tagname
@@ -14362,6 +14648,9 @@ proc highlightCurrentBarebones {textwidget pos} {
             set cur [$textwidget index "$cur + 1 char"]
         }
         addToStatus "\n${occurrence_count} occurrences\n"
+        if {$occurrence_count > 0} {
+            markTextModified $textwidget
+        }
     } msg
     if {$msg ne ""} {
         addToStatus "highlight error: $msg"
@@ -19753,8 +20042,12 @@ wm protocol . WM_DELETE_WINDOW {confirmAndExit}
 
 
 bind .t <<Modified>> {
-    set modified 1;
-    updateModifiedStatus;
+    global suppress_modified_events;
+    global suppress_clean_modified_events;
+    if {$suppress_modified_events == 0 && !$suppress_clean_modified_events} {
+        set modified 1;
+        updateModifiedStatus;
+    }
     .t edit modified 0;
 }
 
@@ -20302,6 +20595,7 @@ load_plugin "plugins.tcl"
 load_plugin "plugin_*.tcl"
 
 proc init_spectral {} {
+    beginProgrammaticTextChange;
     set old_cb ""; 
     catch {set old_cb [clipboard get]};
      .t configure -undo 0;
@@ -20314,13 +20608,10 @@ proc init_spectral {} {
      .t fastdelete 1.0 end;
      .t configure -undo 1;
      
-     global modified;
-     set modified 0;
-    .t edit reset;
-    .t edit modified 0;
-    updateModifiedStatus;
+    markTextClean .t;
     clipboard clear;
     clipboard append $old_cb;
+    endProgrammaticTextChange .t 1;
  }
 
 init_spectral; 
