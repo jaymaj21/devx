@@ -2273,6 +2273,37 @@ function setStatus(text) {
         statusBox.value = text + "\n" + statusBox.value ;
     }
 }
+
+function copyTextToClipboardRobust(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(text);
+    }
+
+    return new Promise((resolve, reject) => {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        try {
+            if (document.execCommand('copy')) {
+                resolve();
+            } else {
+                reject(new Error('document.execCommand("copy") returned false'));
+            }
+        } catch (err) {
+            reject(err);
+        } finally {
+            document.body.removeChild(textarea);
+        }
+    });
+}
+
 function showText(str, popupid)
 {
   dec = Base64.decode(str);
@@ -2336,6 +2367,7 @@ function saveEditorRange() {
     }
 }
 const editor = document.getElementById('editor');
+document.addEventListener('click', handleUuidPickClick, true);
 editor.addEventListener('keydown', saveEditorRange);
 editor.addEventListener('click', saveEditorRange);
 editor.addEventListener('click', insertCursorOnMouseDown);
@@ -2838,6 +2870,17 @@ window.addEventListener('DOMContentLoaded', () => {
     hydrateEmbeddedVideoSources(document);
 });
 document.addEventListener('keydown', function(event) {
+    if (uuidPickMode && event.key === 'Escape') {
+        event.preventDefault();
+        cancelUuidPickMode();
+        return;
+    }
+
+    if (event.key === 'F8') {
+        event.preventDefault();
+        startUuidPickMode();
+        return;
+    }
     
     if(event.ctrlKey && !event.altKey) {
     
@@ -3187,6 +3230,263 @@ function getPreviousTextNodeDeep(node) {
         }
     }
     return null;
+}
+
+let uuidPickMode = false;
+
+function isUuidTokenChar(ch) {
+    return /^[A-Za-z0-9._:-]$/.test(ch);
+}
+
+function isSvgTextElement(el) {
+    return el && el.namespaceURI === 'http://www.w3.org/2000/svg' && /^(text|tspan|textPath)$/i.test(el.tagName || '');
+}
+
+function closestUuidTextScope(node) {
+    const el = node && node.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+    if (!el) return null;
+    const svgText = el.closest && el.closest('text');
+    if (svgText && svgText.namespaceURI === 'http://www.w3.org/2000/svg') return svgText;
+    return el.closest && el.closest('div,p,li,tr,td,th,pre,section,article,blockquote,h1,h2,h3,h4,h5,h6,#editor');
+}
+
+function fragmentHasUuidBoundary(fragment) {
+    const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, null, false);
+    let n;
+    while ((n = walker.nextNode())) {
+        if (n.nodeType === Node.TEXT_NODE) {
+            if ((n.textContent || '').length > 0 && !/^[A-Za-z0-9._:-]*$/.test(n.textContent)) {
+                return true;
+            }
+        } else if (n.nodeType === Node.ELEMENT_NODE) {
+            const tag = (n.tagName || '').toLowerCase();
+            if (/^(br|div|p|li|tr|td|th|pre|section|article|blockquote|h[1-6])$/.test(tag)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function canCrossUuidTextBoundary(fromNode, toNode, direction) {
+    if (!fromNode || !toNode) return false;
+
+    const fromScope = closestUuidTextScope(fromNode);
+    const toScope = closestUuidTextScope(toNode);
+    if (fromScope !== toScope) return false;
+
+    const range = document.createRange();
+    try {
+        if (direction === 'forward') {
+            range.setStart(fromNode, fromNode.textContent.length);
+            range.setEnd(toNode, 0);
+        } else {
+            range.setStart(toNode, toNode.textContent.length);
+            range.setEnd(fromNode, 0);
+        }
+    } catch (_) {
+        return false;
+    }
+
+    return !fragmentHasUuidBoundary(range.cloneContents());
+}
+
+function rangeFromSvgTextPoint(event) {
+    const targetEl = event.target && event.target.closest ? event.target.closest('text,tspan,textPath') : null;
+    const textEl = targetEl && targetEl.closest ? targetEl.closest('text') : targetEl;
+    if (!isSvgTextElement(textEl) || !textEl.ownerSVGElement || typeof textEl.getCharNumAtPosition !== 'function') {
+        return null;
+    }
+
+    const svg = textEl.ownerSVGElement;
+    const pt = svg.createSVGPoint();
+    pt.x = event.clientX;
+    pt.y = event.clientY;
+
+    let localPoint;
+    try {
+        localPoint = pt.matrixTransform(textEl.getScreenCTM().inverse());
+    } catch (_) {
+        return null;
+    }
+
+    let charIndex = -1;
+    try {
+        charIndex = textEl.getCharNumAtPosition(localPoint);
+    } catch (_) {
+        return null;
+    }
+    if (charIndex < 0) return null;
+
+    try {
+        const extent = textEl.getExtentOfChar(charIndex);
+        if (localPoint.x > extent.x + extent.width / 2) {
+            charIndex++;
+        }
+    } catch (_) {
+        // Keep the browser-reported character index.
+    }
+
+    const walker = document.createTreeWalker(textEl, NodeFilter.SHOW_TEXT, null, false);
+    let node;
+    let remaining = charIndex;
+    while ((node = walker.nextNode())) {
+        const len = node.textContent.length;
+        if (remaining <= len) {
+            const range = document.createRange();
+            range.setStart(node, Math.max(0, Math.min(remaining, len)));
+            range.collapse(true);
+            return range;
+        }
+        remaining -= len;
+    }
+
+    return null;
+}
+
+function rangeFromPointRobust(event) {
+    let range = null;
+    if (document.caretRangeFromPoint) {
+        range = document.caretRangeFromPoint(event.clientX, event.clientY);
+    } else if (document.caretPositionFromPoint) {
+        const pos = document.caretPositionFromPoint(event.clientX, event.clientY);
+        if (pos) {
+            range = document.createRange();
+            range.setStart(pos.offsetNode, pos.offset);
+            range.collapse(true);
+        }
+    }
+
+    if (range && range.startContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
+        return range;
+    }
+
+    const svgRange = rangeFromSvgTextPoint(event);
+    if (svgRange) return svgRange;
+
+    const target = event.target;
+    if (target && target.nodeType === Node.TEXT_NODE) {
+        const fallback = document.createRange();
+        fallback.setStart(target, 0);
+        fallback.collapse(true);
+        return fallback;
+    }
+
+    if (target && target.nodeType === Node.ELEMENT_NODE) {
+        const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT, {
+            acceptNode: node => node.textContent ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
+        }, false);
+        const node = walker.nextNode();
+        if (node) {
+            const fallback = document.createRange();
+            fallback.setStart(node, 0);
+            fallback.collapse(true);
+            return fallback;
+        }
+    }
+
+    return null;
+}
+
+function getUuidTokenAtRange(range) {
+    const editor = document.getElementById('editor');
+    if (!range || !editor || !editor.contains(range.startContainer)) return '';
+
+    let node = range.startContainer;
+    let offset = range.startOffset;
+
+    if (node.nodeType !== Node.TEXT_NODE) {
+        node = getNextTextNodeDeep(node);
+        offset = 0;
+    }
+    if (!node || node.nodeType !== Node.TEXT_NODE) return '';
+
+    const text = node.textContent || '';
+    if (offset > 0 && (offset >= text.length || !isUuidTokenChar(text[offset])) && isUuidTokenChar(text[offset - 1])) {
+        offset--;
+    }
+
+    const forwardParts = [];
+    let forwardNode = node;
+    let forwardOffset = offset;
+    while (forwardNode) {
+        const s = forwardNode.textContent || '';
+        let i = forwardOffset;
+        while (i < s.length && isUuidTokenChar(s[i])) i++;
+        forwardParts.push(s.slice(forwardOffset, i));
+        if (i < s.length) break;
+        const nextNode = getNextTextNodeDeep(forwardNode);
+        if (!canCrossUuidTextBoundary(forwardNode, nextNode, 'forward')) break;
+        forwardNode = nextNode;
+        forwardOffset = 0;
+    }
+
+    const backwardParts = [];
+    let backwardNode = node;
+    let backwardOffset = offset;
+    while (backwardNode) {
+        const s = backwardNode.textContent || '';
+        let i = Math.min(backwardOffset, s.length);
+        while (i > 0 && isUuidTokenChar(s[i - 1])) i--;
+        backwardParts.push(s.slice(i, backwardOffset));
+        if (i > 0) break;
+        const prevNode = getPreviousTextNodeDeep(backwardNode);
+        if (!canCrossUuidTextBoundary(backwardNode, prevNode, 'backward')) break;
+        backwardNode = prevNode;
+        backwardOffset = backwardNode ? backwardNode.textContent.length : 0;
+    }
+
+    return backwardParts.reverse().join('') + forwardParts.join('');
+}
+
+function cancelUuidPickMode(message = 'UUID picker cancelled.') {
+    uuidPickMode = false;
+    if (cursorInsertMode) {
+        toggleMouseIconForCursorPlacementMode();
+    } else {
+        document.body.style.cursor = 'text';
+    }
+    setStatus(message);
+}
+
+function startUuidPickMode() {
+    uuidPickMode = true;
+    document.body.style.cursor = 'copy';
+    setStatus('Token picker: click a word/token, or press Esc to cancel.');
+}
+
+async function handleUuidPickClick(event) {
+    if (!uuidPickMode) return;
+
+    const editor = document.getElementById('editor');
+    if (!editor || !editor.contains(event.target)) {
+        cancelUuidPickMode('UUID picker cancelled: click was outside the editor.');
+        return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const range = rangeFromPointRobust(event);
+    const token = getUuidTokenAtRange(range);
+    uuidPickMode = false;
+    if (cursorInsertMode) {
+        toggleMouseIconForCursorPlacementMode();
+    } else {
+        document.body.style.cursor = 'text';
+    }
+
+    if (!token) {
+        setStatus('No token found at click point.');
+        return;
+    }
+
+    try {
+        await copyTextToClipboardRobust(token);
+        setStatus('Copied token: ' + token);
+    } catch (err) {
+        setStatus('Failed to copy token: ' + err);
+    }
 }
 
 
@@ -8911,6 +9211,7 @@ text = text.replace(/§§CODESPAN\d+§§/g, '<code></code>');
   Ctrl+Alt+m     Match brackets (+ braces and parenthesis)
   Ctrl+Alt+p     Scale selected or nearby picture(s)
   Ctrl+Alt+P     Iconize selected picture(s)
+  F8             Pick and copy token under click
   Ctrl+Alt+/     Search for multiple regexes (one per line)
   Ctrl+Alt+S     Save state
   Ctrl+Alt+z     Undo to the last saved state
