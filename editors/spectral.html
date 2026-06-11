@@ -2881,6 +2881,12 @@ document.addEventListener('keydown', function(event) {
         startUuidPickMode();
         return;
     }
+
+    if (event.key === 'F9') {
+        event.preventDefault();
+        editNearestImageAnnotation();
+        return;
+    }
     
     if(event.ctrlKey && !event.altKey) {
     
@@ -3762,6 +3768,505 @@ function applyImageScaling(scale) {
             alert("No image found near the cursor.");
         }
     }
+}
+
+function getNearestImageToEditorRange(range = savedEditorRange) {
+    const editor = document.getElementById('editor');
+    if (!editor) return null;
+
+    const images = Array.from(editor.querySelectorAll('img'));
+    if (images.length === 0) return null;
+
+    if (range && editor.contains(range.commonAncestorContainer)) {
+        const container = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+            ? range.commonAncestorContainer
+            : range.commonAncestorContainer.parentElement;
+        const directImg = container && container.closest ? container.closest('img') : null;
+        if (directImg && editor.contains(directImg)) return directImg;
+
+        const intersecting = images.find(img => {
+            try { return range.intersectsNode(img); } catch (_) { return false; }
+        });
+        if (intersecting) return intersecting;
+
+        const rangeRect = range.getBoundingClientRect ? range.getBoundingClientRect() : null;
+        if (rangeRect && (rangeRect.width || rangeRect.height)) {
+            const rx = rangeRect.left + rangeRect.width / 2;
+            const ry = rangeRect.top + rangeRect.height / 2;
+            let best = null;
+            let bestDist = Infinity;
+
+            images.forEach(img => {
+                const rect = img.getBoundingClientRect();
+                if (!rect.width && !rect.height) return;
+                const ix = rect.left + rect.width / 2;
+                const iy = rect.top + rect.height / 2;
+                const dx = ix - rx;
+                const dy = iy - ry;
+                const dist = dx * dx + dy * dy;
+                if (dist < bestDist) {
+                    best = img;
+                    bestDist = dist;
+                }
+            });
+
+            if (best) return best;
+        }
+
+        let node = range.startContainer;
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+
+        let nearestImage = null;
+        let minDistance = Infinity;
+        images.forEach(img => {
+            const dist = Math.abs(img.compareDocumentPosition(node));
+            if (dist < minDistance) {
+                nearestImage = img;
+                minDistance = dist;
+            }
+        });
+        if (nearestImage) return nearestImage;
+    }
+
+    return images[0] || null;
+}
+
+function ensureImageAnnotationPopup() {
+    let popup = document.getElementById('imageAnnotationPopup');
+    if (popup) return popup;
+
+    const style = document.createElement('style');
+    style.id = 'imageAnnotationPopupStyle';
+    style.textContent = `
+        #imageAnnotationPopup {
+            position: fixed;
+            inset: 3vh 3vw;
+            display: none;
+            flex-direction: column;
+            background: #f7f7f7;
+            color: #111;
+            border: 1px solid #888;
+            box-shadow: 0 8px 28px rgba(0,0,0,0.35);
+            z-index: 20000;
+            font-family: sans-serif;
+            font-size: 13px;
+        }
+        #imageAnnotationPopup .image-annotation-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 8px;
+            border-bottom: 1px solid #bbb;
+            background: #fff;
+        }
+        #imageAnnotationPopup .image-annotation-palette {
+            display: grid;
+            grid-template-columns: repeat(32, 18px);
+            gap: 2px;
+        }
+        #imageAnnotationPopup .image-annotation-tool {
+            border: 1px solid #888;
+            background: #eee;
+            padding: 3px 8px;
+            cursor: pointer;
+        }
+        #imageAnnotationPopup .image-annotation-tool.active {
+            background: #cfe3ff;
+            border-color: #2266bb;
+        }
+        #imageAnnotationPopup .image-annotation-swatch {
+            width: 18px;
+            height: 18px;
+            border: 1px solid #777;
+            padding: 0;
+            cursor: pointer;
+        }
+        #imageAnnotationPopup .image-annotation-swatch.active {
+            outline: 2px solid #111;
+            outline-offset: 1px;
+        }
+        #imageAnnotationPopup .image-annotation-canvas-wrap {
+            flex: 1;
+            overflow: auto;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 12px;
+            background: #d8d8d8;
+        }
+        #imageAnnotationCanvas {
+            background: #fff;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+            touch-action: none;
+            cursor: crosshair;
+            max-width: none;
+        }
+        #imageAnnotationPopup input[type="range"] {
+            width: 120px;
+        }
+        #imageAnnotationTextValue {
+            width: 190px;
+        }
+        #imageAnnotationTextSize {
+            width: 58px;
+        }
+    `;
+    document.head.appendChild(style);
+
+    popup = document.createElement('div');
+    popup.id = 'imageAnnotationPopup';
+    popup.innerHTML = `
+        <div class="image-annotation-toolbar">
+            <strong>Image annotation</strong>
+            <button id="imageAnnotationPenTool" class="image-annotation-tool active" type="button">Pen</button>
+            <button id="imageAnnotationTextTool" class="image-annotation-tool" type="button">Text</button>
+            <label>Pen <input id="imageAnnotationSize" type="range" min="1" max="60" value="8"></label>
+            <span id="imageAnnotationSizeText">8 px</span>
+            <label>Opacity <input id="imageAnnotationOpacity" type="range" min="0" max="100" value="100"></label>
+            <span id="imageAnnotationOpacityText">100%</span>
+            <input id="imageAnnotationColor" type="color" value="#ff0000" title="Custom color">
+            <input id="imageAnnotationTextValue" type="text" placeholder="Text to place">
+            <select id="imageAnnotationTextFont" title="Text font">
+                <option value="Arial">Arial</option>
+                <option value="Verdana">Verdana</option>
+                <option value="Times New Roman">Times New Roman</option>
+                <option value="Courier New">Courier New</option>
+                <option value="Georgia">Georgia</option>
+                <option value="Impact">Impact</option>
+                <option value="OpenDyslexic">OpenDyslexic</option>
+                <option value="OpenDyslexicMono">OpenDyslexicMono</option>
+            </select>
+            <label>Size <input id="imageAnnotationTextSize" type="number" min="6" max="300" value="32"></label>
+            <label>FG <input id="imageAnnotationTextFg" type="color" value="#000000"></label>
+            <label>BG <input id="imageAnnotationTextBg" type="color" value="#ffffff"></label>
+            <label><input id="imageAnnotationTextBgTransparent" type="checkbox"> No BG</label>
+            <button id="imageAnnotationUndo" type="button">Undo</button>
+            <button id="imageAnnotationClear" type="button">Reset</button>
+            <button id="imageAnnotationSave" type="button">Save</button>
+            <button id="imageAnnotationCancel" type="button">Cancel</button>
+            <div id="imageAnnotationPalette" class="image-annotation-palette"></div>
+        </div>
+        <div class="image-annotation-canvas-wrap">
+            <canvas id="imageAnnotationCanvas"></canvas>
+        </div>
+    `;
+    document.body.appendChild(popup);
+
+    return popup;
+}
+
+function imageAnnotationPaletteColors() {
+    const colors = [];
+    const channel = [0, 85, 170, 255];
+    channel.forEach(r => {
+        channel.forEach(g => {
+            channel.forEach(b => {
+                colors.push('#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join(''));
+            });
+        });
+    });
+    return colors;
+}
+
+function loadImageElementForCanvas(src) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Image could not be loaded for editing.'));
+        img.src = src;
+    });
+}
+
+function getPreferredCanvasMimeForImage(imgEl) {
+    const src = imgEl.getAttribute('src') || '';
+    const match = src.match(/^data:(image\/(?:png|jpeg|webp));/i);
+    return match ? match[1].toLowerCase() : 'image/png';
+}
+
+async function openImageAnnotationEditor(imgEl) {
+    if (!imgEl) {
+        setStatus('No image found near the cursor.');
+        return;
+    }
+
+    const popup = ensureImageAnnotationPopup();
+    const canvas = document.getElementById('imageAnnotationCanvas');
+    const ctx = canvas.getContext('2d');
+    const sizeInput = document.getElementById('imageAnnotationSize');
+    const sizeText = document.getElementById('imageAnnotationSizeText');
+    const opacityInput = document.getElementById('imageAnnotationOpacity');
+    const opacityText = document.getElementById('imageAnnotationOpacityText');
+    const colorInput = document.getElementById('imageAnnotationColor');
+    const penToolBtn = document.getElementById('imageAnnotationPenTool');
+    const textToolBtn = document.getElementById('imageAnnotationTextTool');
+    const textValueInput = document.getElementById('imageAnnotationTextValue');
+    const textFontSelect = document.getElementById('imageAnnotationTextFont');
+    const textSizeInput = document.getElementById('imageAnnotationTextSize');
+    const textFgInput = document.getElementById('imageAnnotationTextFg');
+    const textBgInput = document.getElementById('imageAnnotationTextBg');
+    const textBgTransparentInput = document.getElementById('imageAnnotationTextBgTransparent');
+    const palette = document.getElementById('imageAnnotationPalette');
+    const saveBtn = document.getElementById('imageAnnotationSave');
+    const cancelBtn = document.getElementById('imageAnnotationCancel');
+    const undoBtn = document.getElementById('imageAnnotationUndo');
+    const clearBtn = document.getElementById('imageAnnotationClear');
+
+    let sourceImage;
+    try {
+        sourceImage = await loadImageElementForCanvas(imgEl.currentSrc || imgEl.src);
+    } catch (err) {
+        setStatus(err.message);
+        return;
+    }
+
+    const width = sourceImage.naturalWidth || imgEl.naturalWidth || imgEl.width;
+    const height = sourceImage.naturalHeight || imgEl.naturalHeight || imgEl.height;
+    if (!width || !height) {
+        setStatus('Image has no usable dimensions for editing.');
+        return;
+    }
+
+    canvas.width = width;
+    canvas.height = height;
+    const displayScale = Math.min(1, (window.innerWidth * 0.88) / width, (window.innerHeight * 0.70) / height);
+    canvas.style.width = Math.max(1, Math.round(width * displayScale)) + 'px';
+    canvas.style.height = Math.max(1, Math.round(height * displayScale)) + 'px';
+    ctx.clearRect(0, 0, width, height);
+    try {
+        ctx.drawImage(sourceImage, 0, 0, width, height);
+    } catch (err) {
+        setStatus('Image could not be drawn. It may be blocked by browser canvas security.');
+        return;
+    }
+
+    let initialImageData;
+    try {
+        initialImageData = ctx.getImageData(0, 0, width, height);
+    } catch (err) {
+        setStatus('Image could not be edited. It may be blocked by browser canvas security.');
+        return;
+    }
+    const undoStack = [];
+    let drawing = false;
+    let lastPoint = null;
+    let currentColor = colorInput.value || '#ff0000';
+    let annotationTool = 'pen';
+
+    function saveUndoSnapshot() {
+        try {
+            undoStack.push(ctx.getImageData(0, 0, width, height));
+            if (undoStack.length > 20) undoStack.shift();
+        } catch (_) {
+            // Undo is best-effort; drawing and save can still work.
+        }
+    }
+
+    function setColor(color) {
+        currentColor = color;
+        colorInput.value = color;
+        palette.querySelectorAll('.image-annotation-swatch').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.color.toLowerCase() === color.toLowerCase());
+        });
+    }
+
+    palette.innerHTML = '';
+    imageAnnotationPaletteColors().forEach(color => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'image-annotation-swatch';
+        btn.dataset.color = color;
+        btn.style.backgroundColor = color;
+        btn.title = color;
+        btn.addEventListener('click', () => setColor(btn.dataset.color));
+        palette.appendChild(btn);
+    });
+    setColor(currentColor);
+
+    sizeText.textContent = sizeInput.value + ' px';
+    sizeInput.oninput = () => {
+        sizeText.textContent = sizeInput.value + ' px';
+    };
+    opacityText.textContent = opacityInput.value + '%';
+    opacityInput.oninput = () => {
+        opacityText.textContent = opacityInput.value + '%';
+    };
+    colorInput.oninput = () => setColor(colorInput.value);
+
+    function setAnnotationTool(tool) {
+        annotationTool = tool;
+        penToolBtn.classList.toggle('active', tool === 'pen');
+        textToolBtn.classList.toggle('active', tool === 'text');
+        canvas.style.cursor = tool === 'text' ? 'text' : 'crosshair';
+    }
+
+    penToolBtn.onclick = () => setAnnotationTool('pen');
+    textToolBtn.onclick = () => setAnnotationTool('text');
+    textValueInput.onkeydown = event => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            setAnnotationTool('text');
+        }
+    };
+    setAnnotationTool('pen');
+
+    function canvasPoint(event) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: (event.clientX - rect.left) * (canvas.width / rect.width),
+            y: (event.clientY - rect.top) * (canvas.height / rect.height),
+            pressure: event.pressure && event.pressure > 0 ? event.pressure : 1
+        };
+    }
+
+    function drawTo(point) {
+        if (!lastPoint) {
+            lastPoint = point;
+        }
+
+        const baseSize = parseFloat(sizeInput.value) || 8;
+        const pressure = Math.max(0.2, Math.min(1, point.pressure || 1));
+        const opacity = Math.max(0, Math.min(100, parseFloat(opacityInput.value) || 0)) / 100;
+        ctx.save();
+        ctx.globalAlpha = opacity;
+        ctx.strokeStyle = currentColor;
+        ctx.lineWidth = baseSize * pressure;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(lastPoint.x, lastPoint.y);
+        ctx.lineTo(point.x, point.y);
+        ctx.stroke();
+        ctx.restore();
+        lastPoint = point;
+    }
+
+    function cssFontFamilyForCanvas(fontFamily) {
+        return String(fontFamily || 'Arial').split(',').map(part => {
+            const name = part.trim().replace(/^['"]|['"]$/g, '');
+            return /\s/.test(name) ? `"${name.replace(/"/g, '')}"` : name;
+        }).join(', ');
+    }
+
+    function drawTextAt(point) {
+        const text = textValueInput.value;
+        if (!text) {
+            setStatus('Enter text before placing it on the image.');
+            textValueInput.focus();
+            return;
+        }
+
+        saveUndoSnapshot();
+
+        const fontSize = Math.max(6, parseFloat(textSizeInput.value) || 32);
+        const fontFamily = cssFontFamilyForCanvas(textFontSelect.value || 'Arial');
+        const lines = text.split(/\r?\n/);
+        const lineHeight = fontSize * 1.22;
+        const padX = Math.max(4, fontSize * 0.25);
+        const padY = Math.max(3, fontSize * 0.18);
+
+        ctx.save();
+        ctx.font = `${fontSize}px ${fontFamily}`;
+        ctx.textBaseline = 'top';
+
+        const metrics = lines.map(line => ctx.measureText(line || ' '));
+        const textWidth = Math.max(...metrics.map(m => m.width), 1);
+        const blockWidth = textWidth + padX * 2;
+        const blockHeight = lines.length * lineHeight + padY * 2;
+        const x = Math.max(0, Math.min(point.x, canvas.width - blockWidth));
+        const y = Math.max(0, Math.min(point.y, canvas.height - blockHeight));
+
+        if (!textBgTransparentInput.checked) {
+            ctx.fillStyle = textBgInput.value || '#ffffff';
+            ctx.fillRect(x, y, blockWidth, blockHeight);
+        }
+
+        ctx.fillStyle = textFgInput.value || '#000000';
+        lines.forEach((line, index) => {
+            ctx.fillText(line, x + padX, y + padY + index * lineHeight);
+        });
+        ctx.restore();
+    }
+
+    function onPointerDown(event) {
+        event.preventDefault();
+        if (annotationTool === 'text') {
+            drawTextAt(canvasPoint(event));
+            return;
+        }
+        saveUndoSnapshot();
+        drawing = true;
+        lastPoint = canvasPoint(event);
+        canvas.setPointerCapture(event.pointerId);
+        drawTo(lastPoint);
+    }
+
+    function onPointerMove(event) {
+        if (!drawing) return;
+        event.preventDefault();
+        drawTo(canvasPoint(event));
+    }
+
+    function onPointerUp(event) {
+        if (!drawing) return;
+        event.preventDefault();
+        drawing = false;
+        lastPoint = null;
+        try { canvas.releasePointerCapture(event.pointerId); } catch (_) {}
+    }
+
+    function onPopupKeyDown(event) {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            closePopup();
+        }
+    }
+
+    function closePopup() {
+        drawing = false;
+        canvas.removeEventListener('pointerdown', onPointerDown);
+        canvas.removeEventListener('pointermove', onPointerMove);
+        canvas.removeEventListener('pointerup', onPointerUp);
+        canvas.removeEventListener('pointercancel', onPointerUp);
+        window.removeEventListener('keydown', onPopupKeyDown, true);
+        popup.style.display = 'none';
+    }
+
+    canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('pointercancel', onPointerUp);
+    window.addEventListener('keydown', onPopupKeyDown, true);
+
+    undoBtn.onclick = () => {
+        const previous = undoStack.pop();
+        if (previous) ctx.putImageData(previous, 0, 0);
+    };
+    clearBtn.onclick = () => {
+        saveUndoSnapshot();
+        ctx.putImageData(initialImageData, 0, 0);
+    };
+    cancelBtn.onclick = closePopup;
+    saveBtn.onclick = () => {
+        try {
+            const mime = getPreferredCanvasMimeForImage(imgEl);
+            imgEl.src = canvas.toDataURL(mime, 0.92);
+            imgEl.removeAttribute('srcset');
+            syncImageMapFor(imgEl);
+            closePopup();
+            setStatus('Saved annotated image.');
+        } catch (err) {
+            setStatus('Could not save annotated image: ' + err);
+        }
+    };
+
+    popup.style.display = 'flex';
+    setStatus('Annotating nearest image. Drag to draw; Save writes back to the image.');
+}
+
+function editNearestImageAnnotation() {
+    openImageAnnotationEditor(getNearestImageToEditorRange());
 }
 
 
@@ -9212,6 +9717,7 @@ text = text.replace(/§§CODESPAN\d+§§/g, '<code></code>');
   Ctrl+Alt+p     Scale selected or nearby picture(s)
   Ctrl+Alt+P     Iconize selected picture(s)
   F8             Pick and copy token under click
+  F9             Annotate nearest image
   Ctrl+Alt+/     Search for multiple regexes (one per line)
   Ctrl+Alt+S     Save state
   Ctrl+Alt+z     Undo to the last saved state

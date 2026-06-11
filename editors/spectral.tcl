@@ -4523,7 +4523,111 @@ proc diffdiff { { ignore_re {} } } {
     }
 }
 
+set strdiff_context {};
+
+proc set_strdiff_context {context_before {context_after {}}} {
+  global strdiff_context;
+  if {$context_before == ""} {
+    set strdiff_context {};
+    return $strdiff_context;
+  }
+  if {$context_after == ""} {
+    set context_after $context_before;
+  }
+  set strdiff_context [list [expr {max(0, int($context_before))}] [expr {max(0, int($context_after))}]];
+  return $strdiff_context;
+}
+
+proc clear_strdiff_context {} {
+  global strdiff_context;
+  set strdiff_context {};
+  return $strdiff_context;
+}
+
 proc strdiff {granularity {string1 {} } {string2 {} } {wnd {}} } {
+   global strdiff_context;
+   strdiff_helper $granularity $strdiff_context $string1 $string2 $wnd;
+}
+
+proc strdiff_focus {granularity context_before {context_after {}}} {
+  if {$context_after == ""} {
+    set context_after $context_before;
+  }
+  strdiff_helper $granularity [list $context_before $context_after];
+}
+
+proc strdiff_segments_to_lines {segments} {
+  set lines [list {}]
+  set diff_lines [dict create]
+  set line 0
+
+  foreach segment $segments {
+    lassign $segment txt tag
+    set parts [split $txt "\n"]
+    set last_part [expr {[llength $parts] - 1}]
+    for {set i 0} {$i <= $last_part} {incr i} {
+      set part [lindex $parts $i]
+      if {$part != ""} {
+        set curline [lindex $lines $line]
+        lappend curline [list $part $tag]
+        lset lines $line $curline
+        if {$tag == "inserted" || $tag == "deleted"} {
+          dict set diff_lines $line 1
+        }
+      }
+      if {$i < $last_part} {
+        set curline [lindex $lines $line]
+        lappend curline [list "\n" $tag]
+        lset lines $line $curline
+        if {$tag == "inserted" || $tag == "deleted"} {
+          dict set diff_lines $line 1
+        }
+        incr line
+        lappend lines {}
+      }
+    }
+  }
+
+  return [list $lines $diff_lines]
+}
+
+proc strdiff_insert_segments {wnd segments context} {
+  if {[llength $context] != 2} {
+    foreach segment $segments {
+      lassign $segment txt tag
+      $wnd insert end $txt $tag
+    }
+    return
+  }
+
+  set context_before [expr {max(0, int([lindex $context 0]))}]
+  set context_after [expr {max(0, int([lindex $context 1]))}]
+  lassign [strdiff_segments_to_lines $segments] lines diff_lines
+  set selected [dict create]
+  set last_line [expr {[llength $lines] - 1}]
+
+  foreach diff_line [lsort -integer [dict keys $diff_lines]] {
+    set first [expr {max(0, $diff_line - $context_before)}]
+    set last [expr {min($last_line, $diff_line + $context_after)}]
+    for {set line $first} {$line <= $last} {incr line} {
+      dict set selected $line 1
+    }
+  }
+
+  set previous_line -1
+  foreach line [lsort -integer [dict keys $selected]] {
+    if {$previous_line >= 0 && $line > ($previous_line + 1)} {
+      $wnd insert end "---------- context break ----------\n" diff_context_separator
+    }
+    foreach segment [lindex $lines $line] {
+      lassign $segment txt tag
+      $wnd insert end $txt $tag
+    }
+    set previous_line $line
+  }
+}
+
+proc strdiff_helper {granularity {context {}} {string1 {} } {string2 {} } {wnd {}} } {
  
   set selranges [.t tag ranges sel];
   # text strings to "difference":
@@ -4586,21 +4690,25 @@ proc strdiff {granularity {string1 {} } {string2 {} } {wnd {}} } {
   
   $wnd tag configure inserted -underline true -background #aafba2;
   $wnd tag configure deleted  -overstrike true -background  #fd9f9f;
+  $wnd tag configure diff_context_separator -foreground #777777 -background #eeeeee;
+
+  set segments {}
   foreach item $diffdata {
     lassign $item kind idx1 idx2
     switch -exact $kind {
-      added     { $wnd insert end [ join [ lrange $list2 {*}$idx2 ] "" ] inserted;
+      added     { lappend segments [list [ join [ lrange $list2 {*}$idx2 ] "" ] inserted];
        }
-      deleted   { $wnd insert end [ join [ lrange $list1 {*}$idx1 ] "" ] deleted;
+      deleted   { lappend segments [list [ join [ lrange $list1 {*}$idx1 ] "" ] deleted];
        }
-      changed   { $wnd insert end [ join [ lrange $list1 {*}$idx1 ] "" ] deleted;
-                  $wnd insert end [ join [ lrange $list2 {*}$idx2 ] "" ] inserted ;
+      changed   { lappend segments [list [ join [ lrange $list1 {*}$idx1 ] "" ] deleted];
+                  lappend segments [list [ join [ lrange $list2 {*}$idx2 ] "" ] inserted];
               }
-      unchanged { $wnd insert end [ join [ lrange $list1 {*}$idx1 ] "" ] {};
+      unchanged { lappend segments [list [ join [ lrange $list1 {*}$idx1 ] "" ] {}];
           }
       }
       
     }
+  strdiff_insert_segments $wnd $segments $context
 }
 
 proc strdiff++ {granularity ignore_regex {string1 {} } {string2 {} } {wnd {} } } {
@@ -11725,7 +11833,9 @@ proc createResultsWindow {title} {
 
    wm title $resultsWindow $title;
    iwidgets::scrolledtext $resultsWindow.results -width 400 -height 400;
-   [$resultsWindow.results component text] configure -undo 0
+   set txtwidget [$resultsWindow.results component text];
+   $txtwidget configure -undo 0
+   add_popup_text_search_controls $resultsWindow $txtwidget;
    pack $resultsWindow.results -side top -fill both -expand yes
    entry $resultsWindow.filter;
    bind $resultsWindow.filter <Return>  "filterResult $resultsWindow";
@@ -11756,9 +11866,6 @@ proc createResultsWindow {title} {
      %W tag remove visited "$aline" "$aline lineend";
    }
    
-   set txtwidget [$resultsWindow.results component text];  
-  
-  
     bind $txtwidget  <Control-c> "
      copySelection $txtwidget;
      break;
@@ -11771,7 +11878,7 @@ proc createResultsWindow {title} {
   
     bind $txtwidget <Double-ButtonPress-1> "
        set pos \[$txtwidget index {@%x,%y}\];
-       highlightCurrent $txtwidget  \$pos; break;
+       highlightCurrentBarebones $txtwidget  \$pos; break;
   
     "
    
@@ -19893,6 +20000,9 @@ add_spectral_alias  quilt;
 add_spectral_alias  reformat_xml;
 add_spectral_alias  reformat_xml_file;
 add_spectral_alias  strdiff;
+add_spectral_alias  strdiff_focus;
+add_spectral_alias  set_strdiff_context;
+add_spectral_alias  clear_strdiff_context;
 add_spectral_alias  strdiff++;
 add_spectral_alias  strdiff_files;
 add_spectral_alias  commands;
