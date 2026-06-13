@@ -477,14 +477,72 @@ function getDiffNoteText(noteRef) {
     return String(noteRef);
 }
 
-function tokeniseDiffText(text, granularity) {
-    text = String(text ?? '');
-    const mode = String(granularity || 'line').toLowerCase();
-    if (mode.startsWith('char')) return Array.from(text);
-    if (mode.startsWith('word')) return text.match(/\S+|\s+/g) || [];
+function normalizedDiffOptions(opts = {}) {
+    return {
+        normalizeEol: opts.normalizeEol !== false,
+        normalizeUnicode: opts.normalizeUnicode !== false,
+        normalizeNbsp: opts.normalizeNbsp !== false,
+        stripBom: opts.stripBom !== false,
+        ignoreTrailingWhitespace: opts.ignoreTrailingWhitespace !== false,
+        ignoreAllWhitespace: opts.ignoreAllWhitespace === true
+    };
+}
 
-    const tokens = text.match(/[^\n]*\n|[^\n]+/g);
-    return tokens || [];
+function normalizeDiffTextInput(text, opts = {}) {
+    const nopts = normalizedDiffOptions(opts);
+    let out = String(text ?? '');
+
+    if (nopts.stripBom) {
+        out = out.replace(/^\uFEFF/, '');
+    }
+    if (nopts.normalizeEol) {
+        out = out.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    }
+    if (nopts.normalizeNbsp) {
+        out = out.replace(/\u00A0/g, ' ');
+    }
+    if (nopts.normalizeUnicode && typeof out.normalize === 'function') {
+        try {
+            out = out.normalize('NFC');
+        } catch (_) {
+            // Keep the original text if the browser cannot normalize it.
+        }
+    }
+
+    return out;
+}
+
+function diffTokenCompareKey(text, granularity, opts = {}) {
+    const nopts = normalizedDiffOptions(opts);
+    let key = String(text ?? '');
+    const mode = String(granularity || 'line').toLowerCase();
+
+    if (nopts.ignoreTrailingWhitespace && mode.startsWith('line')) {
+        key = key.replace(/[ \t]+(?=\n?$)/, '');
+    }
+    if (nopts.ignoreAllWhitespace) {
+        key = key.replace(/\s+/g, '');
+    }
+
+    return key;
+}
+
+function tokeniseDiffText(text, granularity, opts = {}) {
+    text = normalizeDiffTextInput(text, opts);
+    const mode = String(granularity || 'line').toLowerCase();
+    let parts;
+    if (mode.startsWith('char')) {
+        parts = Array.from(text);
+    } else if (mode.startsWith('word')) {
+        parts = text.match(/\S+|\s+/g) || [];
+    } else {
+        parts = text.match(/[^\n]*\n|[^\n]+/g) || [];
+    }
+
+    return parts.map(part => ({
+        text: part,
+        key: diffTokenCompareKey(part, granularity, opts)
+    }));
 }
 
 function lcsDiffTokens(aTokens, bTokens) {
@@ -498,7 +556,7 @@ function lcsDiffTokens(aTokens, bTokens) {
     const dp = Array.from({ length: aLen + 1 }, () => new Uint32Array(bLen + 1));
     for (let i = aLen - 1; i >= 0; i--) {
         for (let j = bLen - 1; j >= 0; j--) {
-            dp[i][j] = aTokens[i] === bTokens[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+            dp[i][j] = aTokens[i].key === bTokens[j].key ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
         }
     }
 
@@ -506,17 +564,17 @@ function lcsDiffTokens(aTokens, bTokens) {
     let i = 0;
     let j = 0;
     while (i < aLen && j < bLen) {
-        if (aTokens[i] === bTokens[j]) {
-            out.push({ type: 'same', text: aTokens[i++] });
+        if (aTokens[i].key === bTokens[j].key) {
+            out.push({ type: 'same', text: aTokens[i++].text });
             j++;
         } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-            out.push({ type: 'delete', text: aTokens[i++] });
+            out.push({ type: 'delete', text: aTokens[i++].text });
         } else {
-            out.push({ type: 'insert', text: bTokens[j++] });
+            out.push({ type: 'insert', text: bTokens[j++].text });
         }
     }
-    while (i < aLen) out.push({ type: 'delete', text: aTokens[i++] });
-    while (j < bLen) out.push({ type: 'insert', text: bTokens[j++] });
+    while (i < aLen) out.push({ type: 'delete', text: aTokens[i++].text });
+    while (j < bLen) out.push({ type: 'insert', text: bTokens[j++].text });
 
     return coalesceDiffSegments(out);
 }
@@ -558,8 +616,8 @@ function renderDiffNotesPopup(text1, text2, opts = {}) {
     const body = document.getElementById('diffNotesBody');
     const title = document.getElementById('diffNotesHeader');
     const modeSelect = document.getElementById('diffNotesGranularity');
-    const left = getDiffNoteText(text1);
-    const right = getDiffNoteText(text2);
+    const left = normalizeDiffTextInput(getDiffNoteText(text1), opts);
+    const right = normalizeDiffTextInput(getDiffNoteText(text2), opts);
 
     if (!popup || !body) {
         setStatus('diffnotes: popup markup is missing.');
@@ -570,7 +628,7 @@ function renderDiffNotesPopup(text1, text2, opts = {}) {
 
     let segments;
     try {
-        segments = lcsDiffTokens(tokeniseDiffText(left, granularity), tokeniseDiffText(right, granularity));
+        segments = lcsDiffTokens(tokeniseDiffText(left, granularity, opts), tokeniseDiffText(right, granularity, opts));
     } catch (err) {
         setStatus('diffnotes: ' + err.message);
         return [];
@@ -589,6 +647,7 @@ function renderDiffNotesPopup(text1, text2, opts = {}) {
 
     popup.dataset.leftText = left;
     popup.dataset.rightText = right;
+    popup.dataset.diffOptions = JSON.stringify(normalizedDiffOptions(opts));
     popup.style.display = 'block';
     hideTools();
     makeDraggable('diffNotesPopup', 'diffNotesHeader');
@@ -600,7 +659,14 @@ function refreshDiffNotesPopup() {
     const popup = document.getElementById('diffNotesPopup');
     const modeSelect = document.getElementById('diffNotesGranularity');
     if (!popup) return;
+    let savedOptions = {};
+    try {
+        savedOptions = JSON.parse(popup.dataset.diffOptions || '{}');
+    } catch (_) {
+        savedOptions = {};
+    }
     renderDiffNotesPopup(popup.dataset.leftText || '', popup.dataset.rightText || '', {
+        ...savedOptions,
         granularity: modeSelect ? modeSelect.value : 'line'
     });
 }
