@@ -317,8 +317,31 @@ function noteButtonClickHandler(event) {
         showNoteEditPopup(event);
     };
 
+function getLegacyNoteMessageFromOnclick(btn) {
+    const onclick = btn?.getAttribute('onclick') || '';
+    const match = onclick.match(/showText\s*\(\s*([`'"])([\s\S]*?)\1/);
+    if (!match) return null;
+
+    try {
+        Base64.decode(match[2]);
+        return match[2];
+    } catch (_) {
+        return null;
+    }
+}
+
 function hydrateEditorControls(root = document.getElementById('editor')) {
     if (!root) return;
+
+    root.querySelectorAll('button[onclick*="showText"]').forEach(btn => {
+        const encodedMessage = getLegacyNoteMessageFromOnclick(btn);
+        if (encodedMessage == null) return;
+
+        btn.classList.add('note-button');
+        btn.setAttribute('data-message', encodedMessage);
+        btn.setAttribute("onclick", 'noteButtonClickHandler(event)');
+        btn.onclick = noteButtonClickHandler;
+    });
 
     root.querySelectorAll('button.note-button, .note-button').forEach(btn => {
         if (!btn.hasAttribute('data-message')) {
@@ -359,6 +382,385 @@ function hydrateEditorControls(root = document.getElementById('editor')) {
     if (typeof hydrateEmbeddedVideoSources === 'function') {
         hydrateEmbeddedVideoSources(root);
     }
+}
+
+function decodeEmbeddedNoteButton(btn) {
+    if (!btn) return '';
+
+    const dataMessage = btn.getAttribute('data-message');
+    if (dataMessage != null && dataMessage !== '') {
+        try {
+            return Base64.decode(dataMessage);
+        } catch (_) {
+            return '';
+        }
+    }
+
+    const onclick = btn.getAttribute('onclick') || '';
+    const match = onclick.match(/showText\s*\(\s*([`'"])([\s\S]*?)\1/);
+    if (match) {
+        try {
+            return Base64.decode(match[2]);
+        } catch (_) {
+            return '';
+        }
+    }
+
+    return '';
+}
+
+function ensureElementId(el, prefix = 'note_match') {
+    if (el.id) return el.id;
+    el.id = prefix + '_' + generateGUID();
+    return el.id;
+}
+
+function noteSearchRegex(searchValue, opts = {}) {
+    if (searchValue instanceof RegExp) {
+        const flags = searchValue.flags.includes('g') ? searchValue.flags : searchValue.flags + 'g';
+        return new RegExp(searchValue.source, flags);
+    }
+
+    const text = String(searchValue ?? '');
+    const useRegex = opts.regex === true;
+    const caseSensitive = opts.caseSensitive === true;
+    const source = useRegex ? text : escapeRegex(text);
+    return new RegExp(source, 'g' + (caseSensitive ? '' : 'i'));
+}
+
+function noteMatchSnippet(text, index, length, context = 45) {
+    const start = Math.max(0, index - context);
+    const end = Math.min(text.length, index + length + context);
+    const prefix = start > 0 ? '...' : '';
+    const suffix = end < text.length ? '...' : '';
+    return prefix + text.slice(start, end).replace(/\s+/g, ' ') + suffix;
+}
+
+function collectEmbeddedNotes(root = document.getElementById('editor')) {
+    if (!root) return [];
+
+    const buttons = Array.from(root.querySelectorAll('button.note-button, button[data-message], button[onclick*="showText"]'));
+    const seen = new Set();
+    const notes = [];
+
+    buttons.forEach(btn => {
+        if (seen.has(btn)) return;
+        seen.add(btn);
+
+        const text = decodeEmbeddedNoteButton(btn);
+        if (text === '') return;
+        notes.push({ btn, text });
+    });
+
+    return notes;
+}
+
+let diffNotesPickMode = false;
+let diffNotesFirstButton = null;
+let diffNotesPickOptions = {};
+let diffNotesOriginalCursor = '';
+
+function getNoteButtonFromTarget(target) {
+    const editor = document.getElementById('editor');
+    const el = target && target.nodeType === Node.ELEMENT_NODE ? target : target?.parentElement;
+    if (!editor || !el || !editor.contains(el)) return null;
+    return el.closest('button.note-button, button[data-message], button[onclick*="showText"]');
+}
+
+function getDiffNoteText(noteRef) {
+    if (noteRef == null) return '';
+    if (typeof noteRef === 'string') return noteRef;
+    if (noteRef.text != null) return String(noteRef.text);
+    if (noteRef.noteText != null) return String(noteRef.noteText);
+    if (noteRef.nodeType === Node.ELEMENT_NODE) return decodeEmbeddedNoteButton(noteRef);
+    if (noteRef.btn && noteRef.btn.nodeType === Node.ELEMENT_NODE) return decodeEmbeddedNoteButton(noteRef.btn);
+    return String(noteRef);
+}
+
+function tokeniseDiffText(text, granularity) {
+    text = String(text ?? '');
+    const mode = String(granularity || 'line').toLowerCase();
+    if (mode.startsWith('char')) return Array.from(text);
+    if (mode.startsWith('word')) return text.match(/\S+|\s+/g) || [];
+
+    const tokens = text.match(/[^\n]*\n|[^\n]+/g);
+    return tokens || [];
+}
+
+function lcsDiffTokens(aTokens, bTokens) {
+    const aLen = aTokens.length;
+    const bLen = bTokens.length;
+    const cells = (aLen + 1) * (bLen + 1);
+    if (cells > 4000000) {
+        throw new Error('diff is too large for this in-browser comparison; try line granularity or smaller notes');
+    }
+
+    const dp = Array.from({ length: aLen + 1 }, () => new Uint32Array(bLen + 1));
+    for (let i = aLen - 1; i >= 0; i--) {
+        for (let j = bLen - 1; j >= 0; j--) {
+            dp[i][j] = aTokens[i] === bTokens[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+        }
+    }
+
+    const out = [];
+    let i = 0;
+    let j = 0;
+    while (i < aLen && j < bLen) {
+        if (aTokens[i] === bTokens[j]) {
+            out.push({ type: 'same', text: aTokens[i++] });
+            j++;
+        } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+            out.push({ type: 'delete', text: aTokens[i++] });
+        } else {
+            out.push({ type: 'insert', text: bTokens[j++] });
+        }
+    }
+    while (i < aLen) out.push({ type: 'delete', text: aTokens[i++] });
+    while (j < bLen) out.push({ type: 'insert', text: bTokens[j++] });
+
+    return coalesceDiffSegments(out);
+}
+
+function coalesceDiffSegments(segments) {
+    const merged = [];
+    segments.forEach(seg => {
+        const last = merged[merged.length - 1];
+        if (last && last.type === seg.type) {
+            last.text += seg.text;
+        } else {
+            merged.push({ type: seg.type, text: seg.text });
+        }
+    });
+    return merged;
+}
+
+function escapeHtml(text) {
+    return String(text ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function diffNotesSummary(segments) {
+    return segments.reduce((acc, seg) => {
+        if (seg.type === 'insert') acc.inserted += seg.text.length;
+        if (seg.type === 'delete') acc.deleted += seg.text.length;
+        if (seg.type === 'same') acc.same += seg.text.length;
+        return acc;
+    }, { inserted: 0, deleted: 0, same: 0 });
+}
+
+function renderDiffNotesPopup(text1, text2, opts = {}) {
+    const granularity = opts.granularity || opts.mode || 'line';
+    const popup = document.getElementById('diffNotesPopup');
+    const body = document.getElementById('diffNotesBody');
+    const title = document.getElementById('diffNotesHeader');
+    const modeSelect = document.getElementById('diffNotesGranularity');
+    const left = getDiffNoteText(text1);
+    const right = getDiffNoteText(text2);
+
+    if (!popup || !body) {
+        setStatus('diffnotes: popup markup is missing.');
+        return [];
+    }
+
+    if (modeSelect) modeSelect.value = String(granularity).toLowerCase().startsWith('char') ? 'char' : String(granularity).toLowerCase().startsWith('word') ? 'word' : 'line';
+
+    let segments;
+    try {
+        segments = lcsDiffTokens(tokeniseDiffText(left, granularity), tokeniseDiffText(right, granularity));
+    } catch (err) {
+        setStatus('diffnotes: ' + err.message);
+        return [];
+    }
+
+    const summary = diffNotesSummary(segments);
+    if (title) {
+        title.textContent = `Note Diff (${modeSelect ? modeSelect.value : granularity}): -${summary.deleted} +${summary.inserted}`;
+    }
+
+    body.innerHTML = segments.map(seg => {
+        if (seg.type === 'insert') return `<span class="diffnotes-inserted">${escapeHtml(seg.text)}</span>`;
+        if (seg.type === 'delete') return `<span class="diffnotes-deleted">${escapeHtml(seg.text)}</span>`;
+        return `<span>${escapeHtml(seg.text)}</span>`;
+    }).join('');
+
+    popup.dataset.leftText = left;
+    popup.dataset.rightText = right;
+    popup.style.display = 'block';
+    hideTools();
+    makeDraggable('diffNotesPopup', 'diffNotesHeader');
+    setStatus(`diffnotes: shown ${modeSelect ? modeSelect.value : granularity} diff (-${summary.deleted}, +${summary.inserted}).`);
+    return segments;
+}
+
+function refreshDiffNotesPopup() {
+    const popup = document.getElementById('diffNotesPopup');
+    const modeSelect = document.getElementById('diffNotesGranularity');
+    if (!popup) return;
+    renderDiffNotesPopup(popup.dataset.leftText || '', popup.dataset.rightText || '', {
+        granularity: modeSelect ? modeSelect.value : 'line'
+    });
+}
+
+function closeDiffNotesPopup() {
+    const popup = document.getElementById('diffNotesPopup');
+    if (popup) popup.style.display = 'none';
+    showTools();
+}
+
+function clearDiffNotesFirstSelection() {
+    if (diffNotesFirstButton) {
+        diffNotesFirstButton.classList.remove('diffnotes-picked');
+    }
+    diffNotesFirstButton = null;
+}
+
+function cancelDiffNotesMode(message = 'diffnotes: note selection cancelled.') {
+    diffNotesPickMode = false;
+    clearDiffNotesFirstSelection();
+    document.body.style.cursor = diffNotesOriginalCursor || 'text';
+    setStatus(message);
+}
+
+function startDiffNotesPickMode(opts = {}) {
+    if (uuidPickMode) {
+        uuidPickMode = false;
+    }
+    hydrateEditorControls();
+    diffNotesPickOptions = opts || {};
+    diffNotesPickMode = true;
+    clearDiffNotesFirstSelection();
+    diffNotesOriginalCursor = document.body.style.cursor || '';
+    document.body.style.cursor = 'crosshair';
+    setStatus('diffnotes: click the first note, then click the note to compare it against. Press Esc to cancel.');
+}
+
+function handleDiffNotesPickClick(event) {
+    if (!diffNotesPickMode) return;
+
+    const btn = getNoteButtonFromTarget(event.target);
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!btn) {
+        setStatus('diffnotes: click a note button, or press Esc to cancel.');
+        return;
+    }
+
+    if (!diffNotesFirstButton) {
+        diffNotesFirstButton = btn;
+        btn.classList.add('diffnotes-picked');
+        setStatus('diffnotes: first note selected; click the second note.');
+        return;
+    }
+
+    if (btn === diffNotesFirstButton) {
+        setStatus('diffnotes: choose a different second note, or press Esc to cancel.');
+        return;
+    }
+
+    const first = diffNotesFirstButton;
+    const second = btn;
+    diffNotesPickMode = false;
+    clearDiffNotesFirstSelection();
+    document.body.style.cursor = diffNotesOriginalCursor || 'text';
+    renderDiffNotesPopup(first, second, diffNotesPickOptions);
+}
+
+function diffnotes(note1, note2, opts = {}) {
+    if (note1 == null || note2 == null) {
+        startDiffNotesPickMode(note1 && typeof note1 === 'object' ? note1 : opts);
+        return null;
+    }
+
+    return renderDiffNotesPopup(note1, note2, opts);
+}
+
+function searchnotes(searchValue, opts = {}) {
+    if (searchValue == null || String(searchValue).length === 0) {
+        setStatus('searchnotes: provide a search string or RegExp.');
+        return [];
+    }
+
+    let regex;
+    try {
+        regex = noteSearchRegex(searchValue, opts);
+    } catch (err) {
+        setStatus('searchnotes: invalid pattern: ' + err.message);
+        return [];
+    }
+
+    const editor = document.getElementById('editor');
+    const notes = collectEmbeddedNotes(editor);
+    const matches = [];
+    const showResults = opts.showResults ?? document.getElementById('showSearchResults')?.checked;
+    const colid = Math.max(1, Math.min(7, parseInt(opts.colid || 1, 10) || 1));
+    const highlightColor = opts.color || currentFixedHighlighter || null;
+
+    notes.forEach((note, noteIndex) => {
+        regex.lastIndex = 0;
+        let match;
+        let localCount = 0;
+        while ((match = regex.exec(note.text)) !== null) {
+            localCount++;
+            matches.push({
+                button: note.btn,
+                noteIndex,
+                matchIndex: match.index,
+                matchText: match[0],
+                noteText: note.text,
+                snippet: noteMatchSnippet(note.text, match.index, match[0].length)
+            });
+
+            if (match[0] === '') regex.lastIndex++;
+        }
+
+        if (localCount > 0 && highlightColor) {
+            note.btn.style.backgroundColor = highlightColor;
+            note.btn.style.borderColor = highlightColor;
+        }
+    });
+
+    if (showResults) {
+        const resultDiv = document.getElementById('searchResults' + colid);
+        const resultListing = document.getElementById('searchResults' + colid + 'listing');
+        const resultHeader = document.getElementById('searchResults' + colid + 'Header');
+
+        if (resultDiv && resultListing) {
+            resultListing.innerHTML = '';
+            if (resultHeader) {
+                resultHeader.textContent = `Note Search Results ${colid}: ${matches.length} match(es)`;
+            }
+            resultDiv.style.display = 'block';
+            makeDraggable('searchResults' + colid, 'searchResults' + colid + 'Header');
+            resultListing.addEventListener('copy', copyHandler);
+            hideTools();
+
+            matches.forEach((m, idx) => {
+                const id = ensureElementId(m.button);
+                resultListing.appendChild(document.createTextNode('#' + (idx + 1) + '\t'));
+
+                const anchor = document.createElement('a');
+                anchor.href = '#' + id;
+                anchor.textContent = `note ${m.noteIndex + 1}: ${m.matchText}`;
+                anchor.onclick = function(event) {
+                    event.preventDefault();
+                    selectText(id);
+                    m.button.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    return false;
+                };
+                resultListing.appendChild(anchor);
+                resultListing.appendChild(document.createTextNode('\t' + m.snippet));
+                resultListing.appendChild(document.createElement('br'));
+            });
+        }
+    }
+
+    setStatus(`searchnotes: ${matches.length} match(es) in ${notes.length} note(s).`);
+    return matches;
 }
     
 function selectText(containerid) {
@@ -639,6 +1041,44 @@ function selectText(containerid) {
   line-height: 1;
   text-align: center;
   padding: 0;
+}
+
+.note-button.diffnotes-picked {
+  outline: 3px solid #222;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px #ffd54f;
+}
+
+.diffnotes-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.diffnotes-body {
+  width: min(900px, 80vw);
+  max-height: 65vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.35;
+  border: 1px solid #d0d0d0;
+  padding: 10px;
+  background: #fff;
+}
+
+.diffnotes-inserted {
+  background: #aafba2;
+  text-decoration: underline;
+}
+
+.diffnotes-deleted {
+  background: #fd9f9f;
+  text-decoration: line-through;
 }
 
 @media print {
@@ -2500,6 +2940,7 @@ function saveEditorRange() {
     }
 }
 const editor = document.getElementById('editor');
+document.addEventListener('click', handleDiffNotesPickClick, true);
 document.addEventListener('click', handleUuidPickClick, true);
 editor.addEventListener('keydown', saveEditorRange);
 editor.addEventListener('click', saveEditorRange);
@@ -3006,9 +3447,21 @@ window.addEventListener('DOMContentLoaded', () => {
     hydrateEmbeddedVideoSources(document);
 });
 document.addEventListener('keydown', function(event) {
+    if (diffNotesPickMode && event.key === 'Escape') {
+        event.preventDefault();
+        cancelDiffNotesMode();
+        return;
+    }
+
     if (uuidPickMode && event.key === 'Escape') {
         event.preventDefault();
         cancelUuidPickMode();
+        return;
+    }
+
+    if (event.key === 'F7') {
+        event.preventDefault();
+        diffnotes();
         return;
     }
 
@@ -3592,6 +4045,9 @@ function cancelUuidPickMode(message = 'UUID picker cancelled.') {
 }
 
 function startUuidPickMode() {
+    if (diffNotesPickMode) {
+        cancelDiffNotesMode('diffnotes: note selection cancelled.');
+    }
     uuidPickMode = true;
     document.body.style.cursor = 'copy';
     setStatus('Token picker: click a word/token, or press Esc to cancel.');
@@ -9770,6 +10226,22 @@ text = text.replace(/§§CODESPAN\d+§§/g, '<code></code>');
   <button onclick="closeTextPopup()">Cancel</button>
 </div>
 
+<div id="diffNotesPopup" style="display:none; position:fixed; top:10%; left:50%; transform:translateX(-50%);
+     background:white; color:black; padding:12px; border:1px solid #ccc; box-shadow: 0 4px 8px rgba(0,0,0,0.2); z-index:10000;">
+  <h4 id="diffNotesHeader" style="cursor:move; margin:0 0 8px 0;">Note Diff</h4>
+  <div class="diffnotes-toolbar">
+    <label for="diffNotesGranularity">Granularity</label>
+    <select id="diffNotesGranularity" onchange="refreshDiffNotesPopup()">
+      <option value="line" selected>line</option>
+      <option value="word">word</option>
+      <option value="char">char</option>
+    </select>
+    <span><span class="diffnotes-deleted">deleted</span> <span class="diffnotes-inserted">inserted</span></span>
+    <button onclick="closeDiffNotesPopup()">Close</button>
+  </div>
+  <div id="diffNotesBody" class="diffnotes-body"></div>
+</div>
+
 <div id="searchResults1"  style="display:none; position:fixed; top:20%; left:50%; transform:translateX(-50%);
      background:white; padding:20px; border:1px solid #ccc; box-shadow: 0 4px 8px rgba(0,0,0,0.2); z-index:9999;">
   <h4  id="searchResults1Header" style="cursor:move;">                        Search Results 1:                            </h4>
@@ -9852,6 +10324,7 @@ text = text.replace(/§§CODESPAN\d+§§/g, '<code></code>');
   Ctrl+Alt+m     Match brackets (+ braces and parenthesis)
   Ctrl+Alt+p     Scale selected or nearby picture(s)
   Ctrl+Alt+P     Iconize selected picture(s)
+  F7             Diff two notes
   F8             Pick and copy token under click
   F9             Annotate nearest image
   Ctrl+Alt+/     Search for multiple regexes (one per line)
@@ -9876,6 +10349,8 @@ Text Commands (Can be used with Javascript Eval):
   delgraphics  → Delete SVG elements overlapping 2-point rectangle
   delgraphics_included → Delete SVG elements fully inside 2-point rectangle
   camel        → Convert identifier to camelCase
+  diffnotes()  → Select two notes and show a diff
+  searchnotes("text") → Search embedded notes
   snake        → Convert identifier to snake_case
   kebab        → Convert identifier to kebab-case
   uc           → Convert to upper case
