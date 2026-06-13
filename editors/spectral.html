@@ -1773,6 +1773,136 @@ if(__fontChooserTouched && fontSel !== "No Selection" && fontSel !== __initialFo
 }
 
 let currentFileName = null;
+const IMPORTED_EDITOR_CSS_STYLE_ID = 'spectral-imported-editor-css';
+
+function removeImportedEditorCss() {
+    const existing = document.getElementById(IMPORTED_EDITOR_CSS_STYLE_ID);
+    if (existing) existing.remove();
+}
+
+function splitCssSelectorList(selectorText) {
+    const selectors = [];
+    let current = '';
+    let depth = 0;
+    let quote = null;
+
+    for (let i = 0; i < selectorText.length; i++) {
+        const ch = selectorText[i];
+        const prev = selectorText[i - 1];
+
+        if (quote) {
+            current += ch;
+            if (ch === quote && prev !== '\\') quote = null;
+            continue;
+        }
+
+        if (ch === '"' || ch === "'") {
+            quote = ch;
+            current += ch;
+            continue;
+        }
+
+        if (ch === '(' || ch === '[') depth++;
+        if (ch === ')' || ch === ']') depth = Math.max(0, depth - 1);
+
+        if (ch === ',' && depth === 0) {
+            selectors.push(current.trim());
+            current = '';
+        } else {
+            current += ch;
+        }
+    }
+
+    if (current.trim()) selectors.push(current.trim());
+    return selectors;
+}
+
+function scopeCssSelectorToEditor(selector) {
+    const trimmed = selector.trim();
+    if (!trimmed) return '';
+    if (trimmed.startsWith('#editor')) return trimmed;
+    if (trimmed === 'body' || trimmed === 'html' || trimmed === ':root') return '#editor';
+    if (trimmed.startsWith('body ')) return '#editor ' + trimmed.slice(5);
+    if (trimmed.startsWith('html ')) return '#editor ' + trimmed.slice(5);
+    return '#editor ' + trimmed;
+}
+
+function findMatchingCssBrace(cssText, openIndex) {
+    let depth = 0;
+    let quote = null;
+    for (let i = openIndex; i < cssText.length; i++) {
+        const ch = cssText[i];
+        const prev = cssText[i - 1];
+
+        if (quote) {
+            if (ch === quote && prev !== '\\') quote = null;
+            continue;
+        }
+
+        if (ch === '"' || ch === "'") {
+            quote = ch;
+            continue;
+        }
+
+        if (ch === '{') depth++;
+        if (ch === '}') {
+            depth--;
+            if (depth === 0) return i;
+        }
+    }
+    return -1;
+}
+
+function scopeCssTextToEditor(cssText) {
+    let output = '';
+    let i = 0;
+
+    while (i < cssText.length) {
+        const open = cssText.indexOf('{', i);
+        if (open === -1) break;
+
+        const selectorText = cssText.slice(i, open).trim();
+        const close = findMatchingCssBrace(cssText, open);
+        if (close === -1) break;
+
+        const body = cssText.slice(open + 1, close);
+        if (selectorText.startsWith('@')) {
+            if (/^@(media|supports|container)\b/i.test(selectorText)) {
+                output += selectorText + ' {\n' + scopeCssTextToEditor(body) + '\n}\n';
+            } else {
+                output += selectorText + ' {' + body + '}\n';
+            }
+        } else {
+            const scopedSelectors = splitCssSelectorList(selectorText)
+                .map(scopeCssSelectorToEditor)
+                .filter(Boolean);
+            if (scopedSelectors.length > 0) {
+                output += scopedSelectors.join(', ') + ' {' + body + '}\n';
+            }
+        }
+
+        i = close + 1;
+    }
+
+    return output;
+}
+
+function importEditorCssFromLoadedDocument(doc) {
+    removeImportedEditorCss();
+
+    const cssTexts = Array.from(doc.querySelectorAll('style'))
+        .map(style => style.textContent || '')
+        .filter(text => text.trim().length > 0);
+
+    if (cssTexts.length === 0) return 0;
+
+    const style = document.createElement('style');
+    style.id = IMPORTED_EDITOR_CSS_STYLE_ID;
+    style.textContent = cssTexts.map(scopeCssTextToEditor).join('\n');
+    document.head.appendChild(style);
+    return cssTexts.length;
+}
+
 document.getElementById('fileLoader').addEventListener('change', function(event) {
     const file = event.target.files[0];
 
@@ -1808,6 +1938,7 @@ document.getElementById('fileLoader').addEventListener('change', function(event)
             });
 
             const imported = document.importNode(svg, true);
+            removeImportedEditorCss();
             editor.appendChild(imported);
             setStatus('Loaded inline SVG into editor.');
             return;
@@ -1822,9 +1953,10 @@ document.getElementById('fileLoader').addEventListener('change', function(event)
 
             if (loadedEditorDiv) {
                 // Found an editor div, load its innerHTML
+                const importedStyleCount = importEditorCssFromLoadedDocument(doc);
                 editor.innerHTML = loadedEditorDiv.innerHTML;
                 hydrateEditorControls(editor);
-                setStatus("Loaded editor content from HTML file.");
+                setStatus("Loaded editor content from HTML file" + (importedStyleCount ? ` with ${importedStyleCount} imported style block(s).` : "."));
                 return;
             }
         }
@@ -1833,6 +1965,7 @@ document.getElementById('fileLoader').addEventListener('change', function(event)
         const loadingElement = document.createElement('div');
         loadingElement.innerHTML = escapeTextWithLineBreaks(contents);
         
+        removeImportedEditorCss();
         editor.innerHTML = "";
         editor.appendChild(loadingElement);
         setStatus("Loaded plain text file content.");
@@ -2766,20 +2899,23 @@ function saveInnerHtmlLocally() {
     /////////////////
     // Pick only these two, by id, from the CLONE
     const styleEl  = document.querySelector('#inline-style');
+    const importedStyleEl = document.querySelector('#' + IMPORTED_EDITOR_CSS_STYLE_ID);
     const scriptEl = document.querySelector('#inline-script');
      const textPopupEl = document.querySelector('#textPopup');
 
-    const parts = [];
+    const headParts = [];
+    const bodyParts = [];
 
     // Order up to you; often style before script is sensible
-    if (styleEl)  { parts.push(styleEl.outerHTML);  }
-    if (scriptEl) { parts.push(scriptEl.outerHTML); }
-    if (textPopupEl) { parts.push(textPopupEl.outerHTML); }
+    if (styleEl)  { headParts.push(styleEl.outerHTML);  }
+    if (importedStyleEl) { headParts.push(importedStyleEl.outerHTML); }
+    if (scriptEl) { headParts.push(scriptEl.outerHTML); }
+    if (textPopupEl) { bodyParts.push(textPopupEl.outerHTML); }
 
 
 
     // Wrap however you like; here we place assets before the editor div
-    let combinedContent = `${parts.join('\n')}\n${editorContent}`;
+    let combinedContent = `<head>\n<meta charset="UTF-8">\n${headParts.join('\n')}\n</head>\n<body>\n${bodyParts.join('\n')}\n${editorContent}\n</body>`;
     /////////////////
     const blob = new Blob(["<html>\n"+combinedContent+"\n</html>"], { type: 'text/html' });
     const downloadLink = document.createElement('a');

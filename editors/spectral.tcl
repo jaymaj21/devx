@@ -8581,7 +8581,7 @@ body { background-color: $default_background ;  color: $default_foreground; }
    }
   }
   append mid {
-<div id="content" contenteditable=true>}
+<div id="editor" contenteditable=true>}
 set prestart {
 <pre id='vimCodeElement'>
 }
