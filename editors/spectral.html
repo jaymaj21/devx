@@ -459,6 +459,7 @@ let diffNotesPickMode = false;
 let diffNotesFirstButton = null;
 let diffNotesPickOptions = {};
 let diffNotesOriginalCursor = '';
+let diffNotesContext = null;
 
 function getNoteButtonFromTarget(target) {
     const editor = document.getElementById('editor');
@@ -610,6 +611,118 @@ function diffNotesSummary(segments) {
     }, { inserted: 0, deleted: 0, same: 0 });
 }
 
+function normaliseDiffContextValue(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.floor(n));
+}
+
+function setDiffContext(contextBefore, contextAfter = contextBefore) {
+    if (contextBefore == null || contextBefore === '') {
+        return clearDiffContext();
+    }
+
+    diffNotesContext = {
+        before: normaliseDiffContextValue(contextBefore),
+        after: normaliseDiffContextValue(contextAfter)
+    };
+    setStatus(`diffnotes: context set to ${diffNotesContext.before} before, ${diffNotesContext.after} after.`);
+    refreshDiffNotesPopup();
+    return diffNotesContext;
+}
+
+function clearDiffContext() {
+    diffNotesContext = null;
+    setStatus('diffnotes: context cleared.');
+    refreshDiffNotesPopup();
+    return null;
+}
+
+function getDiffContextFromOptions(opts = {}) {
+    if (opts.context === false) {
+        return null;
+    }
+    if (opts.context == null && opts.contextBefore == null && opts.contextAfter == null) {
+        return diffNotesContext;
+    }
+    if (Array.isArray(opts.context)) {
+        return {
+            before: normaliseDiffContextValue(opts.context[0]),
+            after: normaliseDiffContextValue(opts.context.length > 1 ? opts.context[1] : opts.context[0])
+        };
+    }
+    if (typeof opts.context === 'number' || typeof opts.context === 'string') {
+        return {
+            before: normaliseDiffContextValue(opts.context),
+            after: normaliseDiffContextValue(opts.context)
+        };
+    }
+    if (opts.contextBefore != null || opts.contextAfter != null) {
+        const before = opts.contextBefore ?? opts.contextAfter ?? 0;
+        const after = opts.contextAfter ?? before;
+        return {
+            before: normaliseDiffContextValue(before),
+            after: normaliseDiffContextValue(after)
+        };
+    }
+    return diffNotesContext;
+}
+
+function splitDiffSegmentIntoLines(seg) {
+    const pieces = String(seg.text ?? '').match(/[^\n]*\n|[^\n]+/g);
+    if (!pieces) return [];
+    return pieces.map(text => ({ type: seg.type, text }));
+}
+
+function coalesceRenderableDiffSegments(segments) {
+    const merged = [];
+    segments.forEach(seg => {
+        const last = merged[merged.length - 1];
+        if (last && last.type === seg.type && seg.type !== 'separator') {
+            last.text += seg.text;
+        } else {
+            merged.push({ type: seg.type, text: seg.text });
+        }
+    });
+    return merged;
+}
+
+function applyLineDiffContext(segments, context) {
+    if (!context) return segments;
+
+    const before = normaliseDiffContextValue(context.before);
+    const after = normaliseDiffContextValue(context.after);
+    const lines = segments.flatMap(splitDiffSegmentIntoLines);
+    const changedIndexes = [];
+
+    lines.forEach((line, idx) => {
+        if (line.type !== 'same') changedIndexes.push(idx);
+    });
+    if (!changedIndexes.length || !lines.length) return segments;
+
+    const include = new Array(lines.length).fill(false);
+    changedIndexes.forEach(idx => {
+        const start = Math.max(0, idx - before);
+        const end = Math.min(lines.length - 1, idx + after);
+        for (let i = start; i <= end; i++) {
+            include[i] = true;
+        }
+    });
+
+    const contextual = [];
+    let lastIncluded = -1;
+    lines.forEach((line, idx) => {
+        if (!include[idx]) return;
+        if (lastIncluded !== -1 && idx > lastIncluded + 1) {
+            contextual.push({ type: 'separator', text: '---------- context break ----------\n' });
+        }
+        contextual.push(line);
+        lastIncluded = idx;
+    });
+
+    return coalesceRenderableDiffSegments(contextual);
+}
+
 function renderDiffNotesPopup(text1, text2, opts = {}) {
     const granularity = opts.granularity || opts.mode || 'line';
     const popup = document.getElementById('diffNotesPopup');
@@ -634,14 +747,19 @@ function renderDiffNotesPopup(text1, text2, opts = {}) {
         return [];
     }
 
+    const isLineMode = String(granularity).toLowerCase().startsWith('line');
+    const context = isLineMode ? getDiffContextFromOptions(opts) : null;
+    const displaySegments = isLineMode ? applyLineDiffContext(segments, context) : segments;
     const summary = diffNotesSummary(segments);
     if (title) {
-        title.textContent = `Note Diff (${modeSelect ? modeSelect.value : granularity}): -${summary.deleted} +${summary.inserted}`;
+        const contextLabel = context ? `, context ${context.before}/${context.after}` : '';
+        title.textContent = `Note Diff (${modeSelect ? modeSelect.value : granularity}${contextLabel}): -${summary.deleted} +${summary.inserted}`;
     }
 
-    body.innerHTML = segments.map(seg => {
+    body.innerHTML = displaySegments.map(seg => {
         if (seg.type === 'insert') return `<span class="diffnotes-inserted">${escapeHtml(seg.text)}</span>`;
         if (seg.type === 'delete') return `<span class="diffnotes-deleted">${escapeHtml(seg.text)}</span>`;
+        if (seg.type === 'separator') return `<span class="diffnotes-separator">${escapeHtml(seg.text)}</span>`;
         return `<span>${escapeHtml(seg.text)}</span>`;
     }).join('');
 
@@ -658,7 +776,7 @@ function renderDiffNotesPopup(text1, text2, opts = {}) {
 function refreshDiffNotesPopup() {
     const popup = document.getElementById('diffNotesPopup');
     const modeSelect = document.getElementById('diffNotesGranularity');
-    if (!popup) return;
+    if (!popup || popup.style.display === 'none' || !popup.dataset.leftText && !popup.dataset.rightText) return;
     let savedOptions = {};
     try {
         savedOptions = JSON.parse(popup.dataset.diffOptions || '{}');
@@ -1145,6 +1263,14 @@ function selectText(containerid) {
 .diffnotes-deleted {
   background: #fd9f9f;
   text-decoration: line-through;
+}
+
+.diffnotes-separator {
+  display: block;
+  color: #777;
+  background: #eeeeee;
+  padding: 2px 4px;
+  margin: 2px 0;
 }
 
 @media print {
@@ -10416,6 +10542,8 @@ Text Commands (Can be used with Javascript Eval):
   delgraphics_included → Delete SVG elements fully inside 2-point rectangle
   camel        → Convert identifier to camelCase
   diffnotes()  → Select two notes and show a diff
+  setDiffContext(2,2) → Show 2 context lines around note diffs
+  clearDiffContext() → Show full note diffs
   searchnotes("text") → Search embedded notes
   snake        → Convert identifier to snake_case
   kebab        → Convert identifier to kebab-case
