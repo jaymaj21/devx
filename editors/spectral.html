@@ -946,6 +946,205 @@ function searchnotes(searchValue, opts = {}) {
     setStatus(`searchnotes: ${matches.length} match(es) in ${notes.length} note(s).`);
     return matches;
 }
+
+function blockColorResolveColor(colorSpec) {
+    const spec = String(colorSpec ?? '').trim();
+    const fixed = {
+        1: '#f0f583',
+        2: '#fd9f9f',
+        3: '#aafba2',
+        4: '#a5f8f8',
+        5: '#f997f9',
+        7: '#ffffff'
+    };
+
+    if (/^\d+$/.test(spec)) {
+        const n = parseInt(spec, 10);
+        if (n === 6) {
+            return currentFixedHighlighter || document.getElementById('colorChooser')?.value || '#ccd3f7';
+        }
+        if (fixed[n]) return fixed[n];
+
+        const button = document.getElementById('hlButton' + n);
+        if (button) {
+            return button.style.backgroundColor || getComputedStyle(button).backgroundColor;
+        }
+    }
+
+    return spec || '#ccd3f7';
+}
+
+function blockColorRegexes(regexes) {
+    const list = Array.isArray(regexes) ? regexes : [regexes];
+    return list
+        .filter(item => item != null && String(item).length > 0)
+        .map(item => {
+            if (item instanceof RegExp) return item;
+            return new RegExp(String(item), 'm');
+        });
+}
+
+function blockColorMatches(text, regexes) {
+    return regexes.every(regex => {
+        regex.lastIndex = 0;
+        return regex.test(text);
+    });
+}
+
+function buildEditorLinearTextIndex(root = document.getElementById('editor')) {
+    let text = '';
+    const textNodes = [];
+
+    function addVirtualNewline() {
+        text += '\n';
+    }
+
+    function traverse(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            const value = node.textContent || '';
+            const start = text.length;
+            text += value;
+            textNodes.push({ node, start, end: text.length });
+            return;
+        }
+
+        if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return;
+
+        const tag = node.tagName?.toLowerCase();
+        if (['div', 'p', 'li', 'tr', 'br'].includes(tag)) addVirtualNewline();
+
+        for (const child of node.childNodes) {
+            traverse(child);
+        }
+
+        if (['div', 'p', 'li', 'tr'].includes(tag)) addVirtualNewline();
+    }
+
+    traverse(root);
+    return { text, textNodes };
+}
+
+function blockColorLineOffsets(text, startLineNum = 1, endLineNum = 'end') {
+    const lineStarts = [0];
+    for (let i = 0; i < text.length; i++) {
+        if (text[i] === '\n') lineStarts.push(i + 1);
+    }
+
+    const startLine = Math.max(1, parseInt(startLineNum, 10) || 1);
+    const start = lineStarts[Math.min(startLine - 1, lineStarts.length - 1)] ?? text.length;
+
+    if (endLineNum === 'end' || endLineNum == null) {
+        return { start, stop: text.length };
+    }
+
+    const endLine = Math.max(startLine, parseInt(endLineNum, 10) || startLine);
+    const nextLineStart = lineStarts[endLine];
+    const stop = nextLineStart == null ? text.length : nextLineStart;
+    return { start, stop };
+}
+
+function findBraceBlocksAtLevel(text, level, start, stop) {
+    let depth = 0;
+    let blockStart = null;
+    const blocks = [];
+
+    for (let pos = start; pos < stop; pos++) {
+        const ch = text[pos];
+        if (ch === '{') {
+            if (depth === level) {
+                blockStart = pos;
+            }
+            depth++;
+        } else if (ch === '}') {
+            if (depth > 0) {
+                const closingLevel = depth - 1;
+                depth--;
+                if (closingLevel === level && blockStart != null) {
+                    blocks.push({ start: blockStart, end: pos + 1, text: text.slice(blockStart, pos + 1) });
+                    blockStart = null;
+                }
+            }
+        }
+    }
+
+    return blocks;
+}
+
+function applyBlockColorRanges(textNodes, ranges, color, level) {
+    const pieces = [];
+
+    ranges.forEach(range => {
+        textNodes.forEach(({ node, start, end }, order) => {
+            if (end <= range.start || start >= range.end) return;
+            const spanStart = Math.max(range.start, start) - start;
+            const spanEnd = Math.min(range.end, end) - start;
+            if (spanStart < spanEnd) {
+                pieces.push({ node, order, spanStart, spanEnd });
+            }
+        });
+    });
+
+    pieces.sort((a, b) => {
+        if (a.order !== b.order) return b.order - a.order;
+        return b.spanStart - a.spanStart;
+    });
+
+    pieces.forEach(({ node, spanStart, spanEnd }) => {
+        if (!node.parentNode || spanStart === spanEnd) return;
+        if (isSvgTextNode(node)) {
+            createSvgTspanHighlight(node, spanStart, spanEnd, { backgroundColor: color });
+            return;
+        }
+
+        const span = document.createElement('span');
+        span.className = 'block-color-highlight';
+        span.style.backgroundColor = color;
+        span.dataset.blockColorLevel = String(level);
+
+        const r = document.createRange();
+        r.setStart(node, spanStart);
+        r.setEnd(node, spanEnd);
+        try {
+            r.surroundContents(span);
+        } catch (_) {
+            const fragment = r.extractContents();
+            span.appendChild(fragment);
+            r.insertNode(span);
+        }
+    });
+}
+
+function nested_block_color(level, colorSpec, regexes, startLineNum = 1, endLineNum = 'end') {
+    const parsedLevel = parseInt(level, 10);
+    if (!Number.isInteger(parsedLevel) || parsedLevel < 0) {
+        throw new Error('nested_block_color level must be a non-negative integer');
+    }
+
+    let compiledRegexes;
+    try {
+        compiledRegexes = blockColorRegexes(regexes);
+    } catch (err) {
+        setStatus('nested_block_color: invalid regex: ' + err.message);
+        return 0;
+    }
+
+    const editor = document.getElementById('editor');
+    if (!editor) return 0;
+
+    const color = blockColorResolveColor(colorSpec);
+    const { text, textNodes } = buildEditorLinearTextIndex(editor);
+    const { start, stop } = blockColorLineOffsets(text, startLineNum, endLineNum);
+    const blocks = findBraceBlocksAtLevel(text, parsedLevel, start, stop);
+    const matches = compiledRegexes.length === 0 ? blocks : blocks.filter(block => blockColorMatches(block.text, compiledRegexes));
+
+    applyBlockColorRanges(textNodes, matches, color, parsedLevel);
+    setStatus(`nested_block_color: colored ${matches.length} block(s) at level ${parsedLevel}.`);
+    return matches.length;
+}
+
+function block_color(colorSpec, regexes, startLineNum = 1, endLineNum = 'end') {
+    return nested_block_color(0, colorSpec, regexes, startLineNum, endLineNum);
+}
     
 function selectText(containerid) {
     if (document.selection) { // IE
@@ -1271,6 +1470,56 @@ function selectText(containerid) {
   background: #eeeeee;
   padding: 2px 4px;
   margin: 2px 0;
+}
+
+.cmdhelp-body {
+  width: min(860px, 82vw);
+  max-height: 70vh;
+  overflow: auto;
+  padding: 4px 8px 8px 8px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.cmdhelp-section {
+  border-top: 1px solid #dddddd;
+  padding-top: 8px;
+  margin-top: 8px;
+}
+
+.cmdhelp-section:first-child {
+  border-top: none;
+  margin-top: 0;
+}
+
+.cmdhelp-section h5 {
+  margin: 0 0 6px 0;
+  font-size: 14px;
+}
+
+.cmdhelp-section dl {
+  display: grid;
+  grid-template-columns: minmax(220px, 310px) minmax(260px, 1fr);
+  gap: 5px 12px;
+  margin: 0;
+}
+
+.cmdhelp-section dt,
+.cmdhelp-section dd {
+  margin: 0;
+}
+
+.cmdhelp-section code {
+  font-family: Consolas, "Courier New", monospace;
+  color: #111;
+  background: #f2f2f2;
+  padding: 1px 4px;
+  border: 1px solid #dddddd;
+  border-radius: 3px;
+}
+
+.block-color-highlight {
+  border-radius: 2px;
 }
 
 @media print {
@@ -3316,10 +3565,12 @@ function matchAndHighlightBrackets() {
   const openSet = new Set(['(', '[', '{']);
   const closeSet = new Set([')', ']', '}']);
 
-  const char = text[globalOffset] || text[globalOffset - 1];
+  const currentChar = text[globalOffset];
+  const previousChar = text[globalOffset - 1];
+  const char = brackets[currentChar] ? currentChar : previousChar;
   const isOpening = openSet.has(char);
   const matchChar = brackets[char];
-  const startOffset = isOpening ? globalOffset : globalOffset ;
+  const startOffset = brackets[currentChar] ? globalOffset : globalOffset - 1;
 
   if (!matchChar) return;
 
@@ -3365,6 +3616,11 @@ function matchAndHighlightBrackets() {
       applyHighlightToMatch(startOffset, nodes, color);
   }
 
+  const selectionStart = Math.min(startOffset, matchOffset) + 1;
+  const selectionEnd = Math.max(startOffset, matchOffset);
+  if (selectionStart <= selectionEnd) {
+      selectFlatTextRange(editor, selectionStart, selectionEnd);
+  }
 }
 
 // Helper to find node and relative offset for a given global offset
@@ -3375,6 +3631,43 @@ function findNodeAtOffset(offset, nodes) {
       }
     }
     return null;
+}
+
+function findTextBoundaryAtOffset(root, offset) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    let node;
+    let total = 0;
+    let lastTextNode = null;
+
+    while ((node = walker.nextNode())) {
+        const len = node.textContent.length;
+        if (offset <= total + len) {
+            return { node, offset: Math.max(0, Math.min(offset - total, len)) };
+        }
+        total += len;
+        lastTextNode = node;
+    }
+
+    if (lastTextNode) {
+        return { node: lastTextNode, offset: lastTextNode.textContent.length };
+    }
+    return null;
+}
+
+function selectFlatTextRange(root, startOffset, endOffset) {
+    const start = findTextBoundaryAtOffset(root, startOffset);
+    const end = findTextBoundaryAtOffset(root, endOffset);
+    if (!start || !end) return null;
+
+    const range = document.createRange();
+    range.setStart(start.node, start.offset);
+    range.setEnd(end.node, end.offset);
+
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    savedEditorRange = range.cloneRange();
+    return range;
 }
 
 function applyHighlightToMatch(startOffset, nodes, color) {
@@ -5208,6 +5501,144 @@ function showJsEvalPopup() {
     };
 }
 
+function commandHelpSections() {
+    return [
+        {
+            title: 'Getting Help',
+            commands: [
+                ['cmdhelp()', 'Show this command reference.'],
+                ['help()', 'Show the keyboard shortcut help popup.']
+            ]
+        },
+        {
+            title: 'Selection Text',
+            commands: [
+                ['wc()', 'Count words in the current saved selection and write the result to the status pane.'],
+                ['reflow(72)', 'Rewrap the selected text to roughly the given column width.'],
+                ['uc()', 'Upper-case the selected text.'],
+                ['lc()', 'Lower-case the selected text.'],
+                ['tc()', 'Title-case the selected text.'],
+                ['camel()', 'Convert selected text to camelCase.'],
+                ['snake()', 'Convert selected text to snake_case.'],
+                ['kebab()', 'Convert selected text to kebab-case.'],
+                ['replace("find", "replace")', 'Replace text in the editor. Uses regex by default; pass false as the third argument for literal text.'],
+                ['incrint("\\\\bitem-\\\\d+\\\\b", 1)', 'Increment integers inside matches of a regex or string pattern, preserving zero padding where possible.']
+            ]
+        },
+        {
+            title: 'Notes',
+            commands: [
+                ['searchnotes("text")', 'Search embedded note contents. Shows listings when the search-results checkbox is enabled or with { showResults: true }.'],
+                ['searchnotes(/error|fail/i)', 'Search notes using a JavaScript RegExp.'],
+                ['diffnotes()', 'Enter two-click note selection mode and show a diff between the two selected notes.'],
+                ['diffnotes({ granularity: "word" })', 'Select two notes and compare by words instead of lines.'],
+                ['setDiffContext(2, 2)', 'Show two lines before and two lines after changed lines in line-mode note diffs.'],
+                ['clearDiffContext()', 'Clear note-diff context and show full line diffs again.']
+            ]
+        },
+        {
+            title: 'Brace Blocks',
+            commands: [
+                ['block_color(3, ["TODO"])', 'Color top-level brace blocks whose text matches every regex in the list. Color numbers 1-5 use fixed highlighter colors; 6 uses the current color.'],
+                ['block_color("#ffeeaa", /error/i)', 'Color matching top-level brace blocks using an explicit CSS color.'],
+                ['nested_block_color(1, 2, ["if", "return"])', 'Color matching brace blocks at nesting level 1.'],
+                ['nested_block_color(2, "#ccffdd", ["case"], 10, 80)', 'Only scan lines 10 through 80 for level-2 brace blocks.']
+            ]
+        },
+        {
+            title: 'SVG And Graphics',
+            commands: [
+                ['svgtext("label")', 'Click inside an SVG to insert text at that point. Esc cancels.'],
+                ['add_svg_text()', 'Shortcut for svgtext("text").'],
+                ['delete_svg_text()', 'Click an SVG text object to delete it. Esc cancels.'],
+                ['delgraphics()', 'Pick two SVG corners and delete SVG elements overlapping the rectangle.'],
+                ['delgraphics_included()', 'Pick two SVG corners and delete SVG elements fully inside the rectangle.'],
+                ['svg2clipboard()', 'Copy inline SVG markup from the editor to the clipboard.'],
+                ['savesvg()', 'Save inline SVG markup from the editor as an SVG file.']
+            ]
+        },
+        {
+            title: 'Format Conversion',
+            commands: [
+                ['tolatex()', 'Convert editor HTML to LaTeX and copy it to the clipboard.'],
+                ['tomd()', 'Convert editor HTML to Markdown and copy it to the clipboard.'],
+                ['mdrender()', 'Render the editor text as Markdown into HTML in-place.']
+            ]
+        },
+        {
+            title: 'Links And Navigation',
+            commands: [
+                ['target()', 'Wrap the selected text in a span with a generated id and remember it as the latest link target.'],
+                ['target("my-id")', 'Create a target with a specific id.'],
+                ['link()', 'Link selected text to the latest target, or enter image-map link mode if there is no text selection.'],
+                ['link("my-id")', 'Link selected text to a specific target id.'],
+                ['xlink("https://example.com")', 'Create an external link around the selected text.'],
+                ['selectText("element-id")', 'Select and scroll to an element by id.']
+            ]
+        },
+        {
+            title: 'Editing State And Lines',
+            commands: [
+                ['save()', 'Save the current editor HTML and selection onto the undo stack.'],
+                ['undo()', 'Restore the previous saved editor state.'],
+                ['redo()', 'Reapply an undone saved editor state.'],
+                ['yy(3)', 'Yank three visual lines from the current cursor to the clipboard. The command popup also accepts 3y.'],
+                ['dd(3)', 'Delete and yank three visual lines from the current cursor. The command popup also accepts 3d.'],
+                ['keeplines()', 'Keep only lines containing cursors.'],
+                ['dellines()', 'Delete lines containing cursors.'],
+                ['delete_empty_lines()', 'Delete lines whose rendered text is only whitespace, while keeping media/control-only lines.'],
+                ['keeplinesWithHighlights()', 'Keep only lines containing highlight spans.'],
+                ['dellinesWithHighlights()', 'Delete lines containing highlight spans.']
+            ]
+        },
+        {
+            title: 'Java Instrumentation',
+            commands: [
+                ['instrjava(1000)', 'Instrument Java source in the editor with mprewriter.scope_START calls starting at the given id.'],
+                ['instrclean()', 'Remove mprewriter.scope_START calls from the editor.']
+            ]
+        },
+        {
+            title: 'Miscellaneous',
+            commands: [
+                ['darken()', 'Invert the page/editor colors for a dark view.'],
+                ['startVideoRecording()', 'Record webcam video into the editor.'],
+                ['startRecording()', 'Record audio into the editor.']
+            ]
+        }
+    ];
+}
+
+function renderCommandHelpHtml() {
+    return commandHelpSections().map(section => {
+        const rows = section.commands.map(([signature, description]) =>
+            `<dt><code>${escapeHtml(signature)}</code></dt><dd>${escapeHtml(description)}</dd>`
+        ).join('');
+        return `<section class="cmdhelp-section"><h5>${escapeHtml(section.title)}</h5><dl>${rows}</dl></section>`;
+    }).join('');
+}
+
+function cmdhelp() {
+    const popup = document.getElementById('cmdHelpPopup');
+    const body = document.getElementById('cmdHelpBody');
+    if (!popup || !body) {
+        setStatus('cmdhelp: popup markup is missing.');
+        return;
+    }
+
+    body.innerHTML = renderCommandHelpHtml();
+    popup.style.display = 'block';
+    makeDraggable('cmdHelpPopup', 'cmdHelpHeader');
+    hideTools();
+    setStatus('Command help shown.');
+}
+
+function closeCmdHelp() {
+    const popup = document.getElementById('cmdHelpPopup');
+    if (popup) popup.style.display = 'none';
+    showTools();
+}
+
 //// Audio recording ///
 
 let mediaRecorder;
@@ -6499,6 +6930,7 @@ function clearAllHighlight() {
     // Remove .highlight and .highlight1 through .highlight7
     unwrapAll('.highlight');
     [1, 2, 3, 4, 5, 6, 7].forEach(x => unwrapAll('.highlight' + x));
+    unwrapAll('.block-color-highlight');
 
     // Remove SVG highlights (<tspan data-spectral-svg-hl>)
     editor.querySelectorAll('tspan[data-spectral-svg-hl]').forEach(ts => {
@@ -7601,6 +8033,35 @@ function dellines() {
 
     cursors = [];
     setStatus("Deleted lines containing cursors.");
+}
+
+function lineHtmlIsEmpty(lineHtml) {
+    const holder = document.createElement('div');
+    holder.innerHTML = lineHtml || '';
+
+    if (holder.querySelector('img,svg,video,audio,canvas,iframe,object,embed,button,input,textarea,select,table')) {
+        return false;
+    }
+
+    const text = (holder.textContent || '')
+        .replace(/\u00a0/g, ' ')
+        .replace(/[\u200b\u200c\u200d\ufeff]/g, '');
+
+    return /^\s*$/.test(text);
+}
+
+function delete_empty_lines() {
+    const editor = document.getElementById('editor');
+    if (!editor) return 0;
+
+    const lines = getExplicitLines(editor);
+    const kept = lines.filter(line => !lineHtmlIsEmpty(line));
+    const removed = lines.length - kept.length;
+
+    restoreLines(editor, kept);
+    editor.normalize();
+    setStatus(`Deleted ${removed} empty line(s).`);
+    return removed;
 }
 ////////////////////////////////
 // Main function: Reverse selected lines or all lines
@@ -10488,6 +10949,15 @@ text = text.replace(/§§CODESPAN\d+§§/g, '<code></code>');
   <input id="jsEvalInput" type="text" placeholder="Enter JS code..." style="width: 300px;" />
 </div>
 
+<div id="cmdHelpPopup" style="display:none; position:fixed; top:8%; left:50%; transform:translateX(-50%);
+     background:#fff; color:#111; border:1px solid #ccc; padding:12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); z-index:10000;">
+  <div id="cmdHelpHeader" style="cursor:move; display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:8px;">
+    <strong>Command Popup Help</strong>
+    <button onclick="closeCmdHelp()">Close</button>
+  </div>
+  <div id="cmdHelpBody" class="cmdhelp-body"></div>
+</div>
+
 <div id="scaleImagePopup" style="display:none; position:fixed; top:25%; left:50%; transform:translateX(-50%);
      background:white; padding:15px; border:1px solid #ccc; box-shadow:0 4px 8px rgba(0,0,0,0.2); z-index:10000;">
   <label for="scaleImageInput">Scale images (%):</label>
@@ -10534,13 +11004,17 @@ text = text.replace(/§§CODESPAN\d+§§/g, '<code></code>');
   Tab            Indent selection
   Shift+Tab      Unindent selection
 Text Commands (Can be used with Javascript Eval):
+  cmdhelp      → Show command popup command reference
   wc           → Word count of selection
   reflow(n)    → Reflow selected text to n-character lines
   savesvg      → Save editor SVG content to an SVG file
   startVideoRecording() → Record webcam video into the editor
   delgraphics  → Delete SVG elements overlapping 2-point rectangle
   delgraphics_included → Delete SVG elements fully inside 2-point rectangle
+  delete_empty_lines → Delete blank/whitespace-only lines
   camel        → Convert identifier to camelCase
+  block_color(color, regexes) → Color matching top-level brace blocks
+  nested_block_color(level, color, regexes) → Color matching nested brace blocks
   diffnotes()  → Select two notes and show a diff
   setDiffContext(2,2) → Show 2 context lines around note diffs
   clearDiffContext() → Show full note diffs

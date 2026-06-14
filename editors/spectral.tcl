@@ -16915,6 +16915,106 @@ proc keeplines {args} {
 }
 
 
+proc delete_empty_lines {} {
+    set lines {};
+    set lastline [lindex [split [.t index "end - 1 char"] "."] 0];
+    for {set i 1} {$i <= $lastline} {incr i} {
+        set linecont [.t get "$i.0" "$i.end"];
+        if {[regexp {^\s*$} $linecont]} {
+            lappend lines $i;
+        }
+    }
+    set lines [lsort -integer -decreasing $lines];
+    foreach line $lines {
+        .t fastdelete "$line.0" "$line.end + 1c";
+    }
+}
+
+
+proc block_color_resolve_color {color_spec} {
+    global fixed_boxes;
+    global currentColor;
+    array set preset_colors $fixed_boxes;
+    if {[string is integer -strict $color_spec]} {
+        if {$color_spec == 6} {
+            return $currentColor;
+        }
+        if {[info exists preset_colors($color_spec)]} {
+            return $preset_colors($color_spec);
+        }
+    }
+    return $color_spec;
+}
+
+proc block_color_matches {txt regexes} {
+    foreach regex $regexes {
+        if {![regexp $regex $txt]} {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+proc nested_block_color {level color_spec regexes {start_linenum 1} {end_linenum end}} {
+    if {![string is integer -strict $level] || $level < 0} {
+        error "nested_block_color level must be a non-negative integer";
+    }
+
+    set color [block_color_resolve_color $color_spec];
+    set tagname "block_color_";
+    foreach ch [split $color ""] {
+        if {[regexp {[A-Za-z0-9]} $ch]} {
+            append tagname $ch;
+        } else {
+            append tagname "_";
+        }
+    }
+    .t tag configure $tagname -background $color;
+    .t tag raise $tagname;
+
+    set start [.t index "${start_linenum}.0"];
+    if {$end_linenum == "end"} {
+        set stop [.t index "end - 1 char"];
+    } else {
+        set stop [.t index "${end_linenum}.end"];
+    }
+
+    set pos $start;
+    set depth 0;
+    set block_start "";
+    set colored 0;
+    while {[.t compare $pos < $stop]} {
+        set ch [.t get $pos "$pos + 1 char"];
+        if {$ch == "\{"} {
+            if {$depth == $level} {
+                set block_start $pos;
+            }
+            incr depth;
+        } elseif {$ch == "\}"} {
+            if {$depth > 0} {
+                set closing_level [expr {$depth - 1}];
+                incr depth -1;
+                if {$closing_level == $level && $block_start != ""} {
+                    set block_end [.t index "$pos + 1 char"];
+                    set block_text [.t get $block_start $block_end];
+                    if {[block_color_matches $block_text $regexes]} {
+                        .t tag add $tagname $block_start $block_end;
+                        incr colored;
+                    }
+                    set block_start "";
+                }
+            }
+        }
+        set pos [.t index "$pos + 1 char"];
+    }
+    return $colored;
+}
+
+proc block_color {color_spec regexes {start_linenum 1} {end_linenum end}} {
+    return [nested_block_color 0 $color_spec $regexes $start_linenum $end_linenum];
+}
+
+
 
 
 proc del {args} {
@@ -20093,6 +20193,9 @@ add_spectral_alias  copySelection;
 add_spectral_alias  sel;
 add_spectral_alias  dellines;
 add_spectral_alias  keeplines;
+add_spectral_alias  delete_empty_lines;
+add_spectral_alias  block_color;
+add_spectral_alias  nested_block_color;
 add_spectral_alias  seltag;
 add_spectral_alias  selrect
 add_spectral_alias  getmenu;
