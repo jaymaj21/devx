@@ -2687,7 +2687,9 @@ proc negateAll {invert_tags} {
     .searchFrame.color configure -background [negateColor [.searchFrame.color cget -background]];
     .searchFrame.color configure -foreground [negateColor [.searchFrame.color cget -foreground]];
     .t.l configure -background [negateColor [.t.l cget -background]];
-    .t.l configure -foreground [negateColor [.t.l cget -foreground]];
+    if {[catch {.t.l configure -foreground [negateColor [.t.l cget -foreground]]}]} {
+        catch {set ::ctext_linemap_fg(.t) [negateColor $::ctext_linemap_fg(.t)]}
+    }
 
     .searchFrame.font configure -background [negateColor [.searchFrame.font cget -background]];
     #.searchFrame.font configure -foreground [negateColor [.searchFrame.font cget -foreground]];
@@ -9046,6 +9048,29 @@ proc change_yview {args} {
     .bottomFrame.position clear;
     .bottomFrame.position insert 0 $cursor_pos; 
 }
+
+proc ctext::useCanvasLinemap {win} {
+    if {![winfo exists $win.l]} {
+        return
+    }
+    if {[winfo class $win.l] == "Canvas"} {
+        return
+    }
+    set bg "#eeeeee"
+    set fg "#444444"
+    catch {set bg [$win.l cget -background]}
+    catch {set fg [$win.l cget -foreground]}
+    catch {pack forget $win.l}
+    catch {destroy $win.l}
+    canvas $win.l -width 40 -background $bg -highlightthickness 0 -takefocus 0 -cursor arrow
+    set ::ctext_linemap_fg($win) $fg
+    if {[winfo exists $win.t]} {
+        pack $win.l -side left -fill y -before $win.t
+    } else {
+        pack $win.l -side left -fill y
+    }
+}
+
 frame .textFrame
 scrollbar .s -orient vertical -command {change_yview} -takefocus 1
 scrollbar .shoriz -orient horizontal -command {change_xview} -takefocus 1
@@ -9053,6 +9078,7 @@ scrollbar .shoriz -orient horizontal -command {change_xview} -takefocus 1
  ctext .t -yscrollcommand {.s set} -xscrollcommand {.shoriz set} -wrap word -width 100 -height $textheight \
     -font $default_font -setgrid 1 -highlightthickness 0 \
     -padx 4  -takefocus 0 -bg $default_background -fg $default_foreground -insertbackground blue -selectbackground #6bced6 -selectforeground black -selectborderwidth 2 -inactiveselectbackground #6bced6 -maxundo -1 -undo 1
+catch {ctext::useCanvasLinemap .t}
    
 iwidgets::scrolledtext .textFrame.overview  -labeltext "Refresh Overview" -wrap word -labelpos n \
     -vscrollmode static -hscrollmode dynamic \
@@ -9099,36 +9125,7 @@ pack .t -in .textFrame -expand yes -fill both -padx 1
 pack .textFrame -expand yes -fill both
 
 proc update_main_editor_linenumbers {} {
-    if {![winfo exists .t.l] || ![winfo exists .t.t]} {
-        return
-    }
-    set h [winfo height .t.t]
-    if {$h <= 0} {
-        return
-    }
-    set lines {}
-    for {set y 0} {$y < $h} {incr y 14} {
-        set idx [.t.t index @0,$y]
-        set ln [lindex [split $idx .] 0]
-        if {[llength $lines] == 0 || [lindex $lines end] ne $ln} {
-            lappend lines $ln
-        }
-    }
-    set new_text ""
-    foreach ln $lines {
-        append new_text "${ln}\n"
-    }
-    if {![info exists ::main_linenum_text] || $::main_linenum_text ne $new_text} {
-        set ::main_linenum_text $new_text
-        .t.l delete 1.0 end
-        .t.l insert end $new_text
-    }
-    set endrow [lindex [split [.t.t index end-1c] .] 0]
-    set new_w [expr {max(3,[string length $endrow])}]
-    if {![info exists ::main_linenum_width] || $::main_linenum_width != $new_w} {
-        set ::main_linenum_width $new_w
-        .t.l configure -width $new_w
-    }
+    catch {ctext::linemapUpdate .t}
 }
 
 proc schedule_main_editor_linenumbers {} {
@@ -20598,43 +20595,73 @@ proc ctext::highlight {win start end {afterTriggered 0}} {
 #args is here because -yscrollcommand may call it
 proc ctext::linemapUpdate {win args} {
     if {[winfo exists $win.l] != 1} {
-    return
+        return
     }
 
-    set currentPixel 0
-    set lastLine {}
-    set lastLineL {};
+    set t $win._t
     set lineList [list]
-    set fontMetrics [font metrics [$win.l cget -font]]
-    set incrBy [lindex $fontMetrics 5];
-    set currentPixel [expr $incrBy / 2];
-    
-    #set incrBy [expr [lindex $fontMetrics 5]]
-    #puts stderr "incrBy = $incrBy currentPixel = $currentPixel winfo height of .t = [winfo height $win.t]"
+    set displayLines [list]
+    set height [winfo height $win.t]
+    if {$height <= 0} {
+        return
+    }
+    catch {update idletasks}
 
-    while {$currentPixel < [winfo height $win.t]} {
-    $win.l insert end "\n";
-    set idx [$win._t index @0,$currentPixel]
-    set idxL [$win.l index @0,$currentPixel]
-     
-
-    if {$idxL != $lastLineL} {
-       if {$idx != $lastLine} {
-          set line [lindex [split $idx .] 0]
-          lappend lineList $line
-          set lastLine $idx;
-       } else {
-          lappend lineList [lindex [split $lastLine .] 0]
-       }
-       set lastLineL $idxL;
-     }
-     incr currentPixel $incrBy;
-     #puts stderr "currentPixel=$currentPixel last Line=$lastLine last line L = $lastLineL";
-
-    } 
-    #puts stderr $lineList
+    set idx [$t index @0,0]
+    set guard 0
+    while {$idx != "" && $guard < 10000} {
+        incr guard
+        set info [$t dlineinfo $idx]
+        if {$info == ""} {
+            break
+        }
+        set y [lindex $info 1]
+        set h [lindex $info 3]
+        if {$y >= $height} {
+            break
+        }
+        if {[expr {$y + $h}] >= 0} {
+            set line [lindex [split $idx .] 0]
+            lappend lineList $line
+            lappend displayLines [list $line $y]
+        }
+        set next [$t index "$idx + 1 display lines"]
+        if {$next == $idx} {
+            break
+        }
+        set idx $next
+    }
 
     ctext::getAr $win linemap linemapAr
+
+    if {[winfo class $win.l] == "Canvas"} {
+        $win.l delete all
+        set endrow [lindex [split [$win._t index end-1c] .] 0]
+        set digits [string length $endrow]
+        if {$digits < 3} { set digits 3 }
+        set font [$win._t cget -font]
+        set width [expr {[font measure $font [string repeat "8" $digits]] + 8}]
+        $win.l configure -width $width
+        set fg "#444444"
+        catch {set fg $::ctext_linemap_fg($win)}
+        set lastLine {}
+        foreach entry $displayLines {
+            lassign $entry line y
+            set txt ""
+            if {$line != $lastLine} {
+                set txt $line
+            }
+            set fill $fg
+            if {[info exists linemapAr($line)]} {
+                set fill blue
+            }
+            if {$txt != ""} {
+                $win.l create text [expr {$width - 4}] $y -anchor ne -text $txt -font $font -fill $fill
+            }
+            set lastLine $line
+        }
+        return
+    }
 
     $win.l delete 1.0 end
     set lastLine {}
