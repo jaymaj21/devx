@@ -526,9 +526,57 @@ set default_highlight "";
 set modified 0;
 set default_background white;
 set default_foreground black;
+set suppress_modified_events 0;
+set suppress_clean_modified_events 0;
 catch { set default_font [registry get $regroot default_font]};
 #catch { set default_background [registry get $regroot default_background]};
 #catch { set default_foreground [registry get $regroot default_foreground]};
+
+proc beginProgrammaticTextChange {} {
+    global suppress_modified_events;
+    incr suppress_modified_events;
+}
+
+proc finishProgrammaticTextChange {{w .t} {clean 1}} {
+    global suppress_modified_events;
+    global suppress_clean_modified_events;
+    global modified;
+
+    if {$suppress_modified_events > 0} {
+        incr suppress_modified_events -1;
+    }
+    if {$suppress_modified_events == 0 && $clean} {
+        set suppress_clean_modified_events 1;
+        set modified 0;
+        catch {$w edit reset};
+        catch {$w edit modified 0};
+        updateModifiedStatus;
+        after idle {set suppress_clean_modified_events 0};
+    }
+}
+
+proc endProgrammaticTextChange {{w .t} {clean 1}} {
+    after idle [list finishProgrammaticTextChange $w $clean];
+}
+
+proc markTextClean {{w .t}} {
+    global suppress_clean_modified_events;
+    global modified;
+    set suppress_clean_modified_events 1;
+    set modified 0;
+    catch {$w edit reset};
+    catch {$w edit modified 0};
+    updateModifiedStatus;
+    after idle {set suppress_clean_modified_events 0};
+}
+
+proc markTextModified {{w .t}} {
+    global modified;
+    if {$w eq ".t" || $w eq ".t.t"} {
+        set modified 1;
+        updateModifiedStatus;
+    }
+}
 
 rename exit jaao;
 proc exit {} {
@@ -1369,6 +1417,8 @@ set remove_previous 0;
 set use_regex 1;
 set sel_only 0;
 set eval_expr 0;
+set quickCommand_evalmode "";
+set quickCommand_bypass_evalmode 0;
 
 proc setCTextPropertiesMainWindow {widget keywords} {
     $widget tag configure attention -background #5555ce
@@ -1441,6 +1491,16 @@ pack .bottomFrame.position -side right;
 proc checkForSave {} {
    global modified;
    global current_file;
+   global suppress_modified_events;
+   global suppress_clean_modified_events;
+
+   if {$suppress_modified_events == 0 && !$suppress_clean_modified_events} {
+       catch {
+           if {[.t edit modified]} {
+               set modified 1;
+           }
+       }
+   }
 
    if {$modified} {
        focus .
@@ -1451,8 +1511,7 @@ proc checkForSave {} {
        set result [tk_messageBox -title "Save Modifications?" -message $msg -icon question -type yesno];
        if {$result == yes} { 
          saveFile .t 
-         set modified 0;
-         updateModifiedStatus;
+         markTextClean .t;
        }
    } 
 }
@@ -2516,6 +2575,34 @@ proc negateColor {mycolor} {
     return $myresult;
  }
 
+ proc randomLightHighlightColor {} {
+    set h [expr {6.0 * rand()}]
+    set i [expr {int($h)}]
+    if {$i > 5} {
+        set i 5
+    }
+    set f [expr {$h - $i}]
+    set s [expr {0.32 + 0.23 * rand()}]
+    set v [expr {0.94 + 0.06 * rand()}]
+    set p [expr {$v * (1.0 - $s)}]
+    set q [expr {$v * (1.0 - $s * $f)}]
+    set t [expr {$v * (1.0 - $s * (1.0 - $f))}]
+
+    switch -- $i {
+        0 { set r $v; set g $t; set b $p }
+        1 { set r $q; set g $v; set b $p }
+        2 { set r $p; set g $v; set b $t }
+        3 { set r $p; set g $q; set b $v }
+        4 { set r $t; set g $p; set b $v }
+        default { set r $v; set g $p; set b $q }
+    }
+
+    return [format "#%02x%02x%02x" \
+        [expr {int(255 * $r)}] \
+        [expr {int(255 * $g)}] \
+        [expr {int(255 * $b)}]]
+ }
+
  proc colorCode {mycolor} {
    foreach {redcolor greencolor bluecolor} [winfo rgb . $mycolor] break
    set colormax [lindex [winfo rgb . white] 0]
@@ -2602,7 +2689,9 @@ proc negateAll {invert_tags} {
     .searchFrame.color configure -background [negateColor [.searchFrame.color cget -background]];
     .searchFrame.color configure -foreground [negateColor [.searchFrame.color cget -foreground]];
     .t.l configure -background [negateColor [.t.l cget -background]];
-    .t.l configure -foreground [negateColor [.t.l cget -foreground]];
+    if {[catch {.t.l configure -foreground [negateColor [.t.l cget -foreground]]}]} {
+        catch {set ::ctext_linemap_fg(.t) [negateColor $::ctext_linemap_fg(.t)]}
+    }
 
     .searchFrame.font configure -background [negateColor [.searchFrame.font cget -background]];
     #.searchFrame.font configure -foreground [negateColor [.searchFrame.font cget -foreground]];
@@ -2630,6 +2719,194 @@ proc negateAll {invert_tags} {
 
 }
 
+set popup_search_default_bg "#fff2a8";
+set popup_search_default_fg "#000000";
+
+proc add_popup_text_search_controls {w txtwidget} {
+    global default_font;
+    global popup_search_default_bg;
+    global popup_search_default_fg;
+    global popup_search_bg;
+    global popup_search_fg;
+    global popup_search_text;
+    global popup_search_last;
+    global popup_search_pos;
+    global popup_search_tag;
+    global popup_search_current_tag;
+    global popup_search_tags;
+
+    set bar $w.searchFrame;
+    frame $bar;
+
+    set popup_search_bg($txtwidget) $popup_search_default_bg;
+    set popup_search_fg($txtwidget) $popup_search_default_fg;
+    set popup_search_text($txtwidget) "";
+    set popup_search_last($txtwidget) "";
+    set popup_search_pos($txtwidget) -1;
+    set popup_search_tag($txtwidget) "";
+    set popup_search_current_tag($txtwidget) "";
+    set popup_search_tags($txtwidget) {};
+
+    label $bar.label -text "Find:" -font $default_font;
+    entry $bar.search -width 32 -textvariable popup_search_text($txtwidget) -font $default_font;
+    button $bar.bg -text "BG" -background $popup_search_bg($txtwidget) \
+        -command [list popup_search_choose_color $bar bg $txtwidget] -font $default_font;
+    button $bar.fg -text "FG" -foreground $popup_search_fg($txtwidget) \
+        -command [list popup_search_choose_color $bar fg $txtwidget] -font $default_font;
+    button $bar.clear -text "Clear" -command [list popup_search_clear $txtwidget] -font $default_font;
+
+    pack $bar.label -side left;
+    pack $bar.search -side left -fill x -expand yes;
+    pack $bar.bg -side left;
+    pack $bar.fg -side left;
+    pack $bar.clear -side left;
+    pack $bar -side top -fill x;
+
+    bind $bar.search <Return> [list popup_search_next $txtwidget]
+    bind $bar.search <KP_Enter> [list popup_search_next $txtwidget]
+
+    return $bar;
+}
+
+proc popup_search_choose_color {bar which txtwidget} {
+    global popup_search_bg;
+    global popup_search_fg;
+
+    if {$which == "bg"} {
+        set initial $popup_search_bg($txtwidget);
+        set title "Choose Search Background";
+    } else {
+        set initial $popup_search_fg($txtwidget);
+        set title "Choose Search Foreground";
+    }
+
+    set newColor [tk_chooseColor -initialcolor $initial -title $title];
+    if {$newColor == ""} {
+        return;
+    }
+
+    if {$which == "bg"} {
+        set popup_search_bg($txtwidget) $newColor;
+        $bar.bg configure -background $newColor;
+    } else {
+        set popup_search_fg($txtwidget) $newColor;
+        $bar.fg configure -foreground $newColor;
+    }
+
+    popup_search_rehighlight $txtwidget;
+}
+
+proc popup_search_clear {txtwidget} {
+    global popup_search_text;
+    global popup_search_last;
+    global popup_search_pos;
+    global popup_search_tag;
+    global popup_search_current_tag;
+    global popup_search_tags;
+
+    set popup_search_text($txtwidget) "";
+    set popup_search_last($txtwidget) "";
+    set popup_search_pos($txtwidget) -1;
+    foreach tag $popup_search_tags($txtwidget) {
+        catch {$txtwidget tag delete $tag};
+    }
+    set popup_search_tag($txtwidget) "";
+    set popup_search_current_tag($txtwidget) "";
+    set popup_search_tags($txtwidget) {};
+}
+
+proc popup_search_rehighlight {txtwidget} {
+    global popup_search_bg;
+    global popup_search_fg;
+    global popup_search_tag;
+    global popup_search_current_tag;
+
+    if {$popup_search_tag($txtwidget) == ""} {
+        popup_search_next $txtwidget;
+        return;
+    }
+
+    $txtwidget tag configure $popup_search_tag($txtwidget) \
+        -background $popup_search_bg($txtwidget) -foreground $popup_search_fg($txtwidget);
+    $txtwidget tag configure $popup_search_current_tag($txtwidget) \
+        -background $popup_search_bg($txtwidget) -foreground $popup_search_fg($txtwidget) -underline 1;
+}
+
+proc popup_search_next {txtwidget} {
+    global popup_search_text;
+    global popup_search_last;
+    global popup_search_pos;
+    global popup_search_bg;
+    global popup_search_fg;
+    global popup_search_tag;
+    global popup_search_current_tag;
+    global popup_search_tags;
+
+    if {![winfo exists $txtwidget]} {
+        return;
+    }
+
+    set needle $popup_search_text($txtwidget);
+    if {$needle == ""} {
+        popup_search_clear $txtwidget;
+        return;
+    }
+
+    set same_search [expr {$needle == $popup_search_last($txtwidget)}];
+    if {!$same_search} {
+        set popup_search_last($txtwidget) $needle;
+        set popup_search_pos($txtwidget) -1;
+        set popup_search_tag($txtwidget) "popup_search_hit_[randString]";
+        set popup_search_current_tag($txtwidget) "popup_search_current_[randString]";
+        lappend popup_search_tags($txtwidget) $popup_search_tag($txtwidget) $popup_search_current_tag($txtwidget);
+    }
+
+    if {$popup_search_tag($txtwidget) == ""} {
+        set popup_search_tag($txtwidget) "popup_search_hit_[randString]";
+        set popup_search_current_tag($txtwidget) "popup_search_current_[randString]";
+        lappend popup_search_tags($txtwidget) $popup_search_tag($txtwidget) $popup_search_current_tag($txtwidget);
+    }
+
+    set hit_tag $popup_search_tag($txtwidget);
+    set current_tag $popup_search_current_tag($txtwidget);
+
+    $txtwidget tag remove $hit_tag 1.0 end;
+    $txtwidget tag remove $current_tag 1.0 end;
+    $txtwidget tag configure $hit_tag -background $popup_search_bg($txtwidget) -foreground $popup_search_fg($txtwidget);
+    $txtwidget tag configure $current_tag -background $popup_search_bg($txtwidget) -foreground $popup_search_fg($txtwidget) -underline 1;
+
+    set ranges {};
+    set cur 1.0;
+    while 1 {
+        set pos [$txtwidget search -count matchlen -- $needle $cur end];
+        if {$pos == ""} {
+            break;
+        }
+        if {$matchlen <= 0} {
+            break;
+        }
+        set endpos [$txtwidget index "$pos + $matchlen chars"];
+        lappend ranges $pos $endpos;
+        $txtwidget tag add $hit_tag $pos $endpos;
+        set cur $endpos;
+    }
+
+    set occurrence_count [expr {[llength $ranges] / 2}];
+    if {$occurrence_count == 0} {
+        bell;
+        return;
+    }
+
+    set popup_search_pos($txtwidget) [expr {($popup_search_pos($txtwidget) + 1) % $occurrence_count}];
+    set current_start [lindex $ranges [expr {$popup_search_pos($txtwidget) * 2}]];
+    set current_end [lindex $ranges [expr {$popup_search_pos($txtwidget) * 2 + 1}]];
+
+    $txtwidget tag add $current_tag $current_start $current_end;
+    $txtwidget tag raise $current_tag;
+    $txtwidget mark set insert $current_start;
+    $txtwidget see $current_start;
+}
+
 
 proc show_text_input {base data title inputfn width height other_checkboxes clientdata}  {
    
@@ -2648,6 +2925,8 @@ proc show_text_input {base data title inputfn width height other_checkboxes clie
     $w.input insert 1.0 $data;
 
     [$w.input component label] configure -font $default_font;
+    set txtwidget [$w.input component text];
+    add_popup_text_search_controls $w $txtwidget;
 
     button $w.ok -text OK -command "if \{\[$inputfn $w $clientdata\] != 0\} \{destroy $w;\}" -font $default_font
     button $w.cancel -text Cancel -command "destroy $w" -font $default_font
@@ -2661,8 +2940,6 @@ proc show_text_input {base data title inputfn width height other_checkboxes clie
     pack $w.ok -side bottom -fill x
     pack $w.cancel -side bottom -fill x
     
-    set txtwidget [$w.input component text];  
-  
     bind $txtwidget  <Control-m> "
      matchBracket $txtwidget;
      break;
@@ -3174,11 +3451,7 @@ proc openFile {w args} {
 
     loadOverview;
     ctext::linemapUpdate $w;
-    global modified;
-    set modified 0;
-    .t edit reset;
-    .t edit modified 0;
-    updateModifiedStatus;
+    markTextClean .t;
 }
 
 proc loadOverview {} {
@@ -3210,9 +3483,7 @@ proc saveFile {w} {
      set cmd_to_editor 0;
      saveAll $w $current_file;
     
-    global modified;
-    set modified 0;
-    updateModifiedStatus;
+    markTextClean $w;
     
     global file_lastmod;
     set file_lastmod [file mtime $current_file];
@@ -3234,9 +3505,7 @@ proc saveFileAs {w} {
         return;
     }
 
-    global modified;
-    set modified 0;
-    updateModifiedStatus;
+    markTextClean $w;
 
     set current_file $fname;
     global title_prefix;
@@ -3267,8 +3536,7 @@ proc saveAll {w fname} {
      saveToTextFile $w $fname;
      saveToHltFile $w "$fname.hlt";
  
-    global modified;
-    set modified 0;
+    markTextClean $w;
     
 }
 
@@ -3277,13 +3545,20 @@ proc loadFromTextFile {w fname} {
     global rotate;
     global cmd_to_editor;
     set cmd_to_editor 0;
+    beginProgrammaticTextChange;
     
-    set fp [open $fname r];
-    fconfigure $fp -encoding utf-8
-    set cont [read $fp];
-    close $fp;
-    .t fastdelete 0.0 end
-    $w insert end $cont;
+    set err [catch {
+        set fp [open $fname r];
+        fconfigure $fp -encoding utf-8
+        set cont [read $fp];
+        close $fp;
+        .t fastdelete 0.0 end
+        $w insert end $cont;
+    } msg];
+    endProgrammaticTextChange $w 1;
+    if {$err} {
+        error $msg;
+    }
     array unset last_search;
     array unset rotate;
 }
@@ -3574,7 +3849,14 @@ proc loadFromFile {w} {
     fconfigure $fp -encoding utf-8
     set cont [read $fp];
     close $fp;
-    text:restore $w $cont
+    beginProgrammaticTextChange;
+    set err [catch {
+        text:restore $w $cont
+    } msg];
+    endProgrammaticTextChange $w 1;
+    if {$err} {
+        error $msg;
+    }
     
     array unset last_search;
     array unset rotate;
@@ -3615,9 +3897,17 @@ proc loadFromHltFile {w args} {
     set cont [read $fp];
     close $fp;
     set cont [trimMergeConflict $cont];
-    $w configure -undo 0;
-    hlt:restore $w $cont loadingFromFile;
-    $w configure -undo 1;
+    beginProgrammaticTextChange;
+    set err [catch {
+        $w configure -undo 0;
+        hlt:restore $w $cont loadingFromFile;
+        $w configure -undo 1;
+    } msg];
+    endProgrammaticTextChange $w 1;
+    if {$err} {
+        catch {$w configure -undo 1};
+        error $msg;
+    }
    
     
     global file_lastmod;
@@ -3691,6 +3981,7 @@ proc edit:close {{load_old_text 1}} {
 
 proc edit:closeNoAsk {{load_old_text 1}} {
     
+    beginProgrammaticTextChange;
 
     #Reset the viewpoints list
     global viewpoints;
@@ -3740,9 +4031,9 @@ proc edit:closeNoAsk {{load_old_text 1}} {
         }
     }
 
-    global modified;
-    set modified 0;
+    markTextClean .t;
     update;
+    endProgrammaticTextChange .t 1;
     return "";
 }
 
@@ -4236,7 +4527,111 @@ proc diffdiff { { ignore_re {} } } {
     }
 }
 
+set strdiff_context {};
+
+proc set_strdiff_context {context_before {context_after {}}} {
+  global strdiff_context;
+  if {$context_before == ""} {
+    set strdiff_context {};
+    return $strdiff_context;
+  }
+  if {$context_after == ""} {
+    set context_after $context_before;
+  }
+  set strdiff_context [list [expr {max(0, int($context_before))}] [expr {max(0, int($context_after))}]];
+  return $strdiff_context;
+}
+
+proc clear_strdiff_context {} {
+  global strdiff_context;
+  set strdiff_context {};
+  return $strdiff_context;
+}
+
 proc strdiff {granularity {string1 {} } {string2 {} } {wnd {}} } {
+   global strdiff_context;
+   strdiff_helper $granularity $strdiff_context $string1 $string2 $wnd;
+}
+
+proc strdiff_focus {granularity context_before {context_after {}}} {
+  if {$context_after == ""} {
+    set context_after $context_before;
+  }
+  strdiff_helper $granularity [list $context_before $context_after];
+}
+
+proc strdiff_segments_to_lines {segments} {
+  set lines [list {}]
+  set diff_lines [dict create]
+  set line 0
+
+  foreach segment $segments {
+    lassign $segment txt tag
+    set parts [split $txt "\n"]
+    set last_part [expr {[llength $parts] - 1}]
+    for {set i 0} {$i <= $last_part} {incr i} {
+      set part [lindex $parts $i]
+      if {$part != ""} {
+        set curline [lindex $lines $line]
+        lappend curline [list $part $tag]
+        lset lines $line $curline
+        if {$tag == "inserted" || $tag == "deleted"} {
+          dict set diff_lines $line 1
+        }
+      }
+      if {$i < $last_part} {
+        set curline [lindex $lines $line]
+        lappend curline [list "\n" $tag]
+        lset lines $line $curline
+        if {$tag == "inserted" || $tag == "deleted"} {
+          dict set diff_lines $line 1
+        }
+        incr line
+        lappend lines {}
+      }
+    }
+  }
+
+  return [list $lines $diff_lines]
+}
+
+proc strdiff_insert_segments {wnd segments context} {
+  if {[llength $context] != 2} {
+    foreach segment $segments {
+      lassign $segment txt tag
+      $wnd insert end $txt $tag
+    }
+    return
+  }
+
+  set context_before [expr {max(0, int([lindex $context 0]))}]
+  set context_after [expr {max(0, int([lindex $context 1]))}]
+  lassign [strdiff_segments_to_lines $segments] lines diff_lines
+  set selected [dict create]
+  set last_line [expr {[llength $lines] - 1}]
+
+  foreach diff_line [lsort -integer [dict keys $diff_lines]] {
+    set first [expr {max(0, $diff_line - $context_before)}]
+    set last [expr {min($last_line, $diff_line + $context_after)}]
+    for {set line $first} {$line <= $last} {incr line} {
+      dict set selected $line 1
+    }
+  }
+
+  set previous_line -1
+  foreach line [lsort -integer [dict keys $selected]] {
+    if {$previous_line >= 0 && $line > ($previous_line + 1)} {
+      $wnd insert end "---------- context break ----------\n" diff_context_separator
+    }
+    foreach segment [lindex $lines $line] {
+      lassign $segment txt tag
+      $wnd insert end $txt $tag
+    }
+    set previous_line $line
+  }
+}
+
+proc strdiff_helper {granularity {context {}} {string1 {} } {string2 {} } {wnd {}} } {
  
   set selranges [.t tag ranges sel];
   # text strings to "difference":
@@ -4299,21 +4694,25 @@ proc strdiff {granularity {string1 {} } {string2 {} } {wnd {}} } {
   
   $wnd tag configure inserted -underline true -background #aafba2;
   $wnd tag configure deleted  -overstrike true -background  #fd9f9f;
+  $wnd tag configure diff_context_separator -foreground #777777 -background #eeeeee;
+
+  set segments {}
   foreach item $diffdata {
     lassign $item kind idx1 idx2
     switch -exact $kind {
-      added     { $wnd insert end [ join [ lrange $list2 {*}$idx2 ] "" ] inserted;
+      added     { lappend segments [list [ join [ lrange $list2 {*}$idx2 ] "" ] inserted];
        }
-      deleted   { $wnd insert end [ join [ lrange $list1 {*}$idx1 ] "" ] deleted;
+      deleted   { lappend segments [list [ join [ lrange $list1 {*}$idx1 ] "" ] deleted];
        }
-      changed   { $wnd insert end [ join [ lrange $list1 {*}$idx1 ] "" ] deleted;
-                  $wnd insert end [ join [ lrange $list2 {*}$idx2 ] "" ] inserted ;
+      changed   { lappend segments [list [ join [ lrange $list1 {*}$idx1 ] "" ] deleted];
+                  lappend segments [list [ join [ lrange $list2 {*}$idx2 ] "" ] inserted];
               }
-      unchanged { $wnd insert end [ join [ lrange $list1 {*}$idx1 ] "" ] {};
+      unchanged { lappend segments [list [ join [ lrange $list1 {*}$idx1 ] "" ] {}];
           }
       }
       
     }
+  strdiff_insert_segments $wnd $segments $context
 }
 
 proc strdiff++ {granularity ignore_regex {string1 {} } {string2 {} } {wnd {} } } {
@@ -8186,7 +8585,7 @@ body { background-color: $default_background ;  color: $default_foreground; }
    }
   }
   append mid {
-<div id="content" contenteditable=true>}
+<div id="editor" contenteditable=true>}
 set prestart {
 <pre id='vimCodeElement'>
 }
@@ -8651,6 +9050,29 @@ proc change_yview {args} {
     .bottomFrame.position clear;
     .bottomFrame.position insert 0 $cursor_pos; 
 }
+
+proc ctext::useCanvasLinemap {win} {
+    if {![winfo exists $win.l]} {
+        return
+    }
+    if {[winfo class $win.l] == "Canvas"} {
+        return
+    }
+    set bg "#eeeeee"
+    set fg "#444444"
+    catch {set bg [$win.l cget -background]}
+    catch {set fg [$win.l cget -foreground]}
+    catch {pack forget $win.l}
+    catch {destroy $win.l}
+    canvas $win.l -width 40 -background $bg -highlightthickness 0 -takefocus 0 -cursor arrow
+    set ::ctext_linemap_fg($win) $fg
+    if {[winfo exists $win.t]} {
+        pack $win.l -side left -fill y -before $win.t
+    } else {
+        pack $win.l -side left -fill y
+    }
+}
+
 frame .textFrame
 scrollbar .s -orient vertical -command {change_yview} -takefocus 1
 scrollbar .shoriz -orient horizontal -command {change_xview} -takefocus 1
@@ -8658,6 +9080,7 @@ scrollbar .shoriz -orient horizontal -command {change_xview} -takefocus 1
  ctext .t -yscrollcommand {.s set} -xscrollcommand {.shoriz set} -wrap word -width 100 -height $textheight \
     -font $default_font -setgrid 1 -highlightthickness 0 \
     -padx 4  -takefocus 0 -bg $default_background -fg $default_foreground -insertbackground blue -selectbackground #6bced6 -selectforeground black -selectborderwidth 2 -inactiveselectbackground #6bced6 -maxundo -1 -undo 1
+catch {ctext::useCanvasLinemap .t}
    
 iwidgets::scrolledtext .textFrame.overview  -labeltext "Refresh Overview" -wrap word -labelpos n \
     -vscrollmode static -hscrollmode dynamic \
@@ -8704,36 +9127,7 @@ pack .t -in .textFrame -expand yes -fill both -padx 1
 pack .textFrame -expand yes -fill both
 
 proc update_main_editor_linenumbers {} {
-    if {![winfo exists .t.l] || ![winfo exists .t.t]} {
-        return
-    }
-    set h [winfo height .t.t]
-    if {$h <= 0} {
-        return
-    }
-    set lines {}
-    for {set y 0} {$y < $h} {incr y 14} {
-        set idx [.t.t index @0,$y]
-        set ln [lindex [split $idx .] 0]
-        if {[llength $lines] == 0 || [lindex $lines end] ne $ln} {
-            lappend lines $ln
-        }
-    }
-    set new_text ""
-    foreach ln $lines {
-        append new_text "${ln}\n"
-    }
-    if {![info exists ::main_linenum_text] || $::main_linenum_text ne $new_text} {
-        set ::main_linenum_text $new_text
-        .t.l delete 1.0 end
-        .t.l insert end $new_text
-    }
-    set endrow [lindex [split [.t.t index end-1c] .] 0]
-    set new_w [expr {max(3,[string length $endrow])}]
-    if {![info exists ::main_linenum_width] || $::main_linenum_width != $new_w} {
-        set ::main_linenum_width $new_w
-        .t.l configure -width $new_w
-    }
+    catch {ctext::linemapUpdate .t}
 }
 
 proc schedule_main_editor_linenumbers {} {
@@ -9055,6 +9449,45 @@ set cmd_bg "#ffff00";
 set bottompane .topFrame
 interp alias $qcInterp .t {} .t
 set quickCommand $bottompane.quickCommand ;
+proc set_evalmode {mode} {
+    global quickCommand_evalmode;
+    global eval_expr;
+
+    set mode [string trim $mode];
+    if {$mode == "" || $mode == "clear"} {
+        set quickCommand_evalmode "";
+        set eval_expr 0;
+        return $quickCommand_evalmode;
+    }
+    set quickCommand_evalmode $mode;
+    set eval_expr [expr {$mode == "expr"}];
+    return $quickCommand_evalmode;
+}
+
+proc arithmetic args {
+    eval [list expr {*}$args];
+}
+
+proc quickCommandHistoryToEntry {cmd} {
+    global quickCommand_evalmode;
+    global eval_expr;
+
+    set mode $quickCommand_evalmode;
+    if {$mode == "" && $eval_expr} {
+        set mode expr;
+    }
+    if {$mode == ""} {
+        return $cmd;
+    }
+    if {[catch {llength $cmd} len]} {
+        return $cmd;
+    }
+    if {$len == 2 && [lindex $cmd 0] == $mode} {
+        return [lindex $cmd 1];
+    }
+    return $cmd;
+}
+
 proc quickCommandExec {} {
     global quickCommand;
     global cmd_to_editor;
@@ -9065,6 +9498,8 @@ proc quickCommandExec {} {
     global new_loggedcommands;
     global stay_in_quick_command;
     global cmd_bg;
+    global quickCommand_evalmode;
+    global quickCommand_bypass_evalmode;
 
     set thistext  [$quickCommand component entry get ];
     set thistext  [string trim $thistext];
@@ -9076,21 +9511,28 @@ proc quickCommandExec {} {
     } 
     
     if {[string length $thistext] > 0} { 
-      lappend  loggedcommands $thistext;
-      lappend  new_loggedcommands $thistext;
       $quickCommand clear
       set _historyPosition -1;
       set target .status;
       if {$cmd_to_editor} {set target .t};
+      set bypass_evalmode $quickCommand_bypass_evalmode;
+      if {[regexp {^set_evalmode[ \t]+} $thistext]} {
+          set bypass_evalmode 1;
+      }
+      set quickCommand_bypass_evalmode 0;
+      if {$quickCommand_evalmode != "" && !$bypass_evalmode} {
+          set the_cmd [list $quickCommand_evalmode $thistext];
+      } elseif {$eval_expr && !$bypass_evalmode} {
+          set the_cmd [list expr $thistext];
+      } else {
+          set the_cmd $thistext;
+      }
+      lappend  loggedcommands $the_cmd;
+      lappend  new_loggedcommands $the_cmd;
       $target tag configure tag_cmd_bg -background $cmd_bg;
-      $target insert end ">>>> $thistext" tag_cmd_bg;
+      $target insert end ">>>> $the_cmd" tag_cmd_bg;
       $target insert end "\n"
       update;
-      set the_cmd "";
-      if {$eval_expr } {
-          append the_cmd "expr ";
-      }
-      append the_cmd $thistext;
       catch {$qcInterp eval $the_cmd} msg;
       $target insert end $msg;
       $target insert end "\n";
@@ -9139,6 +9581,7 @@ proc changeQuickCommandContent {} {
     if {$apos > 0 && $apos <= $numcmds} {
             incr apos -1    
         set newcmd [lindex $loggedcommands $apos]
+        set newcmd [quickCommandHistoryToEntry $newcmd]
         $quickCommand clear
         $quickCommand component entry insert end $newcmd
     }
@@ -9251,6 +9694,7 @@ proc showOutputFile {file_name type name highlight_lines} {
         -font {Courier 10} -setgrid 1 -highlightthickness 0 \
         -padx 4 -pady 2 -takefocus 0 -bg white -fg black -insertbackground blue ;
     .popup_${type}.t tag configure attention -background #ccd4f7
+    add_popup_text_search_controls .popup_${type} .popup_${type}.t;
     pack .popup_${type}.t -in .popup_${type}.textFrame -expand y -fill both -padx 1
     pack .popup_${type}.textFrame -expand yes -fill both
 
@@ -9328,6 +9772,7 @@ proc showOutput {txt type name highlight_lines} {
         -font {Courier 10} -setgrid 1 -highlightthickness 0 \
         -padx 4 -pady 2 -takefocus 0 -bg white -fg black -insertbackground blue ;
     .popup_${type}.t tag configure attention -background #ccd4f7
+    add_popup_text_search_controls .popup_${type} .popup_${type}.t;
     pack .popup_${type}.t -in .popup_${type}.textFrame -expand y -fill both -padx 1
     pack .popup_${type}.textFrame -expand yes -fill both
     .popup_${type}.t insert end $txt;
@@ -11436,7 +11881,9 @@ proc createResultsWindow {title} {
 
    wm title $resultsWindow $title;
    iwidgets::scrolledtext $resultsWindow.results -width 400 -height 400;
-   [$resultsWindow.results component text] configure -undo 0
+   set txtwidget [$resultsWindow.results component text];
+   $txtwidget configure -undo 0
+   add_popup_text_search_controls $resultsWindow $txtwidget;
    pack $resultsWindow.results -side top -fill both -expand yes
    entry $resultsWindow.filter;
    bind $resultsWindow.filter <Return>  "filterResult $resultsWindow";
@@ -11467,9 +11914,6 @@ proc createResultsWindow {title} {
      %W tag remove visited "$aline" "$aline lineend";
    }
    
-   set txtwidget [$resultsWindow.results component text];  
-  
-  
     bind $txtwidget  <Control-c> "
      copySelection $txtwidget;
      break;
@@ -11482,7 +11926,7 @@ proc createResultsWindow {title} {
   
     bind $txtwidget <Double-ButtonPress-1> "
        set pos \[$txtwidget index {@%x,%y}\];
-       highlightCurrent $txtwidget  \$pos; break;
+       highlightCurrentBarebones $txtwidget  \$pos; break;
   
     "
    
@@ -14193,10 +14637,7 @@ proc highlightCurrent {textwidget pos} {
         global highlight_colors;
         set tagname "";
         if {$default_highlight == ""} {
-        set r [expr { int(100 * rand() + 150) }]
-        set g [expr { int(100 * rand() + 150) }]
-        set b [expr { int(100 * rand() + 150) }]
-        set col [format "#%02x%02x%02x" $r $g $b];
+        set col [randomLightHighlightColor];
         if {$background_code == "#000000"} {
            set col [negateColor $col];
         }
@@ -14271,6 +14712,9 @@ proc highlightCurrent {textwidget pos} {
        }
     } msg;
     
+    if {$occurrence_count > 0} {
+        markTextModified $textwidget;
+    }
     addToStatus "\n${occurrence_count} occurrences\n"
     #puts stderr $msg;
     update;
@@ -14325,10 +14769,7 @@ proc highlightCurrentBarebones {textwidget pos} {
         }
 
         if {$default_highlight eq ""} {
-            set r [expr {int(56 * rand() + 180)}]
-            set g [expr {int(56 * rand() + 180)}]
-            set b [expr {int(56 * rand() + 180)}]
-            set col [format "#%02x%02x%02x" $r $g $b]
+            set col [randomLightHighlightColor]
             set tagname "U[randString]"
             $textwidget tag configure $tagname -background $col
             lappend highlight_colors $tagname
@@ -14362,6 +14803,9 @@ proc highlightCurrentBarebones {textwidget pos} {
             set cur [$textwidget index "$cur + 1 char"]
         }
         addToStatus "\n${occurrence_count} occurrences\n"
+        if {$occurrence_count > 0} {
+            markTextModified $textwidget
+        }
     } msg
     if {$msg ne ""} {
         addToStatus "highlight error: $msg"
@@ -16516,6 +16960,106 @@ proc keeplines {args} {
          }
     }
 
+}
+
+
+proc delete_empty_lines {} {
+    set lines {};
+    set lastline [lindex [split [.t index "end - 1 char"] "."] 0];
+    for {set i 1} {$i <= $lastline} {incr i} {
+        set linecont [.t get "$i.0" "$i.end"];
+        if {[regexp {^\s*$} $linecont]} {
+            lappend lines $i;
+        }
+    }
+    set lines [lsort -integer -decreasing $lines];
+    foreach line $lines {
+        .t fastdelete "$line.0" "$line.end + 1c";
+    }
+}
+
+
+proc block_color_resolve_color {color_spec} {
+    global fixed_boxes;
+    global currentColor;
+    array set preset_colors $fixed_boxes;
+    if {[string is integer -strict $color_spec]} {
+        if {$color_spec == 6} {
+            return $currentColor;
+        }
+        if {[info exists preset_colors($color_spec)]} {
+            return $preset_colors($color_spec);
+        }
+    }
+    return $color_spec;
+}
+
+proc block_color_matches {txt regexes} {
+    foreach regex $regexes {
+        if {![regexp $regex $txt]} {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+proc nested_block_color {level color_spec regexes {start_linenum 1} {end_linenum end}} {
+    if {![string is integer -strict $level] || $level < 0} {
+        error "nested_block_color level must be a non-negative integer";
+    }
+
+    set color [block_color_resolve_color $color_spec];
+    set tagname "block_color_";
+    foreach ch [split $color ""] {
+        if {[regexp {[A-Za-z0-9]} $ch]} {
+            append tagname $ch;
+        } else {
+            append tagname "_";
+        }
+    }
+    .t tag configure $tagname -background $color;
+    .t tag raise $tagname;
+
+    set start [.t index "${start_linenum}.0"];
+    if {$end_linenum == "end"} {
+        set stop [.t index "end - 1 char"];
+    } else {
+        set stop [.t index "${end_linenum}.end"];
+    }
+
+    set pos $start;
+    set depth 0;
+    set block_start "";
+    set colored 0;
+    while {[.t compare $pos < $stop]} {
+        set ch [.t get $pos "$pos + 1 char"];
+        if {$ch == "\{"} {
+            if {$depth == $level} {
+                set block_start $pos;
+            }
+            incr depth;
+        } elseif {$ch == "\}"} {
+            if {$depth > 0} {
+                set closing_level [expr {$depth - 1}];
+                incr depth -1;
+                if {$closing_level == $level && $block_start != ""} {
+                    set block_end [.t index "$pos + 1 char"];
+                    set block_text [.t get $block_start $block_end];
+                    if {[block_color_matches $block_text $regexes]} {
+                        .t tag add $tagname $block_start $block_end;
+                        incr colored;
+                    }
+                    set block_start "";
+                }
+            }
+        }
+        set pos [.t index "$pos + 1 char"];
+    }
+    return $colored;
+}
+
+proc block_color {color_spec regexes {start_linenum 1} {end_linenum end}} {
+    return [nested_block_color 0 $color_spec $regexes $start_linenum $end_linenum];
 }
 
 
@@ -19387,6 +19931,8 @@ proc enlargeFonts {w {inc 2}} {
     }
 }
 add_spectral_alias str2hex;
+add_spectral_alias set_evalmode;
+add_spectral_alias arithmetic;
 add_spectral_alias rename_listed_files;
 add_spectral_alias selincr;
 add_spectral_alias replace_in_file;
@@ -19604,6 +20150,9 @@ add_spectral_alias  quilt;
 add_spectral_alias  reformat_xml;
 add_spectral_alias  reformat_xml_file;
 add_spectral_alias  strdiff;
+add_spectral_alias  strdiff_focus;
+add_spectral_alias  set_strdiff_context;
+add_spectral_alias  clear_strdiff_context;
 add_spectral_alias  strdiff++;
 add_spectral_alias  strdiff_files;
 add_spectral_alias  commands;
@@ -19694,6 +20243,9 @@ add_spectral_alias  copySelection;
 add_spectral_alias  sel;
 add_spectral_alias  dellines;
 add_spectral_alias  keeplines;
+add_spectral_alias  delete_empty_lines;
+add_spectral_alias  block_color;
+add_spectral_alias  nested_block_color;
 add_spectral_alias  seltag;
 add_spectral_alias  selrect
 add_spectral_alias  getmenu;
@@ -19753,8 +20305,12 @@ wm protocol . WM_DELETE_WINDOW {confirmAndExit}
 
 
 bind .t <<Modified>> {
-    set modified 1;
-    updateModifiedStatus;
+    global suppress_modified_events;
+    global suppress_clean_modified_events;
+    if {$suppress_modified_events == 0 && !$suppress_clean_modified_events} {
+        set modified 1;
+        updateModifiedStatus;
+    }
     .t edit modified 0;
 }
 
@@ -20092,43 +20648,73 @@ proc ctext::highlight {win start end {afterTriggered 0}} {
 #args is here because -yscrollcommand may call it
 proc ctext::linemapUpdate {win args} {
     if {[winfo exists $win.l] != 1} {
-    return
+        return
     }
 
-    set currentPixel 0
-    set lastLine {}
-    set lastLineL {};
+    set t $win._t
     set lineList [list]
-    set fontMetrics [font metrics [$win.l cget -font]]
-    set incrBy [lindex $fontMetrics 5];
-    set currentPixel [expr $incrBy / 2];
-    
-    #set incrBy [expr [lindex $fontMetrics 5]]
-    #puts stderr "incrBy = $incrBy currentPixel = $currentPixel winfo height of .t = [winfo height $win.t]"
+    set displayLines [list]
+    set height [winfo height $win.t]
+    if {$height <= 0} {
+        return
+    }
+    catch {update idletasks}
 
-    while {$currentPixel < [winfo height $win.t]} {
-    $win.l insert end "\n";
-    set idx [$win._t index @0,$currentPixel]
-    set idxL [$win.l index @0,$currentPixel]
-     
-
-    if {$idxL != $lastLineL} {
-       if {$idx != $lastLine} {
-          set line [lindex [split $idx .] 0]
-          lappend lineList $line
-          set lastLine $idx;
-       } else {
-          lappend lineList [lindex [split $lastLine .] 0]
-       }
-       set lastLineL $idxL;
-     }
-     incr currentPixel $incrBy;
-     #puts stderr "currentPixel=$currentPixel last Line=$lastLine last line L = $lastLineL";
-
-    } 
-    #puts stderr $lineList
+    set idx [$t index @0,0]
+    set guard 0
+    while {$idx != "" && $guard < 10000} {
+        incr guard
+        set info [$t dlineinfo $idx]
+        if {$info == ""} {
+            break
+        }
+        set y [lindex $info 1]
+        set h [lindex $info 3]
+        if {$y >= $height} {
+            break
+        }
+        if {[expr {$y + $h}] >= 0} {
+            set line [lindex [split $idx .] 0]
+            lappend lineList $line
+            lappend displayLines [list $line $y]
+        }
+        set next [$t index "$idx + 1 display lines"]
+        if {$next == $idx} {
+            break
+        }
+        set idx $next
+    }
 
     ctext::getAr $win linemap linemapAr
+
+    if {[winfo class $win.l] == "Canvas"} {
+        $win.l delete all
+        set endrow [lindex [split [$win._t index end-1c] .] 0]
+        set digits [string length $endrow]
+        if {$digits < 3} { set digits 3 }
+        set font [$win._t cget -font]
+        set width [expr {[font measure $font [string repeat "8" $digits]] + 8}]
+        $win.l configure -width $width
+        set fg "#444444"
+        catch {set fg $::ctext_linemap_fg($win)}
+        set lastLine {}
+        foreach entry $displayLines {
+            lassign $entry line y
+            set txt ""
+            if {$line != $lastLine} {
+                set txt $line
+            }
+            set fill $fg
+            if {[info exists linemapAr($line)]} {
+                set fill blue
+            }
+            if {$txt != ""} {
+                $win.l create text [expr {$width - 4}] $y -anchor ne -text $txt -font $font -fill $fill
+            }
+            set lastLine $line
+        }
+        return
+    }
 
     $win.l delete 1.0 end
     set lastLine {}
@@ -20235,6 +20821,7 @@ bind [.topFrame.quickCommand component entry] <Key-d> {
      set num [string range $cmd 0 end-2];
      [.topFrame.quickCommand component entry] delete 0 end;
      [.topFrame.quickCommand component entry] insert end "dd $num";
+     set quickCommand_bypass_evalmode 1;
      quickCommandExec;
      break;
   }
@@ -20247,6 +20834,7 @@ bind [.topFrame.quickCommand component entry] <Key-y> {
      set num [string range $cmd 0 end-2];
      [.topFrame.quickCommand component entry] delete 0 end;
      [.topFrame.quickCommand component entry] insert end "yy $num";
+     set quickCommand_bypass_evalmode 1;
      quickCommandExec;
      break
   }
@@ -20259,6 +20847,7 @@ bind [.topFrame.quickCommand component entry] <Key-w> {
      set cmdx [string range $cmd  end-1 end];
      [.topFrame.quickCommand component entry] delete 0 end;
      [.topFrame.quickCommand component entry] insert end "$cmdx $num";
+     set quickCommand_bypass_evalmode 1;
      quickCommandExec;
      break
   }
@@ -20271,6 +20860,7 @@ bind [.topFrame.quickCommand component entry] <Key-p> {
      set num [string range $cmd 0 end-2];
      [.topFrame.quickCommand component entry] delete 0 end;
      [.topFrame.quickCommand component entry] insert end "yp $num";
+     set quickCommand_bypass_evalmode 1;
      quickCommandExec;
      break
   } else {
@@ -20280,6 +20870,7 @@ bind [.topFrame.quickCommand component entry] <Key-p> {
   if {$cmd == "p" } {
       set no_hlt_clipboard [catch {clipboard get}];
       if {!$no_hlt_clipboard} {
+        set quickCommand_bypass_evalmode 1;
         quickCommandExec;
       }
      }
@@ -20302,6 +20893,7 @@ load_plugin "plugins.tcl"
 load_plugin "plugin_*.tcl"
 
 proc init_spectral {} {
+    beginProgrammaticTextChange;
     set old_cb ""; 
     catch {set old_cb [clipboard get]};
      .t configure -undo 0;
@@ -20314,13 +20906,10 @@ proc init_spectral {} {
      .t fastdelete 1.0 end;
      .t configure -undo 1;
      
-     global modified;
-     set modified 0;
-    .t edit reset;
-    .t edit modified 0;
-    updateModifiedStatus;
+    markTextClean .t;
     clipboard clear;
     clipboard append $old_cb;
+    endProgrammaticTextChange .t 1;
  }
 
 init_spectral; 
