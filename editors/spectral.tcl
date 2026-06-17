@@ -6251,10 +6251,99 @@ proc copyContentToClipboard {fname} {
 }
 
 set fileToCompareAgainst "";
+set fileToCompareAgainstButton "";
+set fileComparedAgainstButton "";
+array set note_compare_button_style {};
 
 proc fileToCompareAgainst {} {
     global fileToCompareAgainst;
     return $fileToCompareAgainst;
+}
+
+proc remember_note_compare_button_style {btn} {
+    global note_compare_button_style;
+    if {![winfo exists $btn] || [info exists note_compare_button_style($btn)]} {
+        return;
+    }
+
+    set style {};
+    foreach opt {-highlightthickness -highlightbackground -highlightcolor -relief -borderwidth -background -activebackground} {
+        if {![catch {$btn cget $opt} val]} {
+            lappend style $opt $val;
+        }
+    }
+    set note_compare_button_style($btn) $style;
+}
+
+proc restore_note_compare_button_style {btn} {
+    global note_compare_button_style;
+    if {![info exists note_compare_button_style($btn)]} {
+        return;
+    }
+
+    if {[winfo exists $btn]} {
+        catch {$btn configure {*}$note_compare_button_style($btn)}
+    }
+    unset note_compare_button_style($btn);
+}
+
+proc mark_note_compare_button {btn role} {
+    global fileToCompareAgainstButton;
+    global fileComparedAgainstButton;
+
+    if {![winfo exists $btn]} {
+        return;
+    }
+
+    if {$role eq "first"} {
+        if {$fileToCompareAgainstButton ne "" && $fileToCompareAgainstButton ne $btn} {
+            restore_note_compare_button_style $fileToCompareAgainstButton;
+        }
+        set fileToCompareAgainstButton $btn;
+        set color "#1f6feb";
+        set bg "#dbeafe";
+    } else {
+        if {$fileComparedAgainstButton ne "" && $fileComparedAgainstButton ne $btn} {
+            restore_note_compare_button_style $fileComparedAgainstButton;
+        }
+        set fileComparedAgainstButton $btn;
+        set color "#d1242f";
+        set bg "#ffebe9";
+    }
+
+    remember_note_compare_button_style $btn;
+    catch {$btn configure -background $bg -activebackground $bg -highlightthickness 3 -highlightbackground $color -highlightcolor $color -relief raised -borderwidth 3}
+}
+
+proc choose_note_file_to_compare_against {btn fname} {
+    global fileToCompareAgainst;
+
+    set fileToCompareAgainst $fname;
+    mark_note_compare_button $btn first;
+}
+
+proc compare_note_with_chosen_file {btn fname {granularity line}} {
+    global fileToCompareAgainst;
+
+    if {$fileToCompareAgainst eq ""} {
+        tk_messageBox -message "Choose a file to compare against first.";
+        return;
+    }
+
+    mark_note_compare_button $btn second;
+    strdiff_files_and_log $granularity $fileToCompareAgainst $fname;
+}
+
+proc clear_note_compare_cues {} {
+    global fileToCompareAgainstButton;
+    global fileComparedAgainstButton;
+    global note_compare_button_style;
+
+    foreach btn [array names note_compare_button_style] {
+        restore_note_compare_button_style $btn;
+    }
+    set fileToCompareAgainstButton "";
+    set fileComparedAgainstButton "";
 }
 
 package require md5;
@@ -6648,8 +6737,8 @@ proc showNoteMenu {btn fname} {
     .menu4 add command -label "Copy File Name" -command "clipboard clear; clipboard append \"$fname\"";
     .menu4 add command -label "Open Note on Spectral" -command "openNoteFile \"$fname\"";
     .menu4 add command -label "Show in Explorer" -command "showFileInExplorer \"$fname\"";
-    .menu4 add command -label "Choose File to Compare Against" -command "set fileToCompareAgainst  \"$fname\"";
-    .menu4 add command -label "Compare with file chosen for comparison" -command "eval \{strdiff_files_and_log line \"\$fileToCompareAgainst\" \"$fname\" \}";
+    .menu4 add command -label "Choose File to Compare Against" -command [list choose_note_file_to_compare_against $btn $fname];
+    .menu4 add command -label "Compare with file chosen for comparison" -command [list compare_note_with_chosen_file $btn $fname line];
     .menu4 add command -label "Copy content to Clipboard" -command "copyContentToClipboard \"$fname\"";
     
      set getNoteTypeCmd {tk_messageBox -message [getNoteType }; append getNoteTypeCmd $btn; append getNoteTypeCmd {]};
@@ -11014,6 +11103,7 @@ proc f1 {} {
   array unset rotate;
   array unset last_search;
   clearDefaultHighlight;
+  clear_note_compare_cues;
 };
 bind . <F1> f1;
 bind . <F10> f1;

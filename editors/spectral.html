@@ -977,6 +977,46 @@ function charDiffChangedLineRun(run, opts = {}) {
     );
 }
 
+function tokenDiffChangedLineRun(run, granularity, opts = {}) {
+    const left = run.filter(seg => seg.type === 'delete').map(seg => seg.text).join('');
+    const right = run.filter(seg => seg.type === 'insert').map(seg => seg.text).join('');
+
+    if (!left || !right) return run;
+
+    return diffTokensWithTrimmedCommonEdges(
+        tokeniseDiffText(left, granularity, opts),
+        tokeniseDiffText(right, granularity, opts)
+    );
+}
+
+function tokenDiffAnchoredByLines(left, right, granularity, opts = {}) {
+    const anchorOpts = { ...opts, ignoreTrailingWhitespace: false };
+    const lineSegments = lcsDiffTokens(
+        tokeniseDiffText(left, 'line', anchorOpts),
+        tokeniseDiffText(right, 'line', anchorOpts)
+    );
+
+    const out = [];
+    let changedRun = [];
+    const flushChangedRun = () => {
+        if (!changedRun.length) return;
+        out.push(...tokenDiffChangedLineRun(changedRun, granularity, opts));
+        changedRun = [];
+    };
+
+    lineSegments.forEach(seg => {
+        if (seg.type === 'same') {
+            flushChangedRun();
+            out.push(seg);
+        } else {
+            changedRun.push(seg);
+        }
+    });
+    flushChangedRun();
+
+    return coalesceDiffSegments(out);
+}
+
 function charDiffAnchoredByLines(left, right, opts = {}) {
     const anchorOpts = { ...opts, ignoreTrailingWhitespace: false };
     const lineSegments = lcsDiffTokens(
@@ -1009,6 +1049,9 @@ function diffTextSegmentsForGranularity(left, right, granularity, opts = {}) {
     const mode = String(granularity || 'line').toLowerCase();
     if (mode.startsWith('char')) {
         return charDiffAnchoredByLines(left, right, opts);
+    }
+    if (mode.startsWith('word')) {
+        return tokenDiffAnchoredByLines(left, right, 'word', opts);
     }
     return lcsDiffTokens(tokeniseDiffText(left, granularity, opts), tokeniseDiffText(right, granularity, opts));
 }
@@ -1156,6 +1199,15 @@ function applyLineDiffContext(segments, context) {
     return coalesceRenderableDiffSegments(contextual);
 }
 
+function bindDiffNotesGranularityControl() {
+    const modeSelect = document.getElementById('diffNotesGranularity');
+    if (!modeSelect || modeSelect.dataset.diffnotesBound === 'true') return;
+
+    modeSelect.dataset.diffnotesBound = 'true';
+    modeSelect.addEventListener('change', event => refreshDiffNotesPopup(event));
+    modeSelect.addEventListener('input', event => refreshDiffNotesPopup(event));
+}
+
 function renderDiffNotesPopup(text1, text2, opts = {}) {
     const granularity = opts.granularity || opts.mode || 'line';
     const popup = document.getElementById('diffNotesPopup');
@@ -1170,23 +1222,26 @@ function renderDiffNotesPopup(text1, text2, opts = {}) {
         return [];
     }
 
-    if (modeSelect) modeSelect.value = String(granularity).toLowerCase().startsWith('char') ? 'char' : String(granularity).toLowerCase().startsWith('word') ? 'word' : 'line';
+    bindDiffNotesGranularityControl();
+
+    const resolvedGranularity = String(granularity).toLowerCase().startsWith('char') ? 'char' : String(granularity).toLowerCase().startsWith('word') ? 'word' : 'line';
+    if (modeSelect) modeSelect.value = resolvedGranularity;
 
     let segments;
     try {
-        segments = diffTextSegmentsForGranularity(left, right, granularity, opts);
+        segments = diffTextSegmentsForGranularity(left, right, resolvedGranularity, opts);
     } catch (err) {
         setStatus('diffnotes: ' + err.message);
         return [];
     }
 
-    const isLineMode = String(granularity).toLowerCase().startsWith('line');
+    const isLineMode = resolvedGranularity === 'line';
     const context = isLineMode ? getDiffContextFromOptions(opts) : null;
     const displaySegments = isLineMode ? applyLineDiffContext(segments, context) : segments;
     const summary = diffNotesSummary(segments);
     if (title) {
         const contextLabel = context ? `, context ${context.before}/${context.after}` : '';
-        title.textContent = `Note Diff (${modeSelect ? modeSelect.value : granularity}${contextLabel}): -${summary.deleted} +${summary.inserted}`;
+        title.textContent = `Note Diff (${resolvedGranularity}${contextLabel}): -${summary.deleted} +${summary.inserted}`;
     }
 
     body.innerHTML = displaySegments.map(seg => {
@@ -1200,18 +1255,22 @@ function renderDiffNotesPopup(text1, text2, opts = {}) {
 
     popup.dataset.leftText = left;
     popup.dataset.rightText = right;
+    popup.dataset.diffGranularity = resolvedGranularity;
     popup.dataset.diffOptions = JSON.stringify(normalizedDiffOptions(opts));
     popup.style.display = 'block';
     hideTools();
     makeDraggable('diffNotesPopup', 'diffNotesHeader');
-    setStatus(`diffnotes: shown ${modeSelect ? modeSelect.value : granularity} diff (-${summary.deleted}, +${summary.inserted}).`);
+    setStatus(`diffnotes: shown ${resolvedGranularity} diff (-${summary.deleted}, +${summary.inserted}).`);
     return segments;
 }
 
-function refreshDiffNotesPopup() {
+function refreshDiffNotesPopup(eventOrGranularity) {
     const popup = document.getElementById('diffNotesPopup');
     const modeSelect = document.getElementById('diffNotesGranularity');
     if (!popup || popup.style.display === 'none' || !popup.dataset.leftText && !popup.dataset.rightText) return;
+    const eventValue = eventOrGranularity && eventOrGranularity.target ? eventOrGranularity.target.value : null;
+    const explicitValue = typeof eventOrGranularity === 'string' ? eventOrGranularity : null;
+    const granularity = eventValue || explicitValue || (modeSelect ? modeSelect.value : (popup.dataset.diffGranularity || 'line'));
     let savedOptions = {};
     try {
         savedOptions = JSON.parse(popup.dataset.diffOptions || '{}');
@@ -1220,9 +1279,13 @@ function refreshDiffNotesPopup() {
     }
     renderDiffNotesPopup(popup.dataset.leftText || '', popup.dataset.rightText || '', {
         ...savedOptions,
-        granularity: modeSelect ? modeSelect.value : 'line'
+        granularity
     });
 }
+
+window.addEventListener('DOMContentLoaded', () => {
+    bindDiffNotesGranularityControl();
+});
 
 function closeDiffNotesPopup() {
     const popup = document.getElementById('diffNotesPopup');
@@ -11545,7 +11608,7 @@ text = text.replace(/§§CODESPAN\d+§§/g, '<code></code>');
   <h4 id="diffNotesHeader" style="cursor:move; margin:0 0 8px 0;">Note Diff</h4>
   <div class="diffnotes-toolbar">
     <label for="diffNotesGranularity">Granularity</label>
-    <select id="diffNotesGranularity" onchange="refreshDiffNotesPopup()">
+    <select id="diffNotesGranularity" onchange="refreshDiffNotesPopup(event)" oninput="refreshDiffNotesPopup(event)">
       <option value="line" selected>line</option>
       <option value="word">word</option>
       <option value="char">char</option>
