@@ -931,6 +931,88 @@ function lcsDiffTokens(aTokens, bTokens) {
     return coalesceDiffSegments(out);
 }
 
+function diffTokensWithTrimmedCommonEdges(aTokens, bTokens) {
+    let prefix = 0;
+    const maxPrefix = Math.min(aTokens.length, bTokens.length);
+    while (prefix < maxPrefix && aTokens[prefix].key === bTokens[prefix].key) {
+        prefix++;
+    }
+
+    let suffix = 0;
+    const maxSuffix = Math.min(aTokens.length - prefix, bTokens.length - prefix);
+    while (
+        suffix < maxSuffix &&
+        aTokens[aTokens.length - 1 - suffix].key === bTokens[bTokens.length - 1 - suffix].key
+    ) {
+        suffix++;
+    }
+
+    const out = [];
+    if (prefix > 0) {
+        out.push({ type: 'same', text: aTokens.slice(0, prefix).map(t => t.text).join('') });
+    }
+
+    const aMiddle = aTokens.slice(prefix, aTokens.length - suffix);
+    const bMiddle = bTokens.slice(prefix, bTokens.length - suffix);
+    if (aMiddle.length || bMiddle.length) {
+        out.push(...lcsDiffTokens(aMiddle, bMiddle));
+    }
+
+    if (suffix > 0) {
+        out.push({ type: 'same', text: aTokens.slice(aTokens.length - suffix).map(t => t.text).join('') });
+    }
+
+    return coalesceDiffSegments(out);
+}
+
+function charDiffChangedLineRun(run, opts = {}) {
+    const left = run.filter(seg => seg.type === 'delete').map(seg => seg.text).join('');
+    const right = run.filter(seg => seg.type === 'insert').map(seg => seg.text).join('');
+
+    if (!left || !right) return run;
+
+    return diffTokensWithTrimmedCommonEdges(
+        tokeniseDiffText(left, 'char', opts),
+        tokeniseDiffText(right, 'char', opts)
+    );
+}
+
+function charDiffAnchoredByLines(left, right, opts = {}) {
+    const anchorOpts = { ...opts, ignoreTrailingWhitespace: false };
+    const lineSegments = lcsDiffTokens(
+        tokeniseDiffText(left, 'line', anchorOpts),
+        tokeniseDiffText(right, 'line', anchorOpts)
+    );
+
+    const out = [];
+    let changedRun = [];
+    const flushChangedRun = () => {
+        if (!changedRun.length) return;
+        out.push(...charDiffChangedLineRun(changedRun, opts));
+        changedRun = [];
+    };
+
+    lineSegments.forEach(seg => {
+        if (seg.type === 'same') {
+            flushChangedRun();
+            out.push(seg);
+        } else {
+            changedRun.push(seg);
+        }
+    });
+    flushChangedRun();
+
+    return coalesceDiffSegments(out);
+}
+
+function diffTextSegmentsForGranularity(left, right, granularity, opts = {}) {
+    const mode = String(granularity || 'line').toLowerCase();
+    if (mode.startsWith('char')) {
+        return charDiffAnchoredByLines(left, right, opts);
+    }
+    return lcsDiffTokens(tokeniseDiffText(left, granularity, opts), tokeniseDiffText(right, granularity, opts));
+}
+
 function coalesceDiffSegments(segments) {
     const merged = [];
     segments.forEach(seg => {
@@ -1092,7 +1174,7 @@ function renderDiffNotesPopup(text1, text2, opts = {}) {
 
     let segments;
     try {
-        segments = lcsDiffTokens(tokeniseDiffText(left, granularity, opts), tokeniseDiffText(right, granularity, opts));
+        segments = diffTextSegmentsForGranularity(left, right, granularity, opts);
     } catch (err) {
         setStatus('diffnotes: ' + err.message);
         return [];
