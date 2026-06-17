@@ -139,7 +139,9 @@ function showImageFromButton(btn) {
 }
 
 function submitTextPopup() {
-    const text = document.getElementById('popupTextarea').value;
+    const textarea = document.getElementById('popupTextarea');
+    const text = textarea.value;
+    popupTextSearchClear('popupTextarea');
     closeTextPopup();
     if (textPopupCallback) {
         textPopupCallback(text);
@@ -148,6 +150,353 @@ function submitTextPopup() {
 
 function closeTextPopup() {
     document.getElementById('textPopup').style.display = 'none';
+}
+
+const popupTextSearchStates = {};
+
+function getPopupTextSearchState(targetId) {
+    if (!popupTextSearchStates[targetId]) {
+        popupTextSearchStates[targetId] = {
+            bg: '#fff2a8',
+            fg: '#000000',
+            last: '',
+            pos: -1
+        };
+    }
+    return popupTextSearchStates[targetId];
+}
+
+function popupSearchControlId(targetId, suffix) {
+    return `${targetId}_popupSearch_${suffix}`;
+}
+
+function popupSearchTargetSelector(targetId) {
+    if (window.CSS && typeof CSS.escape === 'function') {
+        return CSS.escape(targetId);
+    }
+    return String(targetId).replace(/["\\]/g, '\\$&');
+}
+
+function ensurePopupTextSearchControls(popupId, targetId, insertBeforeId = targetId) {
+    const popup = document.getElementById(popupId);
+    const target = document.getElementById(targetId);
+    if (!popup || !target) return null;
+
+    const existing = document.getElementById(popupSearchControlId(targetId, 'bar'));
+    if (existing) return existing;
+
+    const state = getPopupTextSearchState(targetId);
+    const bar = document.createElement('div');
+    bar.id = popupSearchControlId(targetId, 'bar');
+    bar.className = 'popup-text-search-controls';
+    bar.innerHTML = `
+        <label for="${popupSearchControlId(targetId, 'input')}">Find:</label>
+        <input id="${popupSearchControlId(targetId, 'input')}" type="text" class="popup-text-search-input">
+        <label class="popup-text-search-color-label">BG
+            <input id="${popupSearchControlId(targetId, 'bg')}" type="color" value="${state.bg}">
+        </label>
+        <label class="popup-text-search-color-label">FG
+            <input id="${popupSearchControlId(targetId, 'fg')}" type="color" value="${state.fg}">
+        </label>
+        <button type="button" id="${popupSearchControlId(targetId, 'clear')}">Clear</button>
+        <span id="${popupSearchControlId(targetId, 'count')}" class="popup-text-search-count"></span>
+    `;
+
+    const before = document.getElementById(insertBeforeId) || target;
+    popup.insertBefore(bar, before);
+
+    const input = document.getElementById(popupSearchControlId(targetId, 'input'));
+    const bg = document.getElementById(popupSearchControlId(targetId, 'bg'));
+    const fg = document.getElementById(popupSearchControlId(targetId, 'fg'));
+    const clear = document.getElementById(popupSearchControlId(targetId, 'clear'));
+
+    input.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        popupTextSearchNext(targetId, event.shiftKey ? -1 : 1);
+    });
+    input.addEventListener('input', () => {
+        if (input.value === '') popupTextSearchClear(targetId);
+    });
+    bg.addEventListener('input', () => {
+        state.bg = bg.value;
+        popupTextSearchRehighlight(targetId);
+    });
+    fg.addEventListener('input', () => {
+        state.fg = fg.value;
+        popupTextSearchRehighlight(targetId);
+    });
+    clear.addEventListener('click', () => popupTextSearchClear(targetId));
+
+    return bar;
+}
+
+function popupTextSearchSetCount(targetId, text) {
+    const count = document.getElementById(popupSearchControlId(targetId, 'count'));
+    if (count) count.textContent = text || '';
+}
+
+function popupTextSearchClear(targetId) {
+    const state = getPopupTextSearchState(targetId);
+    const input = document.getElementById(popupSearchControlId(targetId, 'input'));
+    const target = document.getElementById(targetId);
+    if (input) input.value = '';
+    state.last = '';
+    state.pos = -1;
+    if (target && target.matches('textarea,input')) {
+        target.setSelectionRange(target.selectionStart || 0, target.selectionStart || 0);
+    }
+    popupTextSearchClearDomHighlights(targetId);
+    popupTextSearchSetCount(targetId, '');
+}
+
+function popupTextSearchClearDomHighlights(targetId) {
+    const target = document.getElementById(targetId);
+    if (!target || target.matches('textarea,input')) return;
+
+    target.querySelectorAll(`span.popup-search-hit[data-popup-search-target="${popupSearchTargetSelector(targetId)}"]`).forEach(span => {
+        span.replaceWith(document.createTextNode(span.textContent || ''));
+    });
+    target.normalize();
+}
+
+function popupTextSearchRehighlight(targetId) {
+    const state = getPopupTextSearchState(targetId);
+    const input = document.getElementById(popupSearchControlId(targetId, 'input'));
+    if (!state.last && !(input && input.value)) return;
+    const previous = state.pos;
+    state.last = '';
+    state.pos = previous - 1;
+    popupTextSearchNext(targetId, 1);
+}
+
+function popupTextSearchNext(targetId, direction = 1) {
+    const target = document.getElementById(targetId);
+    const input = document.getElementById(popupSearchControlId(targetId, 'input'));
+    if (!target || !input) return;
+
+    const needle = input.value;
+    if (!needle) {
+        popupTextSearchClear(targetId);
+        return;
+    }
+
+    const state = getPopupTextSearchState(targetId);
+    if (needle !== state.last) {
+        state.last = needle;
+        state.pos = direction < 0 ? 0 : -1;
+    }
+
+    if (target.matches('textarea,input')) {
+        popupTextSearchNextInTextInput(target, targetId, needle, direction);
+    } else {
+        popupTextSearchNextInElement(target, targetId, needle, direction);
+    }
+}
+
+function popupTextSearchNextInTextInput(target, targetId, needle, direction) {
+    const state = getPopupTextSearchState(targetId);
+    const text = target.value || '';
+    const starts = [];
+    let idx = text.indexOf(needle);
+    while (idx !== -1) {
+        starts.push(idx);
+        idx = text.indexOf(needle, idx + Math.max(needle.length, 1));
+    }
+
+    if (!starts.length) {
+        popupTextSearchSetCount(targetId, '0');
+        target.focus();
+        return;
+    }
+
+    state.pos = (state.pos + direction + starts.length) % starts.length;
+    const start = starts[state.pos];
+    target.focus();
+    target.setSelectionRange(start, start + needle.length);
+    popupTextSearchScrollTextInputToMatch(target, start, start + needle.length);
+    target.classList.add('popup-search-text-input');
+    target.style.setProperty('--popup-search-bg', state.bg);
+    target.style.setProperty('--popup-search-fg', state.fg);
+    popupTextSearchSetCount(targetId, `${state.pos + 1}/${starts.length}`);
+}
+
+function popupTextSearchAfterLayout(fn) {
+    if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => requestAnimationFrame(fn));
+    } else {
+        setTimeout(fn, 0);
+    }
+}
+
+function popupTextSearchScrollTextInputToMatch(target, start, end) {
+    popupTextSearchAfterLayout(() => {
+        target.focus();
+        target.setSelectionRange(start, end);
+
+        const markerTop = popupTextSearchMeasureTextInputOffset(target, start);
+        if (markerTop == null) return;
+
+        const desiredTop = Math.max(0, markerTop - target.clientHeight / 2);
+        target.scrollTop = desiredTop;
+        target.setSelectionRange(start, end);
+    });
+}
+
+function popupTextSearchMeasureTextInputOffset(target, offset) {
+    const computed = window.getComputedStyle(target);
+    const mirror = document.createElement('div');
+    const marker = document.createElement('span');
+    const properties = [
+        'boxSizing', 'width', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle',
+        'letterSpacing', 'textTransform', 'textIndent', 'textRendering', 'lineHeight',
+        'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'borderTopWidth',
+        'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'whiteSpace',
+        'wordBreak', 'overflowWrap', 'tabSize'
+    ];
+
+    properties.forEach(prop => {
+        mirror.style[prop] = computed[prop];
+    });
+    mirror.style.position = 'fixed';
+    mirror.style.left = '-10000px';
+    mirror.style.top = '0';
+    mirror.style.height = 'auto';
+    mirror.style.minHeight = '0';
+    mirror.style.maxHeight = 'none';
+    mirror.style.overflow = 'hidden';
+    mirror.style.visibility = 'hidden';
+    mirror.style.whiteSpace = computed.whiteSpace === 'pre' ? 'pre' : 'pre-wrap';
+    mirror.style.wordBreak = computed.wordBreak;
+    mirror.style.overflowWrap = computed.overflowWrap;
+
+    const before = (target.value || '').slice(0, offset);
+    mirror.appendChild(document.createTextNode(before || ' '));
+    marker.textContent = '\u200b';
+    mirror.appendChild(marker);
+    document.body.appendChild(mirror);
+
+    const top = marker.offsetTop;
+    mirror.remove();
+    return top;
+}
+
+function popupTextSearchNodeFilter(node) {
+    const parent = node.parentElement;
+    if (!parent) return NodeFilter.FILTER_REJECT;
+    if (parent.closest('.popup-text-search-controls, .popup-search-hit, script, style, textarea, input, select, button')) {
+        return NodeFilter.FILTER_REJECT;
+    }
+    return node.nodeValue ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+}
+
+function popupTextSearchBuildIndex(target) {
+    const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT, { acceptNode: popupTextSearchNodeFilter });
+    const textNodes = [];
+    let text = '';
+    let node;
+    while ((node = walker.nextNode())) {
+        const start = text.length;
+        text += node.nodeValue;
+        textNodes.push({ node, start, end: text.length });
+    }
+    return { text, textNodes };
+}
+
+function popupTextSearchNextInElement(target, targetId, needle, direction) {
+    const state = getPopupTextSearchState(targetId);
+    popupTextSearchClearDomHighlights(targetId);
+
+    const { text, textNodes } = popupTextSearchBuildIndex(target);
+    const ranges = [];
+    let idx = text.indexOf(needle);
+    while (idx !== -1) {
+        ranges.push({ start: idx, end: idx + needle.length });
+        idx = text.indexOf(needle, idx + Math.max(needle.length, 1));
+    }
+
+    if (!ranges.length) {
+        popupTextSearchSetCount(targetId, '0');
+        return;
+    }
+
+    state.pos = (state.pos + direction + ranges.length) % ranges.length;
+    popupTextSearchApplyElementHighlights(targetId, textNodes, ranges, state.pos, state.bg, state.fg);
+    const current = target.querySelector(`span.popup-search-current[data-popup-search-target="${popupSearchTargetSelector(targetId)}"]`);
+    if (current) popupTextSearchAfterLayout(() => popupTextSearchScrollElementIntoView(current, target));
+    popupTextSearchSetCount(targetId, `${state.pos + 1}/${ranges.length}`);
+}
+
+function popupTextSearchScrollElementIntoView(element, container) {
+    if (!element || !container) return;
+
+    element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
+
+    const elementRect = element.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const verticalDelta = elementRect.top - containerRect.top - (container.clientHeight / 2) + (elementRect.height / 2);
+    const horizontalDelta = elementRect.left - containerRect.left - (container.clientWidth / 2) + (elementRect.width / 2);
+
+    if (container.scrollHeight > container.clientHeight) {
+        container.scrollTop += verticalDelta;
+    }
+    if (container.scrollWidth > container.clientWidth) {
+        container.scrollLeft += horizontalDelta;
+    }
+
+    if (elementRect.top < 0 || elementRect.bottom > window.innerHeight) {
+        element.scrollIntoView({ block: 'center', inline: 'nearest' });
+    }
+}
+
+function popupTextSearchApplyElementHighlights(targetId, textNodes, ranges, currentIndex, bg, fg) {
+    const pieces = [];
+    ranges.forEach((range, rangeIndex) => {
+        textNodes.forEach(({ node, start, end }, order) => {
+            if (end <= range.start || start >= range.end) return;
+            pieces.push({
+                node,
+                order,
+                rangeIndex,
+                spanStart: Math.max(range.start, start) - start,
+                spanEnd: Math.min(range.end, end) - start
+            });
+        });
+    });
+
+    pieces.sort((a, b) => {
+        if (a.order !== b.order) return b.order - a.order;
+        return b.spanStart - a.spanStart;
+    });
+
+    pieces.forEach(({ node, rangeIndex, spanStart, spanEnd }) => {
+        if (!node.parentNode || spanStart >= spanEnd) return;
+        const range = document.createRange();
+        range.setStart(node, spanStart);
+        range.setEnd(node, spanEnd);
+        const span = document.createElement('span');
+        span.className = rangeIndex === currentIndex ? 'popup-search-hit popup-search-current' : 'popup-search-hit';
+        span.dataset.popupSearchTarget = targetId;
+        span.style.backgroundColor = bg;
+        span.style.color = fg;
+        if (rangeIndex === currentIndex) span.style.textDecoration = 'underline';
+        try {
+            range.surroundContents(span);
+        } catch (_) {
+            const fragment = range.extractContents();
+            span.appendChild(fragment);
+            range.insertNode(span);
+        }
+    });
+}
+
+function attachStandardPopupSearchControls() {
+    ensurePopupTextSearchControls('textPopup', 'popupTextarea');
+    ensurePopupTextSearchControls('diffNotesPopup', 'diffNotesBody');
+    ensurePopupTextSearchControls('cmdHelpPopup', 'cmdHelpBody');
+    for (let i = 1; i <= 7; i++) {
+        ensurePopupTextSearchControls(`searchResults${i}`, `searchResults${i}listing`);
+    }
 }
 
 var Base64 = {
@@ -294,6 +643,8 @@ function showTextPopup(callback, heading, initialText = '') {
     const textAreaHeading = document.getElementById('popupTextAreaHeading');
     textAreaHeading.innerText = heading;
     textarea.value = initialText;
+    ensurePopupTextSearchControls('textPopup', 'popupTextarea');
+    popupTextSearchClear('popupTextarea');
     popup.style.display = 'block';
     textarea.focus();
 }
@@ -317,8 +668,31 @@ function noteButtonClickHandler(event) {
         showNoteEditPopup(event);
     };
 
+function getLegacyNoteMessageFromOnclick(btn) {
+    const onclick = btn?.getAttribute('onclick') || '';
+    const match = onclick.match(/showText\s*\(\s*([`'"])([\s\S]*?)\1/);
+    if (!match) return null;
+
+    try {
+        Base64.decode(match[2]);
+        return match[2];
+    } catch (_) {
+        return null;
+    }
+}
+
 function hydrateEditorControls(root = document.getElementById('editor')) {
     if (!root) return;
+
+    root.querySelectorAll('button[onclick*="showText"]').forEach(btn => {
+        const encodedMessage = getLegacyNoteMessageFromOnclick(btn);
+        if (encodedMessage == null) return;
+
+        btn.classList.add('note-button');
+        btn.setAttribute('data-message', encodedMessage);
+        btn.setAttribute("onclick", 'noteButtonClickHandler(event)');
+        btn.onclick = noteButtonClickHandler;
+    });
 
     root.querySelectorAll('button.note-button, .note-button').forEach(btn => {
         if (!btn.hasAttribute('data-message')) {
@@ -359,6 +733,772 @@ function hydrateEditorControls(root = document.getElementById('editor')) {
     if (typeof hydrateEmbeddedVideoSources === 'function') {
         hydrateEmbeddedVideoSources(root);
     }
+}
+
+function decodeEmbeddedNoteButton(btn) {
+    if (!btn) return '';
+
+    const dataMessage = btn.getAttribute('data-message');
+    if (dataMessage != null && dataMessage !== '') {
+        try {
+            return Base64.decode(dataMessage);
+        } catch (_) {
+            return '';
+        }
+    }
+
+    const onclick = btn.getAttribute('onclick') || '';
+    const match = onclick.match(/showText\s*\(\s*([`'"])([\s\S]*?)\1/);
+    if (match) {
+        try {
+            return Base64.decode(match[2]);
+        } catch (_) {
+            return '';
+        }
+    }
+
+    return '';
+}
+
+function ensureElementId(el, prefix = 'note_match') {
+    if (el.id) return el.id;
+    el.id = prefix + '_' + generateGUID();
+    return el.id;
+}
+
+function noteSearchRegex(searchValue, opts = {}) {
+    if (searchValue instanceof RegExp) {
+        const flags = searchValue.flags.includes('g') ? searchValue.flags : searchValue.flags + 'g';
+        return new RegExp(searchValue.source, flags);
+    }
+
+    const text = String(searchValue ?? '');
+    const useRegex = opts.regex === true;
+    const caseSensitive = opts.caseSensitive === true;
+    const source = useRegex ? text : escapeRegex(text);
+    return new RegExp(source, 'g' + (caseSensitive ? '' : 'i'));
+}
+
+function noteMatchSnippet(text, index, length, context = 45) {
+    const start = Math.max(0, index - context);
+    const end = Math.min(text.length, index + length + context);
+    const prefix = start > 0 ? '...' : '';
+    const suffix = end < text.length ? '...' : '';
+    return prefix + text.slice(start, end).replace(/\s+/g, ' ') + suffix;
+}
+
+function collectEmbeddedNotes(root = document.getElementById('editor')) {
+    if (!root) return [];
+
+    const buttons = Array.from(root.querySelectorAll('button.note-button, button[data-message], button[onclick*="showText"]'));
+    const seen = new Set();
+    const notes = [];
+
+    buttons.forEach(btn => {
+        if (seen.has(btn)) return;
+        seen.add(btn);
+
+        const text = decodeEmbeddedNoteButton(btn);
+        if (text === '') return;
+        notes.push({ btn, text });
+    });
+
+    return notes;
+}
+
+let diffNotesPickMode = false;
+let diffNotesFirstButton = null;
+let diffNotesPickOptions = {};
+let diffNotesOriginalCursor = '';
+let diffNotesContext = null;
+
+function getNoteButtonFromTarget(target) {
+    const editor = document.getElementById('editor');
+    const el = target && target.nodeType === Node.ELEMENT_NODE ? target : target?.parentElement;
+    if (!editor || !el || !editor.contains(el)) return null;
+    return el.closest('button.note-button, button[data-message], button[onclick*="showText"]');
+}
+
+function getDiffNoteText(noteRef) {
+    if (noteRef == null) return '';
+    if (typeof noteRef === 'string') return noteRef;
+    if (noteRef.text != null) return String(noteRef.text);
+    if (noteRef.noteText != null) return String(noteRef.noteText);
+    if (noteRef.nodeType === Node.ELEMENT_NODE) return decodeEmbeddedNoteButton(noteRef);
+    if (noteRef.btn && noteRef.btn.nodeType === Node.ELEMENT_NODE) return decodeEmbeddedNoteButton(noteRef.btn);
+    return String(noteRef);
+}
+
+function normalizedDiffOptions(opts = {}) {
+    return {
+        normalizeEol: opts.normalizeEol !== false,
+        normalizeUnicode: opts.normalizeUnicode !== false,
+        normalizeNbsp: opts.normalizeNbsp !== false,
+        stripBom: opts.stripBom !== false,
+        ignoreTrailingWhitespace: opts.ignoreTrailingWhitespace !== false,
+        ignoreAllWhitespace: opts.ignoreAllWhitespace === true
+    };
+}
+
+function normalizeDiffTextInput(text, opts = {}) {
+    const nopts = normalizedDiffOptions(opts);
+    let out = String(text ?? '');
+
+    if (nopts.stripBom) {
+        out = out.replace(/^\uFEFF/, '');
+    }
+    if (nopts.normalizeEol) {
+        out = out.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    }
+    if (nopts.normalizeNbsp) {
+        out = out.replace(/\u00A0/g, ' ');
+    }
+    if (nopts.normalizeUnicode && typeof out.normalize === 'function') {
+        try {
+            out = out.normalize('NFC');
+        } catch (_) {
+            // Keep the original text if the browser cannot normalize it.
+        }
+    }
+
+    return out;
+}
+
+function diffTokenCompareKey(text, granularity, opts = {}) {
+    const nopts = normalizedDiffOptions(opts);
+    let key = String(text ?? '');
+    const mode = String(granularity || 'line').toLowerCase();
+
+    if (nopts.ignoreTrailingWhitespace && mode.startsWith('line')) {
+        key = key.replace(/[ \t]+(?=\n?$)/, '');
+    }
+    if (nopts.ignoreAllWhitespace) {
+        key = key.replace(/\s+/g, '');
+    }
+
+    return key;
+}
+
+function tokeniseDiffText(text, granularity, opts = {}) {
+    text = normalizeDiffTextInput(text, opts);
+    const mode = String(granularity || 'line').toLowerCase();
+    let parts;
+    if (mode.startsWith('char')) {
+        parts = Array.from(text);
+    } else if (mode.startsWith('word')) {
+        parts = text.match(/\S+|\s+/g) || [];
+    } else {
+        parts = text.match(/[^\n]*\n|[^\n]+/g) || [];
+    }
+
+    return parts.map(part => ({
+        text: part,
+        key: diffTokenCompareKey(part, granularity, opts)
+    }));
+}
+
+function lcsDiffTokens(aTokens, bTokens) {
+    const aLen = aTokens.length;
+    const bLen = bTokens.length;
+    const cells = (aLen + 1) * (bLen + 1);
+    if (cells > 4000000) {
+        throw new Error('diff is too large for this in-browser comparison; try line granularity or smaller notes');
+    }
+
+    const dp = Array.from({ length: aLen + 1 }, () => new Uint32Array(bLen + 1));
+    for (let i = aLen - 1; i >= 0; i--) {
+        for (let j = bLen - 1; j >= 0; j--) {
+            dp[i][j] = aTokens[i].key === bTokens[j].key ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+        }
+    }
+
+    const out = [];
+    let i = 0;
+    let j = 0;
+    while (i < aLen && j < bLen) {
+        if (aTokens[i].key === bTokens[j].key) {
+            out.push({ type: 'same', text: aTokens[i++].text });
+            j++;
+        } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+            out.push({ type: 'delete', text: aTokens[i++].text });
+        } else {
+            out.push({ type: 'insert', text: bTokens[j++].text });
+        }
+    }
+    while (i < aLen) out.push({ type: 'delete', text: aTokens[i++].text });
+    while (j < bLen) out.push({ type: 'insert', text: bTokens[j++].text });
+
+    return coalesceDiffSegments(out);
+}
+
+function coalesceDiffSegments(segments) {
+    const merged = [];
+    segments.forEach(seg => {
+        const last = merged[merged.length - 1];
+        if (last && last.type === seg.type) {
+            last.text += seg.text;
+        } else {
+            merged.push({ type: seg.type, text: seg.text });
+        }
+    });
+    return merged;
+}
+
+function escapeHtml(text) {
+    return String(text ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function diffNotesSummary(segments) {
+    return segments.reduce((acc, seg) => {
+        if (seg.type === 'insert') acc.inserted += seg.text.length;
+        if (seg.type === 'delete') acc.deleted += seg.text.length;
+        if (seg.type === 'same') acc.same += seg.text.length;
+        return acc;
+    }, { inserted: 0, deleted: 0, same: 0 });
+}
+
+function normaliseDiffContextValue(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.floor(n));
+}
+
+function setDiffContext(contextBefore, contextAfter = contextBefore) {
+    if (contextBefore == null || contextBefore === '') {
+        return clearDiffContext();
+    }
+
+    diffNotesContext = {
+        before: normaliseDiffContextValue(contextBefore),
+        after: normaliseDiffContextValue(contextAfter)
+    };
+    setStatus(`diffnotes: context set to ${diffNotesContext.before} before, ${diffNotesContext.after} after.`);
+    refreshDiffNotesPopup();
+    return diffNotesContext;
+}
+
+function clearDiffContext() {
+    diffNotesContext = null;
+    setStatus('diffnotes: context cleared.');
+    refreshDiffNotesPopup();
+    return null;
+}
+
+function getDiffContextFromOptions(opts = {}) {
+    if (opts.context === false) {
+        return null;
+    }
+    if (opts.context == null && opts.contextBefore == null && opts.contextAfter == null) {
+        return diffNotesContext;
+    }
+    if (Array.isArray(opts.context)) {
+        return {
+            before: normaliseDiffContextValue(opts.context[0]),
+            after: normaliseDiffContextValue(opts.context.length > 1 ? opts.context[1] : opts.context[0])
+        };
+    }
+    if (typeof opts.context === 'number' || typeof opts.context === 'string') {
+        return {
+            before: normaliseDiffContextValue(opts.context),
+            after: normaliseDiffContextValue(opts.context)
+        };
+    }
+    if (opts.contextBefore != null || opts.contextAfter != null) {
+        const before = opts.contextBefore ?? opts.contextAfter ?? 0;
+        const after = opts.contextAfter ?? before;
+        return {
+            before: normaliseDiffContextValue(before),
+            after: normaliseDiffContextValue(after)
+        };
+    }
+    return diffNotesContext;
+}
+
+function splitDiffSegmentIntoLines(seg) {
+    const pieces = String(seg.text ?? '').match(/[^\n]*\n|[^\n]+/g);
+    if (!pieces) return [];
+    return pieces.map(text => ({ type: seg.type, text }));
+}
+
+function coalesceRenderableDiffSegments(segments) {
+    const merged = [];
+    segments.forEach(seg => {
+        const last = merged[merged.length - 1];
+        if (last && last.type === seg.type && seg.type !== 'separator') {
+            last.text += seg.text;
+        } else {
+            merged.push({ type: seg.type, text: seg.text });
+        }
+    });
+    return merged;
+}
+
+function applyLineDiffContext(segments, context) {
+    if (!context) return segments;
+
+    const before = normaliseDiffContextValue(context.before);
+    const after = normaliseDiffContextValue(context.after);
+    const lines = segments.flatMap(splitDiffSegmentIntoLines);
+    const changedIndexes = [];
+
+    lines.forEach((line, idx) => {
+        if (line.type !== 'same') changedIndexes.push(idx);
+    });
+    if (!changedIndexes.length || !lines.length) return segments;
+
+    const include = new Array(lines.length).fill(false);
+    changedIndexes.forEach(idx => {
+        const start = Math.max(0, idx - before);
+        const end = Math.min(lines.length - 1, idx + after);
+        for (let i = start; i <= end; i++) {
+            include[i] = true;
+        }
+    });
+
+    const contextual = [];
+    let lastIncluded = -1;
+    lines.forEach((line, idx) => {
+        if (!include[idx]) return;
+        if (lastIncluded !== -1 && idx > lastIncluded + 1) {
+            contextual.push({ type: 'separator', text: '---------- context break ----------\n' });
+        }
+        contextual.push(line);
+        lastIncluded = idx;
+    });
+
+    return coalesceRenderableDiffSegments(contextual);
+}
+
+function renderDiffNotesPopup(text1, text2, opts = {}) {
+    const granularity = opts.granularity || opts.mode || 'line';
+    const popup = document.getElementById('diffNotesPopup');
+    const body = document.getElementById('diffNotesBody');
+    const title = document.getElementById('diffNotesHeader');
+    const modeSelect = document.getElementById('diffNotesGranularity');
+    const left = normalizeDiffTextInput(getDiffNoteText(text1), opts);
+    const right = normalizeDiffTextInput(getDiffNoteText(text2), opts);
+
+    if (!popup || !body) {
+        setStatus('diffnotes: popup markup is missing.');
+        return [];
+    }
+
+    if (modeSelect) modeSelect.value = String(granularity).toLowerCase().startsWith('char') ? 'char' : String(granularity).toLowerCase().startsWith('word') ? 'word' : 'line';
+
+    let segments;
+    try {
+        segments = lcsDiffTokens(tokeniseDiffText(left, granularity, opts), tokeniseDiffText(right, granularity, opts));
+    } catch (err) {
+        setStatus('diffnotes: ' + err.message);
+        return [];
+    }
+
+    const isLineMode = String(granularity).toLowerCase().startsWith('line');
+    const context = isLineMode ? getDiffContextFromOptions(opts) : null;
+    const displaySegments = isLineMode ? applyLineDiffContext(segments, context) : segments;
+    const summary = diffNotesSummary(segments);
+    if (title) {
+        const contextLabel = context ? `, context ${context.before}/${context.after}` : '';
+        title.textContent = `Note Diff (${modeSelect ? modeSelect.value : granularity}${contextLabel}): -${summary.deleted} +${summary.inserted}`;
+    }
+
+    body.innerHTML = displaySegments.map(seg => {
+        if (seg.type === 'insert') return `<span class="diffnotes-inserted">${escapeHtml(seg.text)}</span>`;
+        if (seg.type === 'delete') return `<span class="diffnotes-deleted">${escapeHtml(seg.text)}</span>`;
+        if (seg.type === 'separator') return `<span class="diffnotes-separator">${escapeHtml(seg.text)}</span>`;
+        return `<span>${escapeHtml(seg.text)}</span>`;
+    }).join('');
+    ensurePopupTextSearchControls('diffNotesPopup', 'diffNotesBody');
+    popupTextSearchRehighlight('diffNotesBody');
+
+    popup.dataset.leftText = left;
+    popup.dataset.rightText = right;
+    popup.dataset.diffOptions = JSON.stringify(normalizedDiffOptions(opts));
+    popup.style.display = 'block';
+    hideTools();
+    makeDraggable('diffNotesPopup', 'diffNotesHeader');
+    setStatus(`diffnotes: shown ${modeSelect ? modeSelect.value : granularity} diff (-${summary.deleted}, +${summary.inserted}).`);
+    return segments;
+}
+
+function refreshDiffNotesPopup() {
+    const popup = document.getElementById('diffNotesPopup');
+    const modeSelect = document.getElementById('diffNotesGranularity');
+    if (!popup || popup.style.display === 'none' || !popup.dataset.leftText && !popup.dataset.rightText) return;
+    let savedOptions = {};
+    try {
+        savedOptions = JSON.parse(popup.dataset.diffOptions || '{}');
+    } catch (_) {
+        savedOptions = {};
+    }
+    renderDiffNotesPopup(popup.dataset.leftText || '', popup.dataset.rightText || '', {
+        ...savedOptions,
+        granularity: modeSelect ? modeSelect.value : 'line'
+    });
+}
+
+function closeDiffNotesPopup() {
+    const popup = document.getElementById('diffNotesPopup');
+    if (popup) popup.style.display = 'none';
+    showTools();
+}
+
+function clearDiffNotesFirstSelection() {
+    if (diffNotesFirstButton) {
+        diffNotesFirstButton.classList.remove('diffnotes-picked');
+    }
+    diffNotesFirstButton = null;
+}
+
+function cancelDiffNotesMode(message = 'diffnotes: note selection cancelled.') {
+    diffNotesPickMode = false;
+    clearDiffNotesFirstSelection();
+    document.body.style.cursor = diffNotesOriginalCursor || 'text';
+    setStatus(message);
+}
+
+function startDiffNotesPickMode(opts = {}) {
+    if (uuidPickMode) {
+        uuidPickMode = false;
+    }
+    hydrateEditorControls();
+    diffNotesPickOptions = opts || {};
+    diffNotesPickMode = true;
+    clearDiffNotesFirstSelection();
+    diffNotesOriginalCursor = document.body.style.cursor || '';
+    document.body.style.cursor = 'crosshair';
+    setStatus('diffnotes: click the first note, then click the note to compare it against. Press Esc to cancel.');
+}
+
+function handleDiffNotesPickClick(event) {
+    if (!diffNotesPickMode) return;
+
+    const btn = getNoteButtonFromTarget(event.target);
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!btn) {
+        setStatus('diffnotes: click a note button, or press Esc to cancel.');
+        return;
+    }
+
+    if (!diffNotesFirstButton) {
+        diffNotesFirstButton = btn;
+        btn.classList.add('diffnotes-picked');
+        setStatus('diffnotes: first note selected; click the second note.');
+        return;
+    }
+
+    if (btn === diffNotesFirstButton) {
+        setStatus('diffnotes: choose a different second note, or press Esc to cancel.');
+        return;
+    }
+
+    const first = diffNotesFirstButton;
+    const second = btn;
+    diffNotesPickMode = false;
+    clearDiffNotesFirstSelection();
+    document.body.style.cursor = diffNotesOriginalCursor || 'text';
+    renderDiffNotesPopup(first, second, diffNotesPickOptions);
+}
+
+function diffnotes(note1, note2, opts = {}) {
+    if (note1 == null || note2 == null) {
+        startDiffNotesPickMode(note1 && typeof note1 === 'object' ? note1 : opts);
+        return null;
+    }
+
+    return renderDiffNotesPopup(note1, note2, opts);
+}
+
+function searchnotes(searchValue, opts = {}) {
+    if (searchValue == null || String(searchValue).length === 0) {
+        setStatus('searchnotes: provide a search string or RegExp.');
+        return [];
+    }
+
+    let regex;
+    try {
+        regex = noteSearchRegex(searchValue, opts);
+    } catch (err) {
+        setStatus('searchnotes: invalid pattern: ' + err.message);
+        return [];
+    }
+
+    const editor = document.getElementById('editor');
+    const notes = collectEmbeddedNotes(editor);
+    const matches = [];
+    const showResults = opts.showResults ?? document.getElementById('showSearchResults')?.checked;
+    const colid = Math.max(1, Math.min(7, parseInt(opts.colid || 1, 10) || 1));
+    const highlightColor = opts.color || currentFixedHighlighter || null;
+
+    notes.forEach((note, noteIndex) => {
+        regex.lastIndex = 0;
+        let match;
+        let localCount = 0;
+        while ((match = regex.exec(note.text)) !== null) {
+            localCount++;
+            matches.push({
+                button: note.btn,
+                noteIndex,
+                matchIndex: match.index,
+                matchText: match[0],
+                noteText: note.text,
+                snippet: noteMatchSnippet(note.text, match.index, match[0].length)
+            });
+
+            if (match[0] === '') regex.lastIndex++;
+        }
+
+        if (localCount > 0 && highlightColor) {
+            note.btn.style.backgroundColor = highlightColor;
+            note.btn.style.borderColor = highlightColor;
+        }
+    });
+
+    if (showResults) {
+        const resultDiv = document.getElementById('searchResults' + colid);
+        const resultListing = document.getElementById('searchResults' + colid + 'listing');
+        const resultHeader = document.getElementById('searchResults' + colid + 'Header');
+
+        if (resultDiv && resultListing) {
+            resultListing.innerHTML = '';
+            if (resultHeader) {
+                resultHeader.textContent = `Note Search Results ${colid}: ${matches.length} match(es)`;
+            }
+            ensurePopupTextSearchControls('searchResults' + colid, 'searchResults' + colid + 'listing');
+            resultDiv.style.display = 'block';
+            makeDraggable('searchResults' + colid, 'searchResults' + colid + 'Header');
+            resultListing.addEventListener('copy', copyHandler);
+            hideTools();
+
+            matches.forEach((m, idx) => {
+                const id = ensureElementId(m.button);
+                resultListing.appendChild(document.createTextNode('#' + (idx + 1) + '\t'));
+
+                const anchor = document.createElement('a');
+                anchor.href = '#' + id;
+                anchor.textContent = `note ${m.noteIndex + 1}: ${m.matchText}`;
+                anchor.onclick = function(event) {
+                    event.preventDefault();
+                    selectText(id);
+                    m.button.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    return false;
+                };
+                resultListing.appendChild(anchor);
+                resultListing.appendChild(document.createTextNode('\t' + m.snippet));
+                resultListing.appendChild(document.createElement('br'));
+            });
+            popupTextSearchRehighlight('searchResults' + colid + 'listing');
+        }
+    }
+
+    setStatus(`searchnotes: ${matches.length} match(es) in ${notes.length} note(s).`);
+    return matches;
+}
+
+function blockColorResolveColor(colorSpec) {
+    const spec = String(colorSpec ?? '').trim();
+    const fixed = {
+        1: '#f0f583',
+        2: '#fd9f9f',
+        3: '#aafba2',
+        4: '#a5f8f8',
+        5: '#f997f9',
+        7: '#ffffff'
+    };
+
+    if (/^\d+$/.test(spec)) {
+        const n = parseInt(spec, 10);
+        if (n === 6) {
+            return currentFixedHighlighter || document.getElementById('colorChooser')?.value || '#ccd3f7';
+        }
+        if (fixed[n]) return fixed[n];
+
+        const button = document.getElementById('hlButton' + n);
+        if (button) {
+            return button.style.backgroundColor || getComputedStyle(button).backgroundColor;
+        }
+    }
+
+    return spec || '#ccd3f7';
+}
+
+function blockColorRegexes(regexes) {
+    const list = Array.isArray(regexes) ? regexes : [regexes];
+    return list
+        .filter(item => item != null && String(item).length > 0)
+        .map(item => {
+            if (item instanceof RegExp) return item;
+            return new RegExp(String(item), 'm');
+        });
+}
+
+function blockColorMatches(text, regexes) {
+    return regexes.every(regex => {
+        regex.lastIndex = 0;
+        return regex.test(text);
+    });
+}
+
+function buildEditorLinearTextIndex(root = document.getElementById('editor')) {
+    let text = '';
+    const textNodes = [];
+
+    function addVirtualNewline() {
+        text += '\n';
+    }
+
+    function traverse(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            const value = node.textContent || '';
+            const start = text.length;
+            text += value;
+            textNodes.push({ node, start, end: text.length });
+            return;
+        }
+
+        if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return;
+
+        const tag = node.tagName?.toLowerCase();
+        if (['div', 'p', 'li', 'tr', 'br'].includes(tag)) addVirtualNewline();
+
+        for (const child of node.childNodes) {
+            traverse(child);
+        }
+
+        if (['div', 'p', 'li', 'tr'].includes(tag)) addVirtualNewline();
+    }
+
+    traverse(root);
+    return { text, textNodes };
+}
+
+function blockColorLineOffsets(text, startLineNum = 1, endLineNum = 'end') {
+    const lineStarts = [0];
+    for (let i = 0; i < text.length; i++) {
+        if (text[i] === '\n') lineStarts.push(i + 1);
+    }
+
+    const startLine = Math.max(1, parseInt(startLineNum, 10) || 1);
+    const start = lineStarts[Math.min(startLine - 1, lineStarts.length - 1)] ?? text.length;
+
+    if (endLineNum === 'end' || endLineNum == null) {
+        return { start, stop: text.length };
+    }
+
+    const endLine = Math.max(startLine, parseInt(endLineNum, 10) || startLine);
+    const nextLineStart = lineStarts[endLine];
+    const stop = nextLineStart == null ? text.length : nextLineStart;
+    return { start, stop };
+}
+
+function findBraceBlocksAtLevel(text, level, start, stop) {
+    let depth = 0;
+    let blockStart = null;
+    const blocks = [];
+
+    for (let pos = start; pos < stop; pos++) {
+        const ch = text[pos];
+        if (ch === '{') {
+            if (depth === level) {
+                blockStart = pos;
+            }
+            depth++;
+        } else if (ch === '}') {
+            if (depth > 0) {
+                const closingLevel = depth - 1;
+                depth--;
+                if (closingLevel === level && blockStart != null) {
+                    blocks.push({ start: blockStart, end: pos + 1, text: text.slice(blockStart, pos + 1) });
+                    blockStart = null;
+                }
+            }
+        }
+    }
+
+    return blocks;
+}
+
+function applyBlockColorRanges(textNodes, ranges, color, level) {
+    const pieces = [];
+
+    ranges.forEach(range => {
+        textNodes.forEach(({ node, start, end }, order) => {
+            if (end <= range.start || start >= range.end) return;
+            const spanStart = Math.max(range.start, start) - start;
+            const spanEnd = Math.min(range.end, end) - start;
+            if (spanStart < spanEnd) {
+                pieces.push({ node, order, spanStart, spanEnd });
+            }
+        });
+    });
+
+    pieces.sort((a, b) => {
+        if (a.order !== b.order) return b.order - a.order;
+        return b.spanStart - a.spanStart;
+    });
+
+    pieces.forEach(({ node, spanStart, spanEnd }) => {
+        if (!node.parentNode || spanStart === spanEnd) return;
+        if (isSvgTextNode(node)) {
+            createSvgTspanHighlight(node, spanStart, spanEnd, { backgroundColor: color });
+            return;
+        }
+
+        const span = document.createElement('span');
+        span.className = 'block-color-highlight';
+        span.style.backgroundColor = color;
+        span.dataset.blockColorLevel = String(level);
+
+        const r = document.createRange();
+        r.setStart(node, spanStart);
+        r.setEnd(node, spanEnd);
+        try {
+            r.surroundContents(span);
+        } catch (_) {
+            const fragment = r.extractContents();
+            span.appendChild(fragment);
+            r.insertNode(span);
+        }
+    });
+}
+
+function nested_block_color(level, colorSpec, regexes, startLineNum = 1, endLineNum = 'end') {
+    const parsedLevel = parseInt(level, 10);
+    if (!Number.isInteger(parsedLevel) || parsedLevel < 0) {
+        throw new Error('nested_block_color level must be a non-negative integer');
+    }
+
+    let compiledRegexes;
+    try {
+        compiledRegexes = blockColorRegexes(regexes);
+    } catch (err) {
+        setStatus('nested_block_color: invalid regex: ' + err.message);
+        return 0;
+    }
+
+    const editor = document.getElementById('editor');
+    if (!editor) return 0;
+
+    const color = blockColorResolveColor(colorSpec);
+    const { text, textNodes } = buildEditorLinearTextIndex(editor);
+    const { start, stop } = blockColorLineOffsets(text, startLineNum, endLineNum);
+    const blocks = findBraceBlocksAtLevel(text, parsedLevel, start, stop);
+    const matches = compiledRegexes.length === 0 ? blocks : blocks.filter(block => blockColorMatches(block.text, compiledRegexes));
+
+    applyBlockColorRanges(textNodes, matches, color, parsedLevel);
+    setStatus(`nested_block_color: colored ${matches.length} block(s) at level ${parsedLevel}.`);
+    return matches.length;
+}
+
+function block_color(colorSpec, regexes, startLineNum = 1, endLineNum = 'end') {
+    return nested_block_color(0, colorSpec, regexes, startLineNum, endLineNum);
 }
     
 function selectText(containerid) {
@@ -510,10 +1650,14 @@ function selectText(containerid) {
             width: 100%;
             height: 100%; /* Fill remaining height */
               box-sizing: border-box; /* Includes padding/border in total height calculation */
-              overflow: auto;  /*Scrollbar if content exceeds height */
+              overflow-x: auto;  /* Scrollbar if content exceeds width */
+              overflow-y: auto;  /* Scrollbar if content exceeds height */
               white-space: pre-wrap;
             word-break: break-word;
              overflow-wrap: break-word;
+        }
+        #editor svg {
+            max-width: none;
         }
         .toolbar button, select, input[type="text"] {
             margin-right: 5px;
@@ -639,6 +1783,146 @@ function selectText(containerid) {
   line-height: 1;
   text-align: center;
   padding: 0;
+}
+
+.note-button.diffnotes-picked {
+  outline: 3px solid #222;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px #ffd54f;
+}
+
+.diffnotes-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.popup-text-search-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px 0;
+  font-family: sans-serif;
+  font-size: 13px;
+}
+
+.popup-text-search-input {
+  width: min(260px, 34vw);
+}
+
+.popup-text-search-color-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.popup-text-search-color-label input[type="color"] {
+  width: 28px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #aaa;
+}
+
+.popup-text-search-count {
+  min-width: 44px;
+  color: #555;
+}
+
+.popup-search-hit {
+  border-radius: 2px;
+}
+
+.popup-search-current {
+  outline: 1px solid currentColor;
+}
+
+.popup-search-text-input::selection {
+  background: var(--popup-search-bg, #fff2a8);
+  color: var(--popup-search-fg, #000000);
+}
+
+.diffnotes-body {
+  width: min(900px, 80vw);
+  max-height: 65vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.35;
+  border: 1px solid #d0d0d0;
+  padding: 10px;
+  background: #fff;
+}
+
+.diffnotes-inserted {
+  background: #aafba2;
+  text-decoration: underline;
+}
+
+.diffnotes-deleted {
+  background: #fd9f9f;
+  text-decoration: line-through;
+}
+
+.diffnotes-separator {
+  display: block;
+  color: #777;
+  background: #eeeeee;
+  padding: 2px 4px;
+  margin: 2px 0;
+}
+
+.cmdhelp-body {
+  width: min(860px, 82vw);
+  max-height: 70vh;
+  overflow: auto;
+  padding: 4px 8px 8px 8px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.cmdhelp-section {
+  border-top: 1px solid #dddddd;
+  padding-top: 8px;
+  margin-top: 8px;
+}
+
+.cmdhelp-section:first-child {
+  border-top: none;
+  margin-top: 0;
+}
+
+.cmdhelp-section h5 {
+  margin: 0 0 6px 0;
+  font-size: 14px;
+}
+
+.cmdhelp-section dl {
+  display: grid;
+  grid-template-columns: minmax(220px, 310px) minmax(260px, 1fr);
+  gap: 5px 12px;
+  margin: 0;
+}
+
+.cmdhelp-section dt,
+.cmdhelp-section dd {
+  margin: 0;
+}
+
+.cmdhelp-section code {
+  font-family: Consolas, "Courier New", monospace;
+  color: #111;
+  background: #f2f2f2;
+  padding: 1px 4px;
+  border: 1px solid #dddddd;
+  border-radius: 3px;
+}
+
+.block-color-highlight {
+  border-radius: 2px;
 }
 
 @media print {
@@ -1773,6 +3057,136 @@ if(__fontChooserTouched && fontSel !== "No Selection" && fontSel !== __initialFo
 }
 
 let currentFileName = null;
+const IMPORTED_EDITOR_CSS_STYLE_ID = 'spectral-imported-editor-css';
+
+function removeImportedEditorCss() {
+    const existing = document.getElementById(IMPORTED_EDITOR_CSS_STYLE_ID);
+    if (existing) existing.remove();
+}
+
+function splitCssSelectorList(selectorText) {
+    const selectors = [];
+    let current = '';
+    let depth = 0;
+    let quote = null;
+
+    for (let i = 0; i < selectorText.length; i++) {
+        const ch = selectorText[i];
+        const prev = selectorText[i - 1];
+
+        if (quote) {
+            current += ch;
+            if (ch === quote && prev !== '\\') quote = null;
+            continue;
+        }
+
+        if (ch === '"' || ch === "'") {
+            quote = ch;
+            current += ch;
+            continue;
+        }
+
+        if (ch === '(' || ch === '[') depth++;
+        if (ch === ')' || ch === ']') depth = Math.max(0, depth - 1);
+
+        if (ch === ',' && depth === 0) {
+            selectors.push(current.trim());
+            current = '';
+        } else {
+            current += ch;
+        }
+    }
+
+    if (current.trim()) selectors.push(current.trim());
+    return selectors;
+}
+
+function scopeCssSelectorToEditor(selector) {
+    const trimmed = selector.trim();
+    if (!trimmed) return '';
+    if (trimmed.startsWith('#editor')) return trimmed;
+    if (trimmed === 'body' || trimmed === 'html' || trimmed === ':root') return '#editor';
+    if (trimmed.startsWith('body ')) return '#editor ' + trimmed.slice(5);
+    if (trimmed.startsWith('html ')) return '#editor ' + trimmed.slice(5);
+    return '#editor ' + trimmed;
+}
+
+function findMatchingCssBrace(cssText, openIndex) {
+    let depth = 0;
+    let quote = null;
+    for (let i = openIndex; i < cssText.length; i++) {
+        const ch = cssText[i];
+        const prev = cssText[i - 1];
+
+        if (quote) {
+            if (ch === quote && prev !== '\\') quote = null;
+            continue;
+        }
+
+        if (ch === '"' || ch === "'") {
+            quote = ch;
+            continue;
+        }
+
+        if (ch === '{') depth++;
+        if (ch === '}') {
+            depth--;
+            if (depth === 0) return i;
+        }
+    }
+    return -1;
+}
+
+function scopeCssTextToEditor(cssText) {
+    let output = '';
+    let i = 0;
+
+    while (i < cssText.length) {
+        const open = cssText.indexOf('{', i);
+        if (open === -1) break;
+
+        const selectorText = cssText.slice(i, open).trim();
+        const close = findMatchingCssBrace(cssText, open);
+        if (close === -1) break;
+
+        const body = cssText.slice(open + 1, close);
+        if (selectorText.startsWith('@')) {
+            if (/^@(media|supports|container)\b/i.test(selectorText)) {
+                output += selectorText + ' {\n' + scopeCssTextToEditor(body) + '\n}\n';
+            } else {
+                output += selectorText + ' {' + body + '}\n';
+            }
+        } else {
+            const scopedSelectors = splitCssSelectorList(selectorText)
+                .map(scopeCssSelectorToEditor)
+                .filter(Boolean);
+            if (scopedSelectors.length > 0) {
+                output += scopedSelectors.join(', ') + ' {' + body + '}\n';
+            }
+        }
+
+        i = close + 1;
+    }
+
+    return output;
+}
+
+function importEditorCssFromLoadedDocument(doc) {
+    removeImportedEditorCss();
+
+    const cssTexts = Array.from(doc.querySelectorAll('style'))
+        .map(style => style.textContent || '')
+        .filter(text => text.trim().length > 0);
+
+    if (cssTexts.length === 0) return 0;
+
+    const style = document.createElement('style');
+    style.id = IMPORTED_EDITOR_CSS_STYLE_ID;
+    style.textContent = cssTexts.map(scopeCssTextToEditor).join('\n');
+    document.head.appendChild(style);
+    return cssTexts.length;
+}
+
 document.getElementById('fileLoader').addEventListener('change', function(event) {
     const file = event.target.files[0];
 
@@ -1808,6 +3222,7 @@ document.getElementById('fileLoader').addEventListener('change', function(event)
             });
 
             const imported = document.importNode(svg, true);
+            removeImportedEditorCss();
             editor.appendChild(imported);
             setStatus('Loaded inline SVG into editor.');
             return;
@@ -1822,9 +3237,10 @@ document.getElementById('fileLoader').addEventListener('change', function(event)
 
             if (loadedEditorDiv) {
                 // Found an editor div, load its innerHTML
+                const importedStyleCount = importEditorCssFromLoadedDocument(doc);
                 editor.innerHTML = loadedEditorDiv.innerHTML;
                 hydrateEditorControls(editor);
-                setStatus("Loaded editor content from HTML file.");
+                setStatus("Loaded editor content from HTML file" + (importedStyleCount ? ` with ${importedStyleCount} imported style block(s).` : "."));
                 return;
             }
         }
@@ -1833,6 +3249,7 @@ document.getElementById('fileLoader').addEventListener('change', function(event)
         const loadingElement = document.createElement('div');
         loadingElement.innerHTML = escapeTextWithLineBreaks(contents);
         
+        removeImportedEditorCss();
         editor.innerHTML = "";
         editor.appendChild(loadingElement);
         setStatus("Loaded plain text file content.");
@@ -2007,7 +3424,7 @@ function toggleLineWrap(isWrapped) {
 
     if (isWrapped) {
         editor.style.whiteSpace = 'pre-wrap'; // allow wrapping
-        editor.style.overflowX = 'hidden';
+        editor.style.overflowX = 'auto';
     } else {
         editor.style.whiteSpace = 'pre';      // no wrapping
         editor.style.overflowX = 'auto';      // horizontal scroll
@@ -2273,6 +3690,37 @@ function setStatus(text) {
         statusBox.value = text + "\n" + statusBox.value ;
     }
 }
+
+function copyTextToClipboardRobust(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(text);
+    }
+
+    return new Promise((resolve, reject) => {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        try {
+            if (document.execCommand('copy')) {
+                resolve();
+            } else {
+                reject(new Error('document.execCommand("copy") returned false'));
+            }
+        } catch (err) {
+            reject(err);
+        } finally {
+            document.body.removeChild(textarea);
+        }
+    });
+}
+
 function showText(str, popupid)
 {
   dec = Base64.decode(str);
@@ -2336,6 +3784,8 @@ function saveEditorRange() {
     }
 }
 const editor = document.getElementById('editor');
+document.addEventListener('click', handleDiffNotesPickClick, true);
+document.addEventListener('click', handleUuidPickClick, true);
 editor.addEventListener('keydown', saveEditorRange);
 editor.addEventListener('click', saveEditorRange);
 editor.addEventListener('click', insertCursorOnMouseDown);
@@ -2518,10 +3968,12 @@ function matchAndHighlightBrackets() {
   const openSet = new Set(['(', '[', '{']);
   const closeSet = new Set([')', ']', '}']);
 
-  const char = text[globalOffset] || text[globalOffset - 1];
+  const currentChar = text[globalOffset];
+  const previousChar = text[globalOffset - 1];
+  const char = brackets[currentChar] ? currentChar : previousChar;
   const isOpening = openSet.has(char);
   const matchChar = brackets[char];
-  const startOffset = isOpening ? globalOffset : globalOffset ;
+  const startOffset = brackets[currentChar] ? globalOffset : globalOffset - 1;
 
   if (!matchChar) return;
 
@@ -2567,6 +4019,11 @@ function matchAndHighlightBrackets() {
       applyHighlightToMatch(startOffset, nodes, color);
   }
 
+  const selectionStart = Math.min(startOffset, matchOffset) + 1;
+  const selectionEnd = Math.max(startOffset, matchOffset);
+  if (selectionStart <= selectionEnd) {
+      selectFlatTextRange(editor, selectionStart, selectionEnd);
+  }
 }
 
 // Helper to find node and relative offset for a given global offset
@@ -2577,6 +4034,43 @@ function findNodeAtOffset(offset, nodes) {
       }
     }
     return null;
+}
+
+function findTextBoundaryAtOffset(root, offset) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    let node;
+    let total = 0;
+    let lastTextNode = null;
+
+    while ((node = walker.nextNode())) {
+        const len = node.textContent.length;
+        if (offset <= total + len) {
+            return { node, offset: Math.max(0, Math.min(offset - total, len)) };
+        }
+        total += len;
+        lastTextNode = node;
+    }
+
+    if (lastTextNode) {
+        return { node: lastTextNode, offset: lastTextNode.textContent.length };
+    }
+    return null;
+}
+
+function selectFlatTextRange(root, startOffset, endOffset) {
+    const start = findTextBoundaryAtOffset(root, startOffset);
+    const end = findTextBoundaryAtOffset(root, endOffset);
+    if (!start || !end) return null;
+
+    const range = document.createRange();
+    range.setStart(start.node, start.offset);
+    range.setEnd(end.node, end.offset);
+
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    savedEditorRange = range.cloneRange();
+    return range;
 }
 
 function applyHighlightToMatch(startOffset, nodes, color) {
@@ -2734,20 +4228,23 @@ function saveInnerHtmlLocally() {
     /////////////////
     // Pick only these two, by id, from the CLONE
     const styleEl  = document.querySelector('#inline-style');
+    const importedStyleEl = document.querySelector('#' + IMPORTED_EDITOR_CSS_STYLE_ID);
     const scriptEl = document.querySelector('#inline-script');
      const textPopupEl = document.querySelector('#textPopup');
 
-    const parts = [];
+    const headParts = [];
+    const bodyParts = [];
 
     // Order up to you; often style before script is sensible
-    if (styleEl)  { parts.push(styleEl.outerHTML);  }
-    if (scriptEl) { parts.push(scriptEl.outerHTML); }
-    if (textPopupEl) { parts.push(textPopupEl.outerHTML); }
+    if (styleEl)  { headParts.push(styleEl.outerHTML);  }
+    if (importedStyleEl) { headParts.push(importedStyleEl.outerHTML); }
+    if (scriptEl) { headParts.push(scriptEl.outerHTML); }
+    if (textPopupEl) { bodyParts.push(textPopupEl.outerHTML); }
 
 
 
     // Wrap however you like; here we place assets before the editor div
-    let combinedContent = `${parts.join('\n')}\n${editorContent}`;
+    let combinedContent = `<head>\n<meta charset="UTF-8">\n${headParts.join('\n')}\n</head>\n<body>\n${bodyParts.join('\n')}\n${editorContent}\n</body>`;
     /////////////////
     const blob = new Blob(["<html>\n"+combinedContent+"\n</html>"], { type: 'text/html' });
     const downloadLink = document.createElement('a');
@@ -2838,6 +4335,35 @@ window.addEventListener('DOMContentLoaded', () => {
     hydrateEmbeddedVideoSources(document);
 });
 document.addEventListener('keydown', function(event) {
+    if (diffNotesPickMode && event.key === 'Escape') {
+        event.preventDefault();
+        cancelDiffNotesMode();
+        return;
+    }
+
+    if (uuidPickMode && event.key === 'Escape') {
+        event.preventDefault();
+        cancelUuidPickMode();
+        return;
+    }
+
+    if (event.key === 'F7') {
+        event.preventDefault();
+        diffnotes();
+        return;
+    }
+
+    if (event.key === 'F8') {
+        event.preventDefault();
+        startUuidPickMode();
+        return;
+    }
+
+    if (event.key === 'F9') {
+        event.preventDefault();
+        editNearestImageAnnotation();
+        return;
+    }
     
     if(event.ctrlKey && !event.altKey) {
     
@@ -3189,6 +4715,266 @@ function getPreviousTextNodeDeep(node) {
     return null;
 }
 
+let uuidPickMode = false;
+
+function isUuidTokenChar(ch) {
+    return /^[A-Za-z0-9._:-]$/.test(ch);
+}
+
+function isSvgTextElement(el) {
+    return el && el.namespaceURI === 'http://www.w3.org/2000/svg' && /^(text|tspan|textPath)$/i.test(el.tagName || '');
+}
+
+function closestUuidTextScope(node) {
+    const el = node && node.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+    if (!el) return null;
+    const svgText = el.closest && el.closest('text');
+    if (svgText && svgText.namespaceURI === 'http://www.w3.org/2000/svg') return svgText;
+    return el.closest && el.closest('div,p,li,tr,td,th,pre,section,article,blockquote,h1,h2,h3,h4,h5,h6,#editor');
+}
+
+function fragmentHasUuidBoundary(fragment) {
+    const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, null, false);
+    let n;
+    while ((n = walker.nextNode())) {
+        if (n.nodeType === Node.TEXT_NODE) {
+            if ((n.textContent || '').length > 0 && !/^[A-Za-z0-9._:-]*$/.test(n.textContent)) {
+                return true;
+            }
+        } else if (n.nodeType === Node.ELEMENT_NODE) {
+            const tag = (n.tagName || '').toLowerCase();
+            if (/^(br|div|p|li|tr|td|th|pre|section|article|blockquote|h[1-6])$/.test(tag)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function canCrossUuidTextBoundary(fromNode, toNode, direction) {
+    if (!fromNode || !toNode) return false;
+
+    const fromScope = closestUuidTextScope(fromNode);
+    const toScope = closestUuidTextScope(toNode);
+    if (fromScope !== toScope) return false;
+
+    const range = document.createRange();
+    try {
+        if (direction === 'forward') {
+            range.setStart(fromNode, fromNode.textContent.length);
+            range.setEnd(toNode, 0);
+        } else {
+            range.setStart(toNode, toNode.textContent.length);
+            range.setEnd(fromNode, 0);
+        }
+    } catch (_) {
+        return false;
+    }
+
+    return !fragmentHasUuidBoundary(range.cloneContents());
+}
+
+function rangeFromSvgTextPoint(event) {
+    const targetEl = event.target && event.target.closest ? event.target.closest('text,tspan,textPath') : null;
+    const textEl = targetEl && targetEl.closest ? targetEl.closest('text') : targetEl;
+    if (!isSvgTextElement(textEl) || !textEl.ownerSVGElement || typeof textEl.getCharNumAtPosition !== 'function') {
+        return null;
+    }
+
+    const svg = textEl.ownerSVGElement;
+    const pt = svg.createSVGPoint();
+    pt.x = event.clientX;
+    pt.y = event.clientY;
+
+    let localPoint;
+    try {
+        localPoint = pt.matrixTransform(textEl.getScreenCTM().inverse());
+    } catch (_) {
+        return null;
+    }
+
+    let charIndex = -1;
+    try {
+        charIndex = textEl.getCharNumAtPosition(localPoint);
+    } catch (_) {
+        return null;
+    }
+    if (charIndex < 0) return null;
+
+    try {
+        const extent = textEl.getExtentOfChar(charIndex);
+        if (localPoint.x > extent.x + extent.width / 2) {
+            charIndex++;
+        }
+    } catch (_) {
+        // Keep the browser-reported character index.
+    }
+
+    const walker = document.createTreeWalker(textEl, NodeFilter.SHOW_TEXT, null, false);
+    let node;
+    let remaining = charIndex;
+    while ((node = walker.nextNode())) {
+        const len = node.textContent.length;
+        if (remaining <= len) {
+            const range = document.createRange();
+            range.setStart(node, Math.max(0, Math.min(remaining, len)));
+            range.collapse(true);
+            return range;
+        }
+        remaining -= len;
+    }
+
+    return null;
+}
+
+function rangeFromPointRobust(event) {
+    let range = null;
+    if (document.caretRangeFromPoint) {
+        range = document.caretRangeFromPoint(event.clientX, event.clientY);
+    } else if (document.caretPositionFromPoint) {
+        const pos = document.caretPositionFromPoint(event.clientX, event.clientY);
+        if (pos) {
+            range = document.createRange();
+            range.setStart(pos.offsetNode, pos.offset);
+            range.collapse(true);
+        }
+    }
+
+    if (range && range.startContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
+        return range;
+    }
+
+    const svgRange = rangeFromSvgTextPoint(event);
+    if (svgRange) return svgRange;
+
+    const target = event.target;
+    if (target && target.nodeType === Node.TEXT_NODE) {
+        const fallback = document.createRange();
+        fallback.setStart(target, 0);
+        fallback.collapse(true);
+        return fallback;
+    }
+
+    if (target && target.nodeType === Node.ELEMENT_NODE) {
+        const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT, {
+            acceptNode: node => node.textContent ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
+        }, false);
+        const node = walker.nextNode();
+        if (node) {
+            const fallback = document.createRange();
+            fallback.setStart(node, 0);
+            fallback.collapse(true);
+            return fallback;
+        }
+    }
+
+    return null;
+}
+
+function getUuidTokenAtRange(range) {
+    const editor = document.getElementById('editor');
+    if (!range || !editor || !editor.contains(range.startContainer)) return '';
+
+    let node = range.startContainer;
+    let offset = range.startOffset;
+
+    if (node.nodeType !== Node.TEXT_NODE) {
+        node = getNextTextNodeDeep(node);
+        offset = 0;
+    }
+    if (!node || node.nodeType !== Node.TEXT_NODE) return '';
+
+    const text = node.textContent || '';
+    if (offset > 0 && (offset >= text.length || !isUuidTokenChar(text[offset])) && isUuidTokenChar(text[offset - 1])) {
+        offset--;
+    }
+
+    const forwardParts = [];
+    let forwardNode = node;
+    let forwardOffset = offset;
+    while (forwardNode) {
+        const s = forwardNode.textContent || '';
+        let i = forwardOffset;
+        while (i < s.length && isUuidTokenChar(s[i])) i++;
+        forwardParts.push(s.slice(forwardOffset, i));
+        if (i < s.length) break;
+        const nextNode = getNextTextNodeDeep(forwardNode);
+        if (!canCrossUuidTextBoundary(forwardNode, nextNode, 'forward')) break;
+        forwardNode = nextNode;
+        forwardOffset = 0;
+    }
+
+    const backwardParts = [];
+    let backwardNode = node;
+    let backwardOffset = offset;
+    while (backwardNode) {
+        const s = backwardNode.textContent || '';
+        let i = Math.min(backwardOffset, s.length);
+        while (i > 0 && isUuidTokenChar(s[i - 1])) i--;
+        backwardParts.push(s.slice(i, backwardOffset));
+        if (i > 0) break;
+        const prevNode = getPreviousTextNodeDeep(backwardNode);
+        if (!canCrossUuidTextBoundary(backwardNode, prevNode, 'backward')) break;
+        backwardNode = prevNode;
+        backwardOffset = backwardNode ? backwardNode.textContent.length : 0;
+    }
+
+    return backwardParts.reverse().join('') + forwardParts.join('');
+}
+
+function cancelUuidPickMode(message = 'UUID picker cancelled.') {
+    uuidPickMode = false;
+    if (cursorInsertMode) {
+        toggleMouseIconForCursorPlacementMode();
+    } else {
+        document.body.style.cursor = 'text';
+    }
+    setStatus(message);
+}
+
+function startUuidPickMode() {
+    if (diffNotesPickMode) {
+        cancelDiffNotesMode('diffnotes: note selection cancelled.');
+    }
+    uuidPickMode = true;
+    document.body.style.cursor = 'copy';
+    setStatus('Token picker: click a word/token, or press Esc to cancel.');
+}
+
+async function handleUuidPickClick(event) {
+    if (!uuidPickMode) return;
+
+    const editor = document.getElementById('editor');
+    if (!editor || !editor.contains(event.target)) {
+        cancelUuidPickMode('UUID picker cancelled: click was outside the editor.');
+        return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const range = rangeFromPointRobust(event);
+    const token = getUuidTokenAtRange(range);
+    uuidPickMode = false;
+    if (cursorInsertMode) {
+        toggleMouseIconForCursorPlacementMode();
+    } else {
+        document.body.style.cursor = 'text';
+    }
+
+    if (!token) {
+        setStatus('No token found at click point.');
+        return;
+    }
+
+    try {
+        await copyTextToClipboardRobust(token);
+        setStatus('Copied token: ' + token);
+    } catch (err) {
+        setStatus('Failed to copy token: ' + err);
+    }
+}
+
 
 function backspaceAtCursors() {
     const editor = document.getElementById('editor');
@@ -3464,6 +5250,505 @@ function applyImageScaling(scale) {
     }
 }
 
+function getNearestImageToEditorRange(range = savedEditorRange) {
+    const editor = document.getElementById('editor');
+    if (!editor) return null;
+
+    const images = Array.from(editor.querySelectorAll('img'));
+    if (images.length === 0) return null;
+
+    if (range && editor.contains(range.commonAncestorContainer)) {
+        const container = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+            ? range.commonAncestorContainer
+            : range.commonAncestorContainer.parentElement;
+        const directImg = container && container.closest ? container.closest('img') : null;
+        if (directImg && editor.contains(directImg)) return directImg;
+
+        const intersecting = images.find(img => {
+            try { return range.intersectsNode(img); } catch (_) { return false; }
+        });
+        if (intersecting) return intersecting;
+
+        const rangeRect = range.getBoundingClientRect ? range.getBoundingClientRect() : null;
+        if (rangeRect && (rangeRect.width || rangeRect.height)) {
+            const rx = rangeRect.left + rangeRect.width / 2;
+            const ry = rangeRect.top + rangeRect.height / 2;
+            let best = null;
+            let bestDist = Infinity;
+
+            images.forEach(img => {
+                const rect = img.getBoundingClientRect();
+                if (!rect.width && !rect.height) return;
+                const ix = rect.left + rect.width / 2;
+                const iy = rect.top + rect.height / 2;
+                const dx = ix - rx;
+                const dy = iy - ry;
+                const dist = dx * dx + dy * dy;
+                if (dist < bestDist) {
+                    best = img;
+                    bestDist = dist;
+                }
+            });
+
+            if (best) return best;
+        }
+
+        let node = range.startContainer;
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+
+        let nearestImage = null;
+        let minDistance = Infinity;
+        images.forEach(img => {
+            const dist = Math.abs(img.compareDocumentPosition(node));
+            if (dist < minDistance) {
+                nearestImage = img;
+                minDistance = dist;
+            }
+        });
+        if (nearestImage) return nearestImage;
+    }
+
+    return images[0] || null;
+}
+
+function ensureImageAnnotationPopup() {
+    let popup = document.getElementById('imageAnnotationPopup');
+    if (popup) return popup;
+
+    const style = document.createElement('style');
+    style.id = 'imageAnnotationPopupStyle';
+    style.textContent = `
+        #imageAnnotationPopup {
+            position: fixed;
+            inset: 3vh 3vw;
+            display: none;
+            flex-direction: column;
+            background: #f7f7f7;
+            color: #111;
+            border: 1px solid #888;
+            box-shadow: 0 8px 28px rgba(0,0,0,0.35);
+            z-index: 20000;
+            font-family: sans-serif;
+            font-size: 13px;
+        }
+        #imageAnnotationPopup .image-annotation-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 8px;
+            border-bottom: 1px solid #bbb;
+            background: #fff;
+        }
+        #imageAnnotationPopup .image-annotation-palette {
+            display: grid;
+            grid-template-columns: repeat(32, 18px);
+            gap: 2px;
+        }
+        #imageAnnotationPopup .image-annotation-tool {
+            border: 1px solid #888;
+            background: #eee;
+            padding: 3px 8px;
+            cursor: pointer;
+        }
+        #imageAnnotationPopup .image-annotation-tool.active {
+            background: #cfe3ff;
+            border-color: #2266bb;
+        }
+        #imageAnnotationPopup .image-annotation-swatch {
+            width: 18px;
+            height: 18px;
+            border: 1px solid #777;
+            padding: 0;
+            cursor: pointer;
+        }
+        #imageAnnotationPopup .image-annotation-swatch.active {
+            outline: 2px solid #111;
+            outline-offset: 1px;
+        }
+        #imageAnnotationPopup .image-annotation-canvas-wrap {
+            flex: 1;
+            overflow: auto;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 12px;
+            background: #d8d8d8;
+        }
+        #imageAnnotationCanvas {
+            background: #fff;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.25);
+            touch-action: none;
+            cursor: crosshair;
+            max-width: none;
+        }
+        #imageAnnotationPopup input[type="range"] {
+            width: 120px;
+        }
+        #imageAnnotationTextValue {
+            width: 190px;
+        }
+        #imageAnnotationTextSize {
+            width: 58px;
+        }
+    `;
+    document.head.appendChild(style);
+
+    popup = document.createElement('div');
+    popup.id = 'imageAnnotationPopup';
+    popup.innerHTML = `
+        <div class="image-annotation-toolbar">
+            <strong>Image annotation</strong>
+            <button id="imageAnnotationPenTool" class="image-annotation-tool active" type="button">Pen</button>
+            <button id="imageAnnotationTextTool" class="image-annotation-tool" type="button">Text</button>
+            <label>Pen <input id="imageAnnotationSize" type="range" min="1" max="60" value="8"></label>
+            <span id="imageAnnotationSizeText">8 px</span>
+            <label>Opacity <input id="imageAnnotationOpacity" type="range" min="0" max="100" value="100"></label>
+            <span id="imageAnnotationOpacityText">100%</span>
+            <input id="imageAnnotationColor" type="color" value="#ff0000" title="Custom color">
+            <input id="imageAnnotationTextValue" type="text" placeholder="Text to place">
+            <select id="imageAnnotationTextFont" title="Text font">
+                <option value="Arial">Arial</option>
+                <option value="Verdana">Verdana</option>
+                <option value="Times New Roman">Times New Roman</option>
+                <option value="Courier New">Courier New</option>
+                <option value="Georgia">Georgia</option>
+                <option value="Impact">Impact</option>
+                <option value="OpenDyslexic">OpenDyslexic</option>
+                <option value="OpenDyslexicMono">OpenDyslexicMono</option>
+            </select>
+            <label>Size <input id="imageAnnotationTextSize" type="number" min="6" max="300" value="32"></label>
+            <label>FG <input id="imageAnnotationTextFg" type="color" value="#000000"></label>
+            <label>BG <input id="imageAnnotationTextBg" type="color" value="#ffffff"></label>
+            <label><input id="imageAnnotationTextBgTransparent" type="checkbox"> No BG</label>
+            <button id="imageAnnotationUndo" type="button">Undo</button>
+            <button id="imageAnnotationClear" type="button">Reset</button>
+            <button id="imageAnnotationSave" type="button">Save</button>
+            <button id="imageAnnotationCancel" type="button">Cancel</button>
+            <div id="imageAnnotationPalette" class="image-annotation-palette"></div>
+        </div>
+        <div class="image-annotation-canvas-wrap">
+            <canvas id="imageAnnotationCanvas"></canvas>
+        </div>
+    `;
+    document.body.appendChild(popup);
+
+    return popup;
+}
+
+function imageAnnotationPaletteColors() {
+    const colors = [];
+    const channel = [0, 85, 170, 255];
+    channel.forEach(r => {
+        channel.forEach(g => {
+            channel.forEach(b => {
+                colors.push('#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join(''));
+            });
+        });
+    });
+    return colors;
+}
+
+function loadImageElementForCanvas(src) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Image could not be loaded for editing.'));
+        img.src = src;
+    });
+}
+
+function getPreferredCanvasMimeForImage(imgEl) {
+    const src = imgEl.getAttribute('src') || '';
+    const match = src.match(/^data:(image\/(?:png|jpeg|webp));/i);
+    return match ? match[1].toLowerCase() : 'image/png';
+}
+
+async function openImageAnnotationEditor(imgEl) {
+    if (!imgEl) {
+        setStatus('No image found near the cursor.');
+        return;
+    }
+
+    const popup = ensureImageAnnotationPopup();
+    const canvas = document.getElementById('imageAnnotationCanvas');
+    const ctx = canvas.getContext('2d');
+    const sizeInput = document.getElementById('imageAnnotationSize');
+    const sizeText = document.getElementById('imageAnnotationSizeText');
+    const opacityInput = document.getElementById('imageAnnotationOpacity');
+    const opacityText = document.getElementById('imageAnnotationOpacityText');
+    const colorInput = document.getElementById('imageAnnotationColor');
+    const penToolBtn = document.getElementById('imageAnnotationPenTool');
+    const textToolBtn = document.getElementById('imageAnnotationTextTool');
+    const textValueInput = document.getElementById('imageAnnotationTextValue');
+    const textFontSelect = document.getElementById('imageAnnotationTextFont');
+    const textSizeInput = document.getElementById('imageAnnotationTextSize');
+    const textFgInput = document.getElementById('imageAnnotationTextFg');
+    const textBgInput = document.getElementById('imageAnnotationTextBg');
+    const textBgTransparentInput = document.getElementById('imageAnnotationTextBgTransparent');
+    const palette = document.getElementById('imageAnnotationPalette');
+    const saveBtn = document.getElementById('imageAnnotationSave');
+    const cancelBtn = document.getElementById('imageAnnotationCancel');
+    const undoBtn = document.getElementById('imageAnnotationUndo');
+    const clearBtn = document.getElementById('imageAnnotationClear');
+
+    let sourceImage;
+    try {
+        sourceImage = await loadImageElementForCanvas(imgEl.currentSrc || imgEl.src);
+    } catch (err) {
+        setStatus(err.message);
+        return;
+    }
+
+    const width = sourceImage.naturalWidth || imgEl.naturalWidth || imgEl.width;
+    const height = sourceImage.naturalHeight || imgEl.naturalHeight || imgEl.height;
+    if (!width || !height) {
+        setStatus('Image has no usable dimensions for editing.');
+        return;
+    }
+
+    canvas.width = width;
+    canvas.height = height;
+    const displayScale = Math.min(1, (window.innerWidth * 0.88) / width, (window.innerHeight * 0.70) / height);
+    canvas.style.width = Math.max(1, Math.round(width * displayScale)) + 'px';
+    canvas.style.height = Math.max(1, Math.round(height * displayScale)) + 'px';
+    ctx.clearRect(0, 0, width, height);
+    try {
+        ctx.drawImage(sourceImage, 0, 0, width, height);
+    } catch (err) {
+        setStatus('Image could not be drawn. It may be blocked by browser canvas security.');
+        return;
+    }
+
+    let initialImageData;
+    try {
+        initialImageData = ctx.getImageData(0, 0, width, height);
+    } catch (err) {
+        setStatus('Image could not be edited. It may be blocked by browser canvas security.');
+        return;
+    }
+    const undoStack = [];
+    let drawing = false;
+    let lastPoint = null;
+    let currentColor = colorInput.value || '#ff0000';
+    let annotationTool = 'pen';
+
+    function saveUndoSnapshot() {
+        try {
+            undoStack.push(ctx.getImageData(0, 0, width, height));
+            if (undoStack.length > 20) undoStack.shift();
+        } catch (_) {
+            // Undo is best-effort; drawing and save can still work.
+        }
+    }
+
+    function setColor(color) {
+        currentColor = color;
+        colorInput.value = color;
+        palette.querySelectorAll('.image-annotation-swatch').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.color.toLowerCase() === color.toLowerCase());
+        });
+    }
+
+    palette.innerHTML = '';
+    imageAnnotationPaletteColors().forEach(color => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'image-annotation-swatch';
+        btn.dataset.color = color;
+        btn.style.backgroundColor = color;
+        btn.title = color;
+        btn.addEventListener('click', () => setColor(btn.dataset.color));
+        palette.appendChild(btn);
+    });
+    setColor(currentColor);
+
+    sizeText.textContent = sizeInput.value + ' px';
+    sizeInput.oninput = () => {
+        sizeText.textContent = sizeInput.value + ' px';
+    };
+    opacityText.textContent = opacityInput.value + '%';
+    opacityInput.oninput = () => {
+        opacityText.textContent = opacityInput.value + '%';
+    };
+    colorInput.oninput = () => setColor(colorInput.value);
+
+    function setAnnotationTool(tool) {
+        annotationTool = tool;
+        penToolBtn.classList.toggle('active', tool === 'pen');
+        textToolBtn.classList.toggle('active', tool === 'text');
+        canvas.style.cursor = tool === 'text' ? 'text' : 'crosshair';
+    }
+
+    penToolBtn.onclick = () => setAnnotationTool('pen');
+    textToolBtn.onclick = () => setAnnotationTool('text');
+    textValueInput.onkeydown = event => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            setAnnotationTool('text');
+        }
+    };
+    setAnnotationTool('pen');
+
+    function canvasPoint(event) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: (event.clientX - rect.left) * (canvas.width / rect.width),
+            y: (event.clientY - rect.top) * (canvas.height / rect.height),
+            pressure: event.pressure && event.pressure > 0 ? event.pressure : 1
+        };
+    }
+
+    function drawTo(point) {
+        if (!lastPoint) {
+            lastPoint = point;
+        }
+
+        const baseSize = parseFloat(sizeInput.value) || 8;
+        const pressure = Math.max(0.2, Math.min(1, point.pressure || 1));
+        const opacity = Math.max(0, Math.min(100, parseFloat(opacityInput.value) || 0)) / 100;
+        ctx.save();
+        ctx.globalAlpha = opacity;
+        ctx.strokeStyle = currentColor;
+        ctx.lineWidth = baseSize * pressure;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(lastPoint.x, lastPoint.y);
+        ctx.lineTo(point.x, point.y);
+        ctx.stroke();
+        ctx.restore();
+        lastPoint = point;
+    }
+
+    function cssFontFamilyForCanvas(fontFamily) {
+        return String(fontFamily || 'Arial').split(',').map(part => {
+            const name = part.trim().replace(/^['"]|['"]$/g, '');
+            return /\s/.test(name) ? `"${name.replace(/"/g, '')}"` : name;
+        }).join(', ');
+    }
+
+    function drawTextAt(point) {
+        const text = textValueInput.value;
+        if (!text) {
+            setStatus('Enter text before placing it on the image.');
+            textValueInput.focus();
+            return;
+        }
+
+        saveUndoSnapshot();
+
+        const fontSize = Math.max(6, parseFloat(textSizeInput.value) || 32);
+        const fontFamily = cssFontFamilyForCanvas(textFontSelect.value || 'Arial');
+        const lines = text.split(/\r?\n/);
+        const lineHeight = fontSize * 1.22;
+        const padX = Math.max(4, fontSize * 0.25);
+        const padY = Math.max(3, fontSize * 0.18);
+
+        ctx.save();
+        ctx.font = `${fontSize}px ${fontFamily}`;
+        ctx.textBaseline = 'top';
+
+        const metrics = lines.map(line => ctx.measureText(line || ' '));
+        const textWidth = Math.max(...metrics.map(m => m.width), 1);
+        const blockWidth = textWidth + padX * 2;
+        const blockHeight = lines.length * lineHeight + padY * 2;
+        const x = Math.max(0, Math.min(point.x, canvas.width - blockWidth));
+        const y = Math.max(0, Math.min(point.y, canvas.height - blockHeight));
+
+        if (!textBgTransparentInput.checked) {
+            ctx.fillStyle = textBgInput.value || '#ffffff';
+            ctx.fillRect(x, y, blockWidth, blockHeight);
+        }
+
+        ctx.fillStyle = textFgInput.value || '#000000';
+        lines.forEach((line, index) => {
+            ctx.fillText(line, x + padX, y + padY + index * lineHeight);
+        });
+        ctx.restore();
+    }
+
+    function onPointerDown(event) {
+        event.preventDefault();
+        if (annotationTool === 'text') {
+            drawTextAt(canvasPoint(event));
+            return;
+        }
+        saveUndoSnapshot();
+        drawing = true;
+        lastPoint = canvasPoint(event);
+        canvas.setPointerCapture(event.pointerId);
+        drawTo(lastPoint);
+    }
+
+    function onPointerMove(event) {
+        if (!drawing) return;
+        event.preventDefault();
+        drawTo(canvasPoint(event));
+    }
+
+    function onPointerUp(event) {
+        if (!drawing) return;
+        event.preventDefault();
+        drawing = false;
+        lastPoint = null;
+        try { canvas.releasePointerCapture(event.pointerId); } catch (_) {}
+    }
+
+    function onPopupKeyDown(event) {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            closePopup();
+        }
+    }
+
+    function closePopup() {
+        drawing = false;
+        canvas.removeEventListener('pointerdown', onPointerDown);
+        canvas.removeEventListener('pointermove', onPointerMove);
+        canvas.removeEventListener('pointerup', onPointerUp);
+        canvas.removeEventListener('pointercancel', onPointerUp);
+        window.removeEventListener('keydown', onPopupKeyDown, true);
+        popup.style.display = 'none';
+    }
+
+    canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('pointercancel', onPointerUp);
+    window.addEventListener('keydown', onPopupKeyDown, true);
+
+    undoBtn.onclick = () => {
+        const previous = undoStack.pop();
+        if (previous) ctx.putImageData(previous, 0, 0);
+    };
+    clearBtn.onclick = () => {
+        saveUndoSnapshot();
+        ctx.putImageData(initialImageData, 0, 0);
+    };
+    cancelBtn.onclick = closePopup;
+    saveBtn.onclick = () => {
+        try {
+            const mime = getPreferredCanvasMimeForImage(imgEl);
+            imgEl.src = canvas.toDataURL(mime, 0.92);
+            imgEl.removeAttribute('srcset');
+            syncImageMapFor(imgEl);
+            closePopup();
+            setStatus('Saved annotated image.');
+        } catch (err) {
+            setStatus('Could not save annotated image: ' + err);
+        }
+    };
+
+    popup.style.display = 'flex';
+    setStatus('Annotating nearest image. Drag to draw; Save writes back to the image.');
+}
+
+function editNearestImageAnnotation() {
+    openImageAnnotationEditor(getNearestImageToEditorRange());
+}
+
 
 // Handles behavior for { and } keys
 function handleBraceKey(event) {
@@ -3617,6 +5902,148 @@ function showJsEvalPopup() {
              event.preventDefault();
         }
     };
+}
+
+function commandHelpSections() {
+    return [
+        {
+            title: 'Getting Help',
+            commands: [
+                ['cmdhelp()', 'Show this command reference.'],
+                ['help()', 'Show the keyboard shortcut help popup.']
+            ]
+        },
+        {
+            title: 'Selection Text',
+            commands: [
+                ['wc()', 'Count words in the current saved selection and write the result to the status pane.'],
+                ['reflow(72)', 'Rewrap the selected text to roughly the given column width.'],
+                ['uc()', 'Upper-case the selected text.'],
+                ['lc()', 'Lower-case the selected text.'],
+                ['tc()', 'Title-case the selected text.'],
+                ['camel()', 'Convert selected text to camelCase.'],
+                ['snake()', 'Convert selected text to snake_case.'],
+                ['kebab()', 'Convert selected text to kebab-case.'],
+                ['replace("find", "replace")', 'Replace text in the editor. Uses regex by default; pass false as the third argument for literal text.'],
+                ['incrint("\\\\bitem-\\\\d+\\\\b", 1)', 'Increment integers inside matches of a regex or string pattern, preserving zero padding where possible.']
+            ]
+        },
+        {
+            title: 'Notes',
+            commands: [
+                ['searchnotes("text")', 'Search embedded note contents. Shows listings when the search-results checkbox is enabled or with { showResults: true }.'],
+                ['searchnotes(/error|fail/i)', 'Search notes using a JavaScript RegExp.'],
+                ['diffnotes()', 'Enter two-click note selection mode and show a diff between the two selected notes.'],
+                ['diffnotes({ granularity: "word" })', 'Select two notes and compare by words instead of lines.'],
+                ['setDiffContext(2, 2)', 'Show two lines before and two lines after changed lines in line-mode note diffs.'],
+                ['clearDiffContext()', 'Clear note-diff context and show full line diffs again.']
+            ]
+        },
+        {
+            title: 'Brace Blocks',
+            commands: [
+                ['block_color(3, ["TODO"])', 'Color top-level brace blocks whose text matches every regex in the list. Color numbers 1-5 use fixed highlighter colors; 6 uses the current color.'],
+                ['block_color("#ffeeaa", /error/i)', 'Color matching top-level brace blocks using an explicit CSS color.'],
+                ['nested_block_color(1, 2, ["if", "return"])', 'Color matching brace blocks at nesting level 1.'],
+                ['nested_block_color(2, "#ccffdd", ["case"], 10, 80)', 'Only scan lines 10 through 80 for level-2 brace blocks.']
+            ]
+        },
+        {
+            title: 'SVG And Graphics',
+            commands: [
+                ['svgtext("label")', 'Click inside an SVG to insert text at that point. Esc cancels.'],
+                ['add_svg_text()', 'Shortcut for svgtext("text").'],
+                ['delete_svg_text()', 'Click an SVG text object to delete it. Esc cancels.'],
+                ['svgrotate(60)', 'Rotate all inline SVGs counterclockwise by 60 degrees and expand their viewBoxes to fit.'],
+                ['svgscale(1.2)', 'Scale all inline SVGs by 20% around their current centres and expand their viewBoxes to fit.'],
+                ['delgraphics()', 'Pick two SVG corners and delete SVG elements overlapping the rectangle.'],
+                ['delgraphics_included()', 'Pick two SVG corners and delete SVG elements fully inside the rectangle.'],
+                ['svg2clipboard()', 'Copy inline SVG markup from the editor to the clipboard.'],
+                ['savesvg()', 'Save inline SVG markup from the editor as an SVG file.']
+            ]
+        },
+        {
+            title: 'Format Conversion',
+            commands: [
+                ['tolatex()', 'Convert editor HTML to LaTeX and copy it to the clipboard.'],
+                ['tomd()', 'Convert editor HTML to Markdown and copy it to the clipboard.'],
+                ['mdrender()', 'Render the editor text as Markdown into HTML in-place.']
+            ]
+        },
+        {
+            title: 'Links And Navigation',
+            commands: [
+                ['target()', 'Wrap the selected text in a span with a generated id and remember it as the latest link target.'],
+                ['target("my-id")', 'Create a target with a specific id.'],
+                ['link()', 'Link selected text to the latest target, or enter image-map link mode if there is no text selection.'],
+                ['link("my-id")', 'Link selected text to a specific target id.'],
+                ['xlink("https://example.com")', 'Create an external link around the selected text.'],
+                ['selectText("element-id")', 'Select and scroll to an element by id.']
+            ]
+        },
+        {
+            title: 'Editing State And Lines',
+            commands: [
+                ['save()', 'Save the current editor HTML and selection onto the undo stack.'],
+                ['undo()', 'Restore the previous saved editor state.'],
+                ['redo()', 'Reapply an undone saved editor state.'],
+                ['yy(3)', 'Yank three visual lines from the current cursor to the clipboard. The command popup also accepts 3y.'],
+                ['dd(3)', 'Delete and yank three visual lines from the current cursor. The command popup also accepts 3d.'],
+                ['keeplines()', 'Keep only lines containing cursors.'],
+                ['dellines()', 'Delete lines containing cursors.'],
+                ['delete_empty_lines()', 'Delete lines whose rendered text is only whitespace, while keeping media/control-only lines.'],
+                ['keeplinesWithHighlights()', 'Keep only lines containing highlight spans.'],
+                ['dellinesWithHighlights()', 'Delete lines containing highlight spans.']
+            ]
+        },
+        {
+            title: 'Java Instrumentation',
+            commands: [
+                ['instrjava(1000)', 'Instrument Java source in the editor with mprewriter.scope_START calls starting at the given id.'],
+                ['instrclean()', 'Remove mprewriter.scope_START calls from the editor.']
+            ]
+        },
+        {
+            title: 'Miscellaneous',
+            commands: [
+                ['darken()', 'Invert the page/editor colors for a dark view.'],
+                ['startVideoRecording()', 'Record webcam video into the editor.'],
+                ['startRecording()', 'Record audio into the editor.']
+            ]
+        }
+    ];
+}
+
+function renderCommandHelpHtml() {
+    return commandHelpSections().map(section => {
+        const rows = section.commands.map(([signature, description]) =>
+            `<dt><code>${escapeHtml(signature)}</code></dt><dd>${escapeHtml(description)}</dd>`
+        ).join('');
+        return `<section class="cmdhelp-section"><h5>${escapeHtml(section.title)}</h5><dl>${rows}</dl></section>`;
+    }).join('');
+}
+
+function cmdhelp() {
+    const popup = document.getElementById('cmdHelpPopup');
+    const body = document.getElementById('cmdHelpBody');
+    if (!popup || !body) {
+        setStatus('cmdhelp: popup markup is missing.');
+        return;
+    }
+
+    body.innerHTML = renderCommandHelpHtml();
+    ensurePopupTextSearchControls('cmdHelpPopup', 'cmdHelpBody');
+    popupTextSearchRehighlight('cmdHelpBody');
+    popup.style.display = 'block';
+    makeDraggable('cmdHelpPopup', 'cmdHelpHeader');
+    hideTools();
+    setStatus('Command help shown.');
+}
+
+function closeCmdHelp() {
+    const popup = document.getElementById('cmdHelpPopup');
+    if (popup) popup.style.display = 'none';
+    showTools();
 }
 
 //// Audio recording ///
@@ -4910,6 +7337,7 @@ function clearAllHighlight() {
     // Remove .highlight and .highlight1 through .highlight7
     unwrapAll('.highlight');
     [1, 2, 3, 4, 5, 6, 7].forEach(x => unwrapAll('.highlight' + x));
+    unwrapAll('.block-color-highlight');
 
     // Remove SVG highlights (<tspan data-spectral-svg-hl>)
     editor.querySelectorAll('tspan[data-spectral-svg-hl]').forEach(ts => {
@@ -6012,6 +8440,35 @@ function dellines() {
 
     cursors = [];
     setStatus("Deleted lines containing cursors.");
+}
+
+function lineHtmlIsEmpty(lineHtml) {
+    const holder = document.createElement('div');
+    holder.innerHTML = lineHtml || '';
+
+    if (holder.querySelector('img,svg,video,audio,canvas,iframe,object,embed,button,input,textarea,select,table')) {
+        return false;
+    }
+
+    const text = (holder.textContent || '')
+        .replace(/\u00a0/g, ' ')
+        .replace(/[\u200b\u200c\u200d\ufeff]/g, '');
+
+    return /^\s*$/.test(text);
+}
+
+function delete_empty_lines() {
+    const editor = document.getElementById('editor');
+    if (!editor) return 0;
+
+    const lines = getExplicitLines(editor);
+    const kept = lines.filter(line => !lineHtmlIsEmpty(line));
+    const removed = lines.length - kept.length;
+
+    restoreLines(editor, kept);
+    editor.normalize();
+    setStatus(`Deleted ${removed} empty line(s).`);
+    return removed;
 }
 ////////////////////////////////
 // Main function: Reverse selected lines or all lines
@@ -7249,6 +9706,178 @@ function insertDownloadLinkAtSavedRange() {
     const htmlName = generateFileName();
     return htmlName.replace(/\.html?$/i, '.svg');
   }
+
+  function svgNumber(value) {
+    const n = parseFloat(String(value));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function svgFormatNumber(value) {
+    if (!Number.isFinite(value)) return '0';
+    return String(Math.round(value * 1000) / 1000);
+  }
+
+  function svgMatrixToAttribute(matrix) {
+    return `matrix(${[
+      matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f
+    ].map(svgFormatNumber).join(' ')})`;
+  }
+
+  function ensureSvgViewBox(svg) {
+    if (svg.hasAttribute('viewBox')) return;
+
+    const width = svgNumber(svg.getAttribute('width'));
+    const height = svgNumber(svg.getAttribute('height'));
+    if (width != null && height != null && width > 0 && height > 0) {
+      svg.setAttribute('viewBox', `0 0 ${svgFormatNumber(width)} ${svgFormatNumber(height)}`);
+      return;
+    }
+
+    try {
+      const bbox = svg.getBBox();
+      if (bbox && bbox.width > 0 && bbox.height > 0) {
+        svg.setAttribute('viewBox', `${svgFormatNumber(bbox.x)} ${svgFormatNumber(bbox.y)} ${svgFormatNumber(bbox.width)} ${svgFormatNumber(bbox.height)}`);
+      }
+    } catch (_) {
+      // Some SVGs have no measurable graphics yet; later commands will report the failure.
+    }
+  }
+
+  function ensureSvgTransformRoot(svg) {
+    let group = Array.from(svg.children).find(child =>
+      child.namespaceURI === 'http://www.w3.org/2000/svg' &&
+      child.tagName.toLowerCase() === 'g' &&
+      child.getAttribute('data-spectral-svg-transform-root') === 'true'
+    );
+    if (group) return group;
+
+    group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    group.setAttribute('data-spectral-svg-transform-root', 'true');
+
+    const retainedRootTags = new Set(['defs', 'style', 'title', 'desc', 'metadata']);
+    const movable = Array.from(svg.childNodes).filter(node => {
+      if (node.nodeType !== Node.ELEMENT_NODE) return node.textContent && node.textContent.trim();
+      return !retainedRootTags.has(node.tagName.toLowerCase());
+    });
+
+    movable.forEach(node => group.appendChild(node));
+    svg.appendChild(group);
+    return group;
+  }
+
+  function svgCurrentMatrix(svg, group) {
+    const base = svg.createSVGMatrix();
+    const consolidated = group.transform && group.transform.baseVal
+      ? group.transform.baseVal.consolidate()
+      : null;
+    return consolidated ? consolidated.matrix : base;
+  }
+
+  function svgTransformedBounds(svg, bbox, matrix) {
+    const corners = [
+      [bbox.x, bbox.y],
+      [bbox.x + bbox.width, bbox.y],
+      [bbox.x, bbox.y + bbox.height],
+      [bbox.x + bbox.width, bbox.y + bbox.height]
+    ].map(([x, y]) => {
+      const point = svg.createSVGPoint();
+      point.x = x;
+      point.y = y;
+      return point.matrixTransform(matrix);
+    });
+
+    const xs = corners.map(point => point.x);
+    const ys = corners.map(point => point.y);
+    return {
+      minX: Math.min(...xs),
+      minY: Math.min(...ys),
+      maxX: Math.max(...xs),
+      maxY: Math.max(...ys)
+    };
+  }
+
+  function setSvgBoundsToFit(svg, bounds) {
+    const pad = 2;
+    const x = bounds.minX - pad;
+    const y = bounds.minY - pad;
+    const width = (bounds.maxX - bounds.minX) + pad * 2;
+    const height = (bounds.maxY - bounds.minY) + pad * 2;
+    if (!(width > 0 && height > 0)) return;
+
+    svg.setAttribute('viewBox', `${svgFormatNumber(x)} ${svgFormatNumber(y)} ${svgFormatNumber(width)} ${svgFormatNumber(height)}`);
+    svg.setAttribute('width', String(Math.ceil(width)));
+    svg.setAttribute('height', String(Math.ceil(height)));
+  }
+
+  function transformInlineSvgs(transformFactory, statusVerb) {
+    const svgs = Array.from(document.querySelectorAll('#editor svg'))
+      .filter(svg => !(svg.parentElement && svg.parentElement.closest('svg')));
+    if (!svgs.length) {
+      setStatus(`No inline SVG found to ${statusVerb}.`);
+      return 0;
+    }
+
+    let transformed = 0;
+    svgs.forEach(svg => {
+      try {
+        ensureSvgViewBox(svg);
+        const group = ensureSvgTransformRoot(svg);
+        const bbox = group.getBBox();
+        if (!bbox || bbox.width <= 0 || bbox.height <= 0) return;
+
+        const currentMatrix = svgCurrentMatrix(svg, group);
+        const currentBounds = svgTransformedBounds(svg, bbox, currentMatrix);
+        const cx = (currentBounds.minX + currentBounds.maxX) / 2;
+        const cy = (currentBounds.minY + currentBounds.maxY) / 2;
+        const additionalMatrix = transformFactory(svg, cx, cy);
+        const newMatrix = additionalMatrix.multiply(currentMatrix);
+        const newBounds = svgTransformedBounds(svg, bbox, newMatrix);
+
+        group.setAttribute('transform', svgMatrixToAttribute(newMatrix));
+        setSvgBoundsToFit(svg, newBounds);
+        transformed++;
+      } catch (err) {
+        console.warn('SVG transform failed:', err, svg);
+      }
+    });
+
+    setStatus(transformed
+      ? `${transformed} SVG(s) ${statusVerb}.`
+      : `No measurable inline SVG graphics found to ${statusVerb}.`);
+    return transformed;
+  }
+
+  window.svgrotate = function svgrotate(angleDegrees) {
+    const angle = Number(angleDegrees);
+    if (!Number.isFinite(angle)) {
+      setStatus('svgrotate(angle): angle must be a number of degrees.');
+      return 0;
+    }
+
+    return transformInlineSvgs((svg, cx, cy) =>
+      svg.createSVGMatrix()
+        .translate(cx, cy)
+        .rotate(-angle)
+        .translate(-cx, -cy),
+      `rotated counterclockwise by ${angle} degree(s)`
+    );
+  };
+
+  window.svgscale = function svgscale(factor) {
+    const scale = Number(factor);
+    if (!(Number.isFinite(scale) && scale > 0)) {
+      setStatus('svgscale(factor): factor must be a positive number.');
+      return 0;
+    }
+
+    return transformInlineSvgs((svg, cx, cy) =>
+      svg.createSVGMatrix()
+        .translate(cx, cy)
+        .scale(scale)
+        .translate(-cx, -cy),
+      `scaled by ${scale}`
+    );
+  };
 
   // Copy inline SVG(s) in the editor to clipboard as SVG markup.
   // If multiple SVGs exist, stack them vertically into a single combined SVG.
@@ -8829,6 +11458,22 @@ text = text.replace(/§§CODESPAN\d+§§/g, '<code></code>');
   <button onclick="closeTextPopup()">Cancel</button>
 </div>
 
+<div id="diffNotesPopup" style="display:none; position:fixed; top:10%; left:50%; transform:translateX(-50%);
+     background:white; color:black; padding:12px; border:1px solid #ccc; box-shadow: 0 4px 8px rgba(0,0,0,0.2); z-index:10000;">
+  <h4 id="diffNotesHeader" style="cursor:move; margin:0 0 8px 0;">Note Diff</h4>
+  <div class="diffnotes-toolbar">
+    <label for="diffNotesGranularity">Granularity</label>
+    <select id="diffNotesGranularity" onchange="refreshDiffNotesPopup()">
+      <option value="line" selected>line</option>
+      <option value="word">word</option>
+      <option value="char">char</option>
+    </select>
+    <span><span class="diffnotes-deleted">deleted</span> <span class="diffnotes-inserted">inserted</span></span>
+    <button onclick="closeDiffNotesPopup()">Close</button>
+  </div>
+  <div id="diffNotesBody" class="diffnotes-body"></div>
+</div>
+
 <div id="searchResults1"  style="display:none; position:fixed; top:20%; left:50%; transform:translateX(-50%);
      background:white; padding:20px; border:1px solid #ccc; box-shadow: 0 4px 8px rgba(0,0,0,0.2); z-index:9999;">
   <h4  id="searchResults1Header" style="cursor:move;">                        Search Results 1:                            </h4>
@@ -8883,6 +11528,15 @@ text = text.replace(/§§CODESPAN\d+§§/g, '<code></code>');
   <input id="jsEvalInput" type="text" placeholder="Enter JS code..." style="width: 300px;" />
 </div>
 
+<div id="cmdHelpPopup" style="display:none; position:fixed; top:8%; left:50%; transform:translateX(-50%);
+     background:#fff; color:#111; border:1px solid #ccc; padding:12px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); z-index:10000;">
+  <div id="cmdHelpHeader" style="cursor:move; display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:8px;">
+    <strong>Command Popup Help</strong>
+    <button onclick="closeCmdHelp()">Close</button>
+  </div>
+  <div id="cmdHelpBody" class="cmdhelp-body"></div>
+</div>
+
 <div id="scaleImagePopup" style="display:none; position:fixed; top:25%; left:50%; transform:translateX(-50%);
      background:white; padding:15px; border:1px solid #ccc; box-shadow:0 4px 8px rgba(0,0,0,0.2); z-index:10000;">
   <label for="scaleImageInput">Scale images (%):</label>
@@ -8911,6 +11565,9 @@ text = text.replace(/§§CODESPAN\d+§§/g, '<code></code>');
   Ctrl+Alt+m     Match brackets (+ braces and parenthesis)
   Ctrl+Alt+p     Scale selected or nearby picture(s)
   Ctrl+Alt+P     Iconize selected picture(s)
+  F7             Diff two notes
+  F8             Pick and copy token under click
+  F9             Annotate nearest image
   Ctrl+Alt+/     Search for multiple regexes (one per line)
   Ctrl+Alt+S     Save state
   Ctrl+Alt+z     Undo to the last saved state
@@ -8926,13 +11583,23 @@ text = text.replace(/§§CODESPAN\d+§§/g, '<code></code>');
   Tab            Indent selection
   Shift+Tab      Unindent selection
 Text Commands (Can be used with Javascript Eval):
+  cmdhelp      → Show command popup command reference
   wc           → Word count of selection
   reflow(n)    → Reflow selected text to n-character lines
   savesvg      → Save editor SVG content to an SVG file
+  svgrotate(n) → Rotate inline SVGs counterclockwise by n degrees
+  svgscale(n)  → Scale inline SVGs by factor n around their centres
   startVideoRecording() → Record webcam video into the editor
   delgraphics  → Delete SVG elements overlapping 2-point rectangle
   delgraphics_included → Delete SVG elements fully inside 2-point rectangle
+  delete_empty_lines → Delete blank/whitespace-only lines
   camel        → Convert identifier to camelCase
+  block_color(color, regexes) → Color matching top-level brace blocks
+  nested_block_color(level, color, regexes) → Color matching nested brace blocks
+  diffnotes()  → Select two notes and show a diff
+  setDiffContext(2,2) → Show 2 context lines around note diffs
+  clearDiffContext() → Show full note diffs
+  searchnotes("text") → Search embedded notes
   snake        → Convert identifier to snake_case
   kebab        → Convert identifier to kebab-case
   uc           → Convert to upper case
