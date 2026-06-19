@@ -6820,10 +6820,40 @@ proc checkAllCommentChecksums  {} {
      
 }
 
+array set extra_note_context_menu_items {};
+
+proc add_note_context_menu_item {txt callback_proc} {
+    global extra_note_context_menu_items;
+    set extra_note_context_menu_items($txt) $callback_proc;
+}
+
+proc note_button_text_index {btn} {
+    if {![winfo exists .t]} {
+        return "";
+    }
+
+    set dump [.t dump -window 1.0 end]
+    foreach {key value index} $dump {
+        if {$key eq "window" && $value eq $btn} {
+            return $index;
+        }
+    }
+
+    return "";
+}
+
+proc invoke_note_context_menu_callback {callback_proc fname index btn} {
+    if {$index eq ""} {
+        set index [note_button_text_index $btn]
+    }
+    uplevel #0 [list $callback_proc $fname $index $btn]
+}
+
 proc showNoteMenu {btn fname} {
     global fileToCompareAgainst;
     global comment_tags;
     global comment_checksums;
+    global extra_note_context_menu_items;
     
     catch {destroy .menu4}
     set x [winfo pointerx .]
@@ -6872,6 +6902,15 @@ proc showNoteMenu {btn fname} {
         }
         foreach generator [array names global_all_generators] {
             .menu4.generator add command -label $generator -command "convertNoteToGenerator $generator $btn ";
+        }
+    }
+    set note_index [note_button_text_index $btn]
+    set extra_items [lsort [array names extra_note_context_menu_items]]
+    if {[llength $extra_items] > 0} {
+        .menu4 add separator
+        foreach extra_item $extra_items {
+            set callback_proc $extra_note_context_menu_items($extra_item)
+            .menu4 add command -label $extra_item -command [list invoke_note_context_menu_callback $callback_proc $fname $note_index $btn]
         }
     }
     tk_popup .menu4 $x $y
@@ -20160,6 +20199,7 @@ add_spectral_alias load_one_line_before;
 add_spectral_alias load_one_line_after;
 add_spectral_alias load_more_lines;
 add_spectral_alias add_popup_menu_item;
+add_spectral_alias add_note_context_menu_item;
 add_spectral_alias popupStatusContent;
 add_spectral_alias selected_device;
 add_spectral_alias processStringInput;
