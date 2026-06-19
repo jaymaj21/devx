@@ -4715,6 +4715,108 @@ proc strdiff_helper {granularity {context {}} {string1 {} } {string2 {} } {wnd {
   strdiff_insert_segments $wnd $segments $context
 }
 
+proc diffhl_tag_candidates {colid} {
+  global fixed_boxes
+  global currentColor
+
+  set candidates [list highlight$colid]
+  set color ""
+
+  if {$colid == 6} {
+    set color $currentColor
+  } else {
+    catch {
+      array set preset_colors $fixed_boxes
+      set color $preset_colors($colid)
+    }
+  }
+  if {$color eq ""} {
+    catch {set color [[.searchFrame.search$colid component label] cget -background]}
+  }
+
+  if {$color ne ""} {
+    lappend candidates $color
+    foreach tag [.t tag names] {
+      if {[catch {.t tag cget $tag -background} bg]} {
+        continue
+      }
+      if {[string equal -nocase $bg $color]} {
+        lappend candidates $tag
+      }
+    }
+  }
+
+  set unique {}
+  foreach tag $candidates {
+    if {$tag ne "" && [lsearch -exact $unique $tag] < 0} {
+      lappend unique $tag
+    }
+  }
+  return $unique
+}
+
+proc diffhl_range_compare {a b} {
+  set as [lindex $a 0]
+  set bs [lindex $b 0]
+  if {[.t compare $as < $bs]} {
+    return -1
+  }
+  if {[.t compare $as > $bs]} {
+    return 1
+  }
+  return 0
+}
+
+proc diffhl_collect_text {colid} {
+  set ranges {}
+  foreach tag [diffhl_tag_candidates $colid] {
+    foreach {start end} [.t tag ranges $tag] {
+      lappend ranges [list $start $end]
+    }
+  }
+  set ranges [lsort -command diffhl_range_compare $ranges]
+
+  set out {}
+  set previous_end {}
+
+  foreach range $ranges {
+    lassign $range start end
+    if {$out ne "" && $previous_end ne "" && ![.t compare $previous_end == $start]} {
+      append out "\n"
+    }
+    append out [.t get $start $end]
+    set previous_end $end
+  }
+
+  return $out
+}
+
+proc diffhl {granularity colid1 {colid2 {}}} {
+  global strdiff_context
+
+  if {$colid2 eq ""} {
+    set colid2 $colid1
+    set colid1 $granularity
+    set granularity line
+  }
+
+  set text1 [diffhl_collect_text $colid1]
+  set text2 [diffhl_collect_text $colid2]
+
+  if {$text1 eq "" && $text2 eq ""} {
+    tk_messageBox -message "No highlighted text found for highlighters $colid1 or $colid2"
+    return
+  }
+  if {$text1 eq ""} {
+    tk_messageBox -message "No highlighted text found for highlighter $colid1"
+  }
+  if {$text2 eq ""} {
+    tk_messageBox -message "No highlighted text found for highlighter $colid2"
+  }
+
+  strdiff_helper $granularity $strdiff_context $text1 $text2
+}
+
 proc strdiff++ {granularity ignore_regex {string1 {} } {string2 {} } {wnd {} } } {
  
   set selranges [.t tag ranges sel];
@@ -20243,6 +20345,7 @@ add_spectral_alias  strdiff;
 add_spectral_alias  strdiff_focus;
 add_spectral_alias  set_strdiff_context;
 add_spectral_alias  clear_strdiff_context;
+add_spectral_alias  diffhl;
 add_spectral_alias  strdiff++;
 add_spectral_alias  strdiff_files;
 add_spectral_alias  commands;

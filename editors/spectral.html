@@ -1127,6 +1127,14 @@ function getDiffContextFromOptions(opts = {}) {
             after: normaliseDiffContextValue(opts.context.length > 1 ? opts.context[1] : opts.context[0])
         };
     }
+    if (opts.context && typeof opts.context === 'object') {
+        const before = opts.context.before ?? opts.context.after ?? 0;
+        const after = opts.context.after ?? before;
+        return {
+            before: normaliseDiffContextValue(before),
+            after: normaliseDiffContextValue(after)
+        };
+    }
     if (typeof opts.context === 'number' || typeof opts.context === 'string') {
         return {
             before: normaliseDiffContextValue(opts.context),
@@ -1279,7 +1287,8 @@ function refreshDiffNotesPopup(eventOrGranularity) {
     }
     renderDiffNotesPopup(popup.dataset.leftText || '', popup.dataset.rightText || '', {
         ...savedOptions,
-        granularity
+        granularity,
+        context: getDiffContextFromOptions({})
     });
 }
 
@@ -1359,6 +1368,164 @@ function diffnotes(note1, note2, opts = {}) {
     }
 
     return renderDiffNotesPopup(note1, note2, opts);
+}
+
+function diffhlNormalizeCssColor(color) {
+    if (!color || color === 'transparent' || color === 'rgba(0, 0, 0, 0)') return '';
+    const probe = diffhlNormalizeCssColor.probe || document.createElement('span');
+    diffhlNormalizeCssColor.probe = probe;
+    probe.style.color = '';
+    probe.style.color = color;
+    document.body.appendChild(probe);
+    const normalized = getComputedStyle(probe).color;
+    probe.remove();
+    return normalized;
+}
+
+function diffhlColorForColid(colid) {
+    const button = document.getElementById('hlButton' + colid);
+    if (button) {
+        const bg = getComputedStyle(button).backgroundColor;
+        if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') return diffhlNormalizeCssColor(bg);
+    }
+
+    const editor = document.getElementById('editor');
+    if (!editor) return '';
+    const sample = document.createElement('span');
+    sample.className = 'highlight' + colid;
+    sample.style.display = 'none';
+    editor.appendChild(sample);
+    const bg = getComputedStyle(sample).backgroundColor;
+    sample.remove();
+    return diffhlNormalizeCssColor(bg);
+}
+
+function diffhlElementHasMatchingHighlightColor(el, normalizedColor) {
+    if (!normalizedColor || !(el instanceof Element)) return false;
+    const bg = diffhlNormalizeCssColor(getComputedStyle(el).backgroundColor);
+    if (bg !== normalizedColor) return false;
+
+    let parent = el.parentElement;
+    while (parent && parent.id !== 'editor') {
+        if (diffhlNormalizeCssColor(getComputedStyle(parent).backgroundColor) === normalizedColor) {
+            return false;
+        }
+        parent = parent.parentElement;
+    }
+    return true;
+}
+
+function diffhlTextWithNewlines(el) {
+    let result = '';
+
+    function walk(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            result += node.textContent || '';
+            return;
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return;
+
+        const tag = node.tagName?.toLowerCase();
+        if (['div', 'p', 'li', 'tr', 'br'].includes(tag) && result && !result.endsWith('\n')) {
+            result += '\n';
+        }
+
+        node.childNodes.forEach(walk);
+
+        if (['div', 'p', 'li', 'tr'].includes(tag) && result && !result.endsWith('\n')) {
+            result += '\n';
+        }
+    }
+
+    walk(el);
+    return result.replace(/[ \t]+\n/g, '\n');
+}
+
+function diffhlRangeHasStructuralBreak(range) {
+    const fragment = range.cloneContents();
+    return !!fragment.querySelector?.('div,p,li,tr,br,table,section,article,blockquote,h1,h2,h3,h4,h5,h6');
+}
+
+function diffhlCollectText(colid) {
+    const editor = document.getElementById('editor');
+    const id = Number(colid);
+    if (!editor || !Number.isInteger(id) || id < 1) return '';
+
+    const normalizedColor = diffhlColorForColid(id);
+    const elementsByNode = new Set();
+    editor.querySelectorAll(`span.highlight${id}, tspan[data-hl-colid="${id}"]`).forEach(el => {
+        elementsByNode.add(el);
+    });
+
+    if (normalizedColor) {
+        editor.querySelectorAll('span,mark,tspan').forEach(el => {
+            if (diffhlElementHasMatchingHighlightColor(el, normalizedColor)) {
+                elementsByNode.add(el);
+            }
+        });
+    }
+
+    const elements = Array.from(elementsByNode)
+        .filter(el => el.textContent && el.textContent.length > 0)
+        .sort((a, b) => {
+            if (a === b) return 0;
+            const pos = a.compareDocumentPosition(b);
+            if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+            if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+            return 0;
+        });
+
+    let out = '';
+    let prevRange = null;
+
+    elements.forEach(el => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+
+        if (out && prevRange) {
+            const between = document.createRange();
+            try {
+                between.setStart(prevRange.endContainer, prevRange.endOffset);
+                between.setEnd(range.startContainer, range.startOffset);
+                if (between.toString().length > 0 || diffhlRangeHasStructuralBreak(between)) {
+                    if (!out.endsWith('\n')) out += '\n';
+                }
+            } catch (_) {
+                if (!out.endsWith('\n')) out += '\n';
+            }
+        }
+
+        out += diffhlTextWithNewlines(el);
+        prevRange = range;
+    });
+
+    return out.replace(/\n{3,}/g, '\n\n').replace(/[ \t]+\n/g, '\n').trim();
+}
+
+function diffhl(arg1, arg2, arg3 = null) {
+    let granularity = arg1;
+    let colid1 = arg2;
+    let colid2 = arg3;
+
+    if (arg3 == null && Number.isInteger(Number(arg1)) && Number.isInteger(Number(arg2))) {
+        granularity = 'line';
+        colid1 = arg1;
+        colid2 = arg2;
+    }
+
+    granularity = granularity || 'line';
+    const left = diffhlCollectText(colid1);
+    const right = diffhlCollectText(colid2);
+    if (!left && !right) {
+        setStatus(`diffhl: no text found for highlighters ${colid1} or ${colid2}.`);
+        return [];
+    }
+    if (!left) setStatus(`diffhl: no text found for highlighter ${colid1}.`);
+    if (!right) setStatus(`diffhl: no text found for highlighter ${colid2}.`);
+    return renderDiffNotesPopup(left, right, {
+        granularity,
+        context: getDiffContextFromOptions({})
+    });
 }
 
 function searchnotes(searchValue, opts = {}) {
@@ -6080,6 +6247,7 @@ function commandHelpSections() {
                 ['searchnotes(/error|fail/i)', 'Search notes using a JavaScript RegExp.'],
                 ['diffnotes()', 'Enter two-click note selection mode and show a diff between the two selected notes.'],
                 ['diffnotes({ granularity: "word" })', 'Select two notes and compare by words instead of lines.'],
+                ['diffhl("line", 1, 2)', 'Diff text collected from highlighter 1 against text collected from highlighter 2. Use "word" or "char" for finer granularity.'],
                 ['setDiffContext(2, 2)', 'Show two lines before and two lines after changed lines in line-mode note diffs.'],
                 ['clearDiffContext()', 'Clear note-diff context and show full line diffs again.']
             ]
@@ -11742,6 +11910,7 @@ Text Commands (Can be used with Javascript Eval):
   block_color(color, regexes) → Color matching top-level brace blocks
   nested_block_color(level, color, regexes) → Color matching nested brace blocks
   diffnotes()  → Select two notes and show a diff
+  diffhl("line",1,2) → Diff text collected from highlighters 1 and 2
   setDiffContext(2,2) → Show 2 context lines around note diffs
   clearDiffContext() → Show full note diffs
   searchnotes("text") → Search embedded notes
