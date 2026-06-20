@@ -1646,15 +1646,26 @@ function blockColorRegexes(regexes) {
     return list
         .filter(item => item != null && String(item).length > 0)
         .map(item => {
-            if (item instanceof RegExp) return item;
-            return new RegExp(String(item), 'm');
+            if (item instanceof RegExp) return { regex: item, negate: false };
+            let pattern = String(item);
+            let negate = false;
+            if (pattern.startsWith('-')) {
+                if (pattern.startsWith('--')) {
+                    pattern = pattern.slice(1);
+                } else {
+                    negate = true;
+                    pattern = pattern.slice(1);
+                }
+            }
+            return { regex: new RegExp(pattern, 'm'), negate };
         });
 }
 
 function blockColorMatches(text, regexes) {
-    return regexes.every(regex => {
+    return regexes.every(({ regex, negate }) => {
         regex.lastIndex = 0;
-        return regex.test(text);
+        const matched = regex.test(text);
+        return negate ? !matched : matched;
     });
 }
 
@@ -6256,6 +6267,7 @@ function commandHelpSections() {
             title: 'Brace Blocks',
             commands: [
                 ['block_color(3, ["TODO"])', 'Color top-level brace blocks whose text matches every regex in the list. Color numbers 1-5 use fixed highlighter colors; 6 uses the current color.'],
+                ['block_color(3, ["TODO", "-done"])', 'Prefix a string regex with - to require that it does not match; use -- for a literal leading hyphen.'],
                 ['block_color("#ffeeaa", /error/i)', 'Color matching top-level brace blocks using an explicit CSS color.'],
                 ['nested_block_color(1, 2, ["if", "return"])', 'Color matching brace blocks at nesting level 1.'],
                 ['nested_block_color(2, "#ccffdd", ["case"], 10, 80)', 'Only scan lines 10 through 80 for level-2 brace blocks.']

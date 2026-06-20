@@ -15776,6 +15776,25 @@ proc selmove {startmove endmove} {
     }
 }
 
+proc selgrow {startgrow endgrow} {
+    set ranges [.t tag ranges sel];
+    .t tag remove sel 1.0 end;
+    foreach {start end} $ranges {
+       .t tag add sel "$start - $startgrow c" "$end + $endgrow c" ;
+    }
+}
+
+
+proc selshrink {startshrink endshrink} {
+    set ranges [.t tag ranges sel];
+    .t tag remove sel 1.0 end;
+    foreach {start end} $ranges {
+       .t tag add sel "$start + $startshrink c" "$end - $endshrink c" ;
+    }
+}
+
+
+
 proc selaroundsel {linesbefore linesafter {extrachars_left 0} {extrachars_right 0}} {
     set ranges [.t tag ranges sel];
     .t tag remove sel 1.0 end;
@@ -17225,9 +17244,27 @@ proc block_color_resolve_color {color_spec} {
     return $color_spec;
 }
 
+proc block_color_regex_matches {txt regex} {
+    set negate 0;
+    if {[string index $regex 0] == "-"} {
+        if {[string index $regex 1] == "-"} {
+            set regex [string range $regex 1 end];
+        } else {
+            set negate 1;
+            set regex [string range $regex 1 end];
+        }
+    }
+
+    set matched [regexp -- $regex $txt];
+    if {$negate} {
+        return [expr {!$matched}];
+    }
+    return $matched;
+}
+
 proc block_color_matches {txt regexes} {
     foreach regex $regexes {
-        if {![regexp $regex $txt]} {
+        if {![block_color_regex_matches $txt $regex]} {
             return 0;
         }
     }
@@ -17239,17 +17276,21 @@ proc nested_block_color {level color_spec regexes {start_linenum 1} {end_linenum
         error "nested_block_color level must be a non-negative integer";
     }
 
-    set color [block_color_resolve_color $color_spec];
-    set tagname "block_color_";
-    foreach ch [split $color ""] {
-        if {[regexp {[A-Za-z0-9]} $ch]} {
-            append tagname $ch;
-        } else {
-            append tagname "_";
+    if {$color_spec == "sel"} {
+        set tagname sel;
+    } else {
+        set color [block_color_resolve_color $color_spec];
+        set tagname "block_color_";
+        foreach ch [split $color ""] {
+            if {[regexp {[A-Za-z0-9]} $ch]} {
+                append tagname $ch;
+            } else {
+                append tagname "_";
+            }
         }
+        .t tag configure $tagname -background $color;
+        .t tag raise $tagname;
     }
-    .t tag configure $tagname -background $color;
-    .t tag raise $tagname;
 
     set start [.t index "${start_linenum}.0"];
     if {$end_linenum == "end"} {
@@ -20162,6 +20203,8 @@ proc enlargeFonts {w {inc 2}} {
     }
 }
 add_spectral_alias str2hex;
+add_spectral_alias selshrink;
+add_spectral_alias selgrow;
 add_spectral_alias set_evalmode;
 add_spectral_alias arithmetic;
 add_spectral_alias rename_listed_files;
