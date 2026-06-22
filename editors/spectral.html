@@ -170,6 +170,10 @@ function popupSearchControlId(targetId, suffix) {
     return `${targetId}_popupSearch_${suffix}`;
 }
 
+function popupTextSearchOverlayId(targetId) {
+    return `${targetId}_popupSearch_overlay`;
+}
+
 function popupSearchTargetSelector(targetId) {
     if (window.CSS && typeof CSS.escape === 'function') {
         return CSS.escape(targetId);
@@ -236,6 +240,16 @@ function popupTextSearchSetCount(targetId, text) {
     if (count) count.textContent = text || '';
 }
 
+function popupTextSearchRestoreInputFocus(targetId) {
+    const input = document.getElementById(popupSearchControlId(targetId, 'input'));
+    if (!input) return;
+    popupTextSearchAfterLayout(() => {
+        input.focus();
+        const end = input.value.length;
+        input.setSelectionRange(end, end);
+    });
+}
+
 function popupTextSearchClear(targetId) {
     const state = getPopupTextSearchState(targetId);
     const input = document.getElementById(popupSearchControlId(targetId, 'input'));
@@ -252,7 +266,16 @@ function popupTextSearchClear(targetId) {
 
 function popupTextSearchClearDomHighlights(targetId) {
     const target = document.getElementById(targetId);
-    if (!target || target.matches('textarea,input')) return;
+    if (!target) return;
+    if (target.matches('textarea,input')) {
+        const overlay = document.getElementById(popupTextSearchOverlayId(targetId));
+        if (overlay) {
+            overlay.innerHTML = '';
+            overlay.style.display = 'none';
+        }
+        target.classList.remove('popup-search-text-input');
+        return;
+    }
 
     target.querySelectorAll(`span.popup-search-hit[data-popup-search-target="${popupSearchTargetSelector(targetId)}"]`).forEach(span => {
         span.replaceWith(document.createTextNode(span.textContent || ''));
@@ -306,19 +329,130 @@ function popupTextSearchNextInTextInput(target, targetId, needle, direction) {
 
     if (!starts.length) {
         popupTextSearchSetCount(targetId, '0');
-        target.focus();
+        popupTextSearchClearDomHighlights(targetId);
+        popupTextSearchRestoreInputFocus(targetId);
         return;
     }
 
     state.pos = (state.pos + direction + starts.length) % starts.length;
     const start = starts[state.pos];
-    target.focus();
-    target.setSelectionRange(start, start + needle.length);
-    popupTextSearchScrollTextInputToMatch(target, start, start + needle.length);
+    target.setSelectionRange(start, start);
+    popupTextSearchRenderTextInputHighlights(target, targetId, starts, state.pos, needle.length, state.bg, state.fg);
     target.classList.add('popup-search-text-input');
     target.style.setProperty('--popup-search-bg', state.bg);
     target.style.setProperty('--popup-search-fg', state.fg);
     popupTextSearchSetCount(targetId, `${state.pos + 1}/${starts.length}`);
+    popupTextSearchRestoreInputFocus(targetId);
+}
+
+function popupTextSearchEnsureTextInputOverlay(target, targetId) {
+    let overlay = document.getElementById(popupTextSearchOverlayId(targetId));
+    if (overlay) return overlay;
+    overlay = document.createElement('div');
+    overlay.id = popupTextSearchOverlayId(targetId);
+    overlay.className = 'popup-text-search-overlay';
+    overlay.style.display = 'none';
+    popupTextSearchBindTemporaryDoubleClickHighlights(overlay);
+    target.parentNode.insertBefore(overlay, target);
+    return overlay;
+}
+
+function popupTextSearchRenderTextInputHighlights(target, targetId, starts, currentIndex, needleLength, bg, fg) {
+    const overlay = popupTextSearchEnsureTextInputOverlay(target, targetId);
+    const text = target.value || '';
+    overlay.innerHTML = '';
+    overlay.style.display = 'block';
+
+    let cursor = 0;
+    starts.forEach((start, index) => {
+        if (start > cursor) {
+            overlay.appendChild(document.createTextNode(text.slice(cursor, start)));
+        }
+        const span = document.createElement('span');
+        span.className = index === currentIndex ? 'popup-search-hit popup-search-current' : 'popup-search-hit';
+        span.dataset.popupSearchTarget = targetId;
+        span.style.backgroundColor = bg;
+        span.style.color = fg;
+        if (index === currentIndex) span.style.textDecoration = 'underline';
+        span.textContent = text.slice(start, start + needleLength);
+        overlay.appendChild(span);
+        cursor = start + needleLength;
+    });
+    if (cursor < text.length) {
+        overlay.appendChild(document.createTextNode(text.slice(cursor)));
+    }
+
+    const current = overlay.querySelector('.popup-search-current');
+    if (current) {
+        popupTextSearchAfterLayout(() => {
+            current.scrollIntoView({ block: 'center', inline: 'nearest' });
+        });
+    }
+}
+
+function popupTextSearchBindTemporaryDoubleClickHighlights(element) {
+    if (!element || element.dataset.popupTempDblclickBound === 'true') return;
+    element.dataset.popupTempDblclickBound = 'true';
+    element.addEventListener('dblclick', popupTextSearchTemporaryHighlightDoubleClick);
+}
+
+function popupTextSearchTemporaryHighlightDoubleClick(event) {
+    const root = event.currentTarget;
+    const selection = window.getSelection();
+    const word = selection ? selection.toString().trim() : '';
+    if (!word) return;
+    popupTextSearchHighlightTemporaryOccurrences(root, word);
+}
+
+function popupTextSearchHighlightTemporaryOccurrences(root, word) {
+    const color = randomHilightColor();
+    const matches = [];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+            const parent = node.parentElement;
+            if (!node.nodeValue || !parent || parent.closest('.popup-overlay-temp-highlight')) {
+                return NodeFilter.FILTER_REJECT;
+            }
+            return NodeFilter.FILTER_ACCEPT;
+        }
+    });
+
+    let node = walker.nextNode();
+    while (node) {
+        popupTextSearchCollectWholeWordMatches(node, word).forEach(match => matches.push(match));
+        node = walker.nextNode();
+    }
+
+    matches.reverse().forEach(match => {
+        const range = document.createRange();
+        range.setStart(match.node, match.start);
+        range.setEnd(match.node, match.end);
+        const span = document.createElement('span');
+        span.className = 'popup-overlay-temp-highlight';
+        span.style.backgroundColor = color;
+        range.surroundContents(span);
+    });
+}
+
+function popupTextSearchCollectWholeWordMatches(node, word) {
+    const matches = [];
+    const text = node.nodeValue || '';
+    let index = text.indexOf(word);
+
+    while (index !== -1) {
+        const end = index + word.length;
+        if (popupTextSearchIsWordBoundary(text, index - 1) && popupTextSearchIsWordBoundary(text, end)) {
+            matches.push({ node, start: index, end });
+        }
+        index = text.indexOf(word, index + Math.max(word.length, 1));
+    }
+
+    return matches;
+}
+
+function popupTextSearchIsWordBoundary(text, index) {
+    if (index < 0 || index >= text.length) return true;
+    return !/[A-Za-z0-9_$]/.test(text.charAt(index));
 }
 
 function popupTextSearchAfterLayout(fn) {
@@ -340,6 +474,7 @@ function popupTextSearchScrollTextInputToMatch(target, start, end) {
         const desiredTop = Math.max(0, markerTop - target.clientHeight / 2);
         target.scrollTop = desiredTop;
         target.setSelectionRange(start, end);
+        popupTextSearchRestoreInputFocus(target.id);
     });
 }
 
@@ -425,6 +560,7 @@ function popupTextSearchNextInElement(target, targetId, needle, direction) {
     const current = target.querySelector(`span.popup-search-current[data-popup-search-target="${popupSearchTargetSelector(targetId)}"]`);
     if (current) popupTextSearchAfterLayout(() => popupTextSearchScrollElementIntoView(current, target));
     popupTextSearchSetCount(targetId, `${state.pos + 1}/${ranges.length}`);
+    popupTextSearchRestoreInputFocus(targetId);
 }
 
 function popupTextSearchScrollElementIntoView(element, container) {
@@ -1258,6 +1394,7 @@ function renderDiffNotesPopup(text1, text2, opts = {}) {
         if (seg.type === 'separator') return `<span class="diffnotes-separator">${escapeHtml(seg.text)}</span>`;
         return `<span>${escapeHtml(seg.text)}</span>`;
     }).join('');
+    popupTextSearchBindTemporaryDoubleClickHighlights(body);
     ensurePopupTextSearchControls('diffNotesPopup', 'diffNotesBody');
     popupTextSearchRehighlight('diffNotesBody');
 
@@ -2160,6 +2297,32 @@ function selectText(containerid) {
   outline: 1px solid currentColor;
 }
 
+.popup-text-search-overlay {
+  box-sizing: border-box;
+  width: 100%;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  border: 1px solid #ccc;
+  background: #fff;
+  color: #111;
+  padding: 6px;
+  margin: 0 0 8px 0;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.popup-text-search-overlay:empty {
+  display: none;
+}
+
+.popup-overlay-temp-highlight {
+  border-radius: 2px;
+}
+
 .popup-search-text-input::selection {
   background: var(--popup-search-bg, #fff2a8);
   color: var(--popup-search-fg, #000000);
@@ -2242,6 +2405,42 @@ function selectText(containerid) {
   padding: 1px 4px;
   border: 1px solid #dddddd;
   border-radius: 3px;
+}
+
+.cmd-dock {
+  position: fixed;
+  left: 8px;
+  right: 8px;
+  bottom: 4px;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 28px;
+  padding: 2px 6px;
+  border: 1px solid #b8b8b8;
+  background: #ffffff;
+  color: #111111;
+  box-shadow: 0 -1px 4px rgba(0,0,0,0.14);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+}
+
+.cmd-dock label {
+  flex: 0 0 auto;
+  font-weight: bold;
+}
+
+.cmd-dock input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 22px;
+  box-sizing: border-box;
+  border: 1px solid #aaa;
+  padding: 1px 5px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
 }
 
 .block-color-highlight {
@@ -6282,7 +6481,7 @@ let jsHistoryIndex = -1;
 function showJsEvalPopup() {
     const popup = document.getElementById('jsEvalPopup');
     const input = document.getElementById('jsEvalInput');
-    popup.style.display = 'block';
+    popup.style.display = 'flex';
     input.value = '';
     input.focus();
 
@@ -6296,7 +6495,7 @@ function showJsEvalPopup() {
                 toEval = 'yy(' + toEval.slice(0,-1) + ')';
                 const result = eval(toEval);
                 input.value = "";
-                 popup.style.display = 'none';
+                input.focus();
                 return;
             }
         } else if(event.key == 'd')  { 
@@ -6305,7 +6504,7 @@ function showJsEvalPopup() {
                 toEval = 'dd(' + toEval.slice(0,-1) + ')';
                 const result = eval(toEval);
                 input.value = "";
-                popup.style.display = 'none';
+                input.focus();
                 return;
             }
             
@@ -6333,7 +6532,8 @@ function showJsEvalPopup() {
                 console.error('[JS Eval Error]', e);
             }
 
-            popup.style.display = 'none';
+            input.value = '';
+            input.focus();
         }
         else if (event.key === 'ArrowUp') {
              event.preventDefault();
@@ -6355,10 +6555,17 @@ function showJsEvalPopup() {
             
         }
         else if (event.key === 'Escape') {
-            popup.style.display = 'none';
              event.preventDefault();
+             input.value = '';
+             input.focus();
         }
     };
+}
+
+function hideCmd() {
+    const popup = document.getElementById('jsEvalPopup');
+    if (popup) popup.style.display = 'none';
+    return '';
 }
 
 function commandHelpSections() {
@@ -6367,7 +6574,8 @@ function commandHelpSections() {
             title: 'Getting Help',
             commands: [
                 ['cmdhelp()', 'Show this command reference.'],
-                ['help()', 'Show the keyboard shortcut help popup.']
+                ['help()', 'Show the keyboard shortcut help popup.'],
+                ['hideCmd()', 'Hide the bottom command bar.']
             ]
         },
         {
@@ -9239,6 +9447,7 @@ function insertDownloadLinkAtSavedRange() {
 function getDOMPositionFromIndex(indexStr) {
     const editor = document.getElementById("editor");
     if (!editor) return null;
+    const value = String(indexStr || '').trim();
     editor.normalize(); // Simplify the DOM structure
 
     const lines = [];
@@ -9271,15 +9480,11 @@ function getDOMPositionFromIndex(indexStr) {
 
     flushLine(); // push the last line
 
-    if (indexStr === "end") {
-        const last = lines[lines.length - 1];
-        if (!last) return null;
-        const lastNode = last.find(n => n.node && n.node.nodeType === Node.TEXT_NODE);
-        if (!lastNode) return null;
-        return { container: lastNode.node, offset: lastNode.node.textContent.length };
+    if (value === "end") {
+        return { container: editor, offset: editor.childNodes.length };
     }
 
-    const match = indexStr.match(/^(\d+)\.(\d+|end)$/);
+    const match = value.match(/^(\d+)\.(\d+|end)$/);
     if (!match) return null;
 
     const lineIndex = parseInt(match[1], 10) - 1;
@@ -9290,12 +9495,22 @@ function getDOMPositionFromIndex(indexStr) {
     const line = lines[lineIndex];
 
     let targetNode = null, offset = 0;
+    if (charIndex === "end") {
+        const lastSegment = line[line.length - 1];
+        if (!lastSegment || !lastSegment.node) return null;
+        if (lastSegment.node.nodeType === Node.TEXT_NODE) {
+            return { container: lastSegment.node, offset: lastSegment.node.textContent.length };
+        }
+        const parent = lastSegment.node.parentNode;
+        if (!parent) return null;
+        return { container: parent, offset: Array.prototype.indexOf.call(parent.childNodes, lastSegment.node) + 1 };
+    }
 
     for (const segment of line) {
         if (segment.node.nodeType === Node.TEXT_NODE) {
             const textLen = segment.text.length;
-            if (charIndex === "end" || offset + textLen >= parseInt(charIndex)) {
-                const pos = (charIndex === "end") ? textLen : parseInt(charIndex) - offset;
+            if (offset + textLen >= parseInt(charIndex)) {
+                const pos = parseInt(charIndex) - offset;
                 return { container: segment.node, offset: segment.startOffset + Math.min(pos, textLen) };
             }
             offset += textLen;
@@ -9327,6 +9542,41 @@ function insertText(indexStr, text) {
     sel.addRange(range);
 
     setStatus(`✅ Inserted text at ${indexStr}`);
+}
+
+function inserText(indexStr, text) {
+    return insertText(indexStr, text);
+}
+
+function createNote(indexStr, text, label = '') {
+    const pos = getDOMPositionFromIndex(indexStr);
+    if (!pos) {
+        setStatus("⚠️ Invalid index: " + indexStr);
+        return null;
+    }
+
+    const range = document.createRange();
+    range.setStart(pos.container, pos.offset);
+    range.collapse(true);
+
+    const btn = document.createElement('button');
+    btn.textContent = label || '';
+    btn.setAttribute('data-message', Base64.encode(String(text || '')));
+    btn.setAttribute("onclick", 'noteButtonClickHandler(event)');
+    btn.setAttribute("class", "note-button");
+    btn.onclick = noteButtonClickHandler;
+
+    range.insertNode(btn);
+    range.setStartAfter(btn);
+    range.collapse(true);
+
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    savedEditorRange = range.cloneRange();
+
+    setStatus(`✅ Created note at ${indexStr}`);
+    return btn;
 }
 
 function addCursorAtIndex(indexStr) {
@@ -11982,9 +12232,9 @@ text = text.replace(/§§CODESPAN\d+§§/g, '<code></code>');
 <button onclick="stopRecording()" id="stopBtn">⏹️ Stop</button>
 </div>
 
-<div id="jsEvalPopup" style="display:none; position:fixed; top:20%; left:50%; transform:translateX(-50%);
-     background:#fff; border:1px solid #ccc; padding:10px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); z-index:10000;">
-  <input id="jsEvalInput" type="text" placeholder="Enter JS code..." style="width: 300px;" />
+<div id="jsEvalPopup" class="cmd-dock" style="display:none;">
+  <label for="jsEvalInput">Cmd</label>
+  <input id="jsEvalInput" type="text" placeholder="Enter JS code..." />
 </div>
 
 <div id="cmdHelpPopup" style="display:none; position:fixed; top:8%; left:50%; transform:translateX(-50%);
