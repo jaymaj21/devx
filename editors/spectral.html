@@ -432,6 +432,9 @@ function popupTextSearchHighlightTemporaryOccurrences(root, word) {
         span.style.backgroundColor = color;
         range.surroundContents(span);
     });
+    if (matches.length) {
+        normalizeEditorDom(root, { quiet: true });
+    }
 }
 
 function popupTextSearchCollectWholeWordMatches(node, word) {
@@ -3561,6 +3564,9 @@ if(__fontChooserTouched && fontSel !== "No Selection" && fontSel !== __initialFo
         }
     });
 
+    if (totalMatches > 0) {
+        normalizeEditorDom(editor, { quiet: true });
+    }
     setStatus(`${totalMatches} match(es) for pattern: ${pattern}`);
 }
 
@@ -4243,6 +4249,61 @@ function copyTextToClipboardRobust(text) {
     });
 }
 
+function getCurrentEditorSelectionRange() {
+    const editor = document.getElementById('editor');
+    const selection = window.getSelection();
+    let range = null;
+
+    if (selection && selection.rangeCount > 0) {
+        const liveRange = selection.getRangeAt(0);
+        if (!liveRange.collapsed && editor.contains(liveRange.commonAncestorContainer)) {
+            range = liveRange.cloneRange();
+        }
+    }
+
+    if (!range && savedEditorRange && !savedEditorRange.collapsed && editor.contains(savedEditorRange.commonAncestorContainer)) {
+        range = savedEditorRange.cloneRange();
+    }
+
+    return range;
+}
+
+function getSelectionOuterHtmlFromEditor() {
+    const range = getCurrentEditorSelectionRange();
+    if (!range) return '';
+
+    const container = document.createElement('div');
+    container.appendChild(range.cloneContents());
+    return container.innerHTML;
+}
+
+async function writeHtmlToClipboardUtf8(html, plainText = '') {
+    await copyTextToClipboardRobust(html);
+}
+
+async function copySelectionOuterHtmlToClipboard() {
+    const range = getCurrentEditorSelectionRange();
+    if (!range) {
+        setStatus('F6 copy: no editor selection.');
+        return '';
+    }
+
+    const html = getSelectionOuterHtmlFromEditor();
+    if (!html) {
+        setStatus('F6 copy: selected editor content has no HTML.');
+        return '';
+    }
+
+    try {
+        await writeHtmlToClipboardUtf8(html, range.toString());
+        setStatus(`F6 copy: selected HTML source copied (${html.length} chars).`);
+        return html;
+    } catch (err) {
+        setStatus('F6 copy failed: ' + err.message);
+        return '';
+    }
+}
+
 function showText(str, popupid)
 {
   dec = Base64.decode(str);
@@ -4866,6 +4927,12 @@ document.addEventListener('keydown', function(event) {
     if (uuidPickMode && event.key === 'Escape') {
         event.preventDefault();
         cancelUuidPickMode();
+        return;
+    }
+
+    if (event.key === 'F6') {
+        event.preventDefault();
+        copySelectionOuterHtmlToClipboard();
         return;
     }
 
@@ -6488,27 +6555,6 @@ function showJsEvalPopup() {
     jsHistoryIndex = jsHistory.length;
 
     input.onkeydown = function(event) {
-       
-        if (event.key === 'y')  {
-            var toEval = input.value.trim()
-            if (/^[0-9]*y$/.test(toEval)) {
-                toEval = 'yy(' + toEval.slice(0,-1) + ')';
-                const result = eval(toEval);
-                input.value = "";
-                input.focus();
-                return;
-            }
-        } else if(event.key == 'd')  { 
-            var toEval = input.value.trim(); 
-            if (/^[0-9]*d$/.test(toEval)) {
-                toEval = 'dd(' + toEval.slice(0,-1) + ')';
-                const result = eval(toEval);
-                input.value = "";
-                input.focus();
-                return;
-            }
-            
-        }
         if (event.key === 'Enter') {
               event.preventDefault();
             const code = input.value.trim();
@@ -6518,14 +6564,9 @@ function showJsEvalPopup() {
             }
 
             let toEval = code;
-          
-            
-            if (!/[()=]/.test(toEval)) {
-                toEval += '()';
-            }
 
             try {
-                const result = eval(toEval);
+                const result = evaluateJsCommand(toEval);
                 setStatus('JS Eval Result: ' + result);
             } catch (e) {
                 setStatus('Error: ' + e.message);
@@ -6568,6 +6609,53 @@ function hideCmd() {
     return '';
 }
 
+function evaluateJsCommand(command) {
+    const text = String(command || '').trim();
+    const lineCommand = parseLineCommand(text);
+    if (lineCommand) {
+        if (lineCommand.name === 'yy') return yy(lineCommand.count);
+        if (lineCommand.name === 'dd') return dd(lineCommand.count);
+        if (lineCommand.name === 'py') return py();
+        if (lineCommand.name === 'yp') return yp(lineCommand.count);
+    }
+
+    const aliases = {
+        cmdhelp: () => cmdhelp(),
+        hideCmd: () => hideCmd(),
+        yy: () => yy(1),
+        dd: () => dd(1),
+        py: () => py(),
+        yp: () => yp(1),
+        delete_empty_lines: () => delete_empty_lines(),
+        deleteEmptyLines: () => deleteEmptyLines(),
+        normalizeEditorDom: () => normalizeEditorDom(),
+        copySelectionOuterHtmlToClipboard: () => copySelectionOuterHtmlToClipboard(),
+        hl: () => showHighlightPopup(),
+        sub: () => showSubstitutePopup(),
+        replace: () => showSubstitutePopup()
+    };
+    const normalized = text.replace(/\(\s*\)$/, '');
+    if (Object.prototype.hasOwnProperty.call(aliases, normalized)) {
+        return aliases[normalized]();
+    }
+
+    let toEval = text;
+    if (!/[()=]/.test(toEval)) {
+        toEval += '()';
+    }
+    return eval(toEval);
+}
+
+function parseLineCommand(command) {
+    let match = String(command || '').trim().match(/^(\d+)([yd])$/);
+    if (match) {
+        return { name: match[2] === 'y' ? 'yy' : 'dd', count: Number.parseInt(match[1], 10) || 1 };
+    }
+    match = String(command || '').trim().match(/^(yy|dd|py|yp)(?:\(\s*(\d*)\s*\))?$/);
+    if (!match) return null;
+    return { name: match[1], count: Number.parseInt(match[2], 10) || 1 };
+}
+
 function commandHelpSections() {
     return [
         {
@@ -6590,6 +6678,10 @@ function commandHelpSections() {
                 ['snake()', 'Convert selected text to snake_case.'],
                 ['kebab()', 'Convert selected text to kebab-case.'],
                 ['replace("find", "replace")', 'Replace text in the editor. Uses regex by default; pass false as the third argument for literal text.'],
+                ['hl("TODO", 2)', 'Highlight regex matches using search-bar color id 1..7.'],
+                ['sub("foo", "bar", "i", 3, 8)', 'Regex substitution, optionally constrained to inclusive line numbers. Use "s" for case-sensitive.'],
+                ['fsub(2, "foo", "bar", "s", 3, 8)', 'Substitute only inside spans highlighted with color id 2.'],
+                ['copySelectionOuterHtmlToClipboard()', 'Copy the current editor selection as literal UTF-8 HTML source. F6 runs the same command.'],
                 ['incrint("\\\\bitem-\\\\d+\\\\b", 1)', 'Increment integers inside matches of a regex or string pattern, preserving zero padding where possible.']
             ]
         },
@@ -6656,9 +6748,12 @@ function commandHelpSections() {
                 ['redo()', 'Reapply an undone saved editor state.'],
                 ['yy(3)', 'Yank three visual lines from the current cursor to the clipboard. The command popup also accepts 3y.'],
                 ['dd(3)', 'Delete and yank three visual lines from the current cursor. The command popup also accepts 3d.'],
+                ['py', 'Paste clipboard content at the start of the next line.'],
+                ['yp, yp(3)', 'Yank current line or next N visual lines, then paste them after the current line.'],
                 ['keeplines()', 'Keep only lines containing cursors.'],
                 ['dellines()', 'Delete lines containing cursors.'],
                 ['delete_empty_lines()', 'Delete lines whose rendered text is only whitespace, while keeping media/control-only lines.'],
+                ['normalizeEditorDom()', 'Lightly clean editor DOM after span-heavy edits without full HTML reparse.'],
                 ['keeplinesWithHighlights()', 'Keep only lines containing highlight spans.'],
                 ['dellinesWithHighlights()', 'Delete lines containing highlight spans.']
             ]
@@ -7798,6 +7893,151 @@ function replace(findPattern, replaceText, useRegex = true, caseSensitive = true
     setStatus(`🔁 ${replacements.length} node(s) replaced.`);
 }
 
+function hl(regex, colid = 1, flags = '') {
+    const caseInsensitive = document.getElementById('caseInsensitive');
+    const oldCaseInsensitive = caseInsensitive?.checked;
+    if (caseInsensitive) caseInsensitive.checked = String(flags || '').includes('i');
+    const count = highlightRegexRobust(String(regex || ''), Number.parseInt(colid, 10) || 1, false);
+    if (caseInsensitive) caseInsensitive.checked = oldCaseInsensitive;
+    setStatus(`hl: highlighted ${count} match${count === 1 ? '' : 'es'}.`);
+    return count;
+}
+
+function showHighlightPopup() {
+    showTextPopup(raw => {
+        const lines = String(raw || '').split(/\r?\n/);
+        hl(lines.shift() || '', (lines.shift() || '1').trim(), (lines.shift() || '').trim());
+    }, 'Highlight: regex, color id, optional flags', '');
+}
+
+function sub(pattern, replacement, flags = '', firstLine = null, lastLine = null) {
+    return substitute(pattern, replacement, flags, firstLine, lastLine);
+}
+
+function fsub(colid, pattern, replacement, flags = '', firstLine = null, lastLine = null) {
+    return substitute(pattern, replacement, flags, firstLine, lastLine, `highlight${Number.parseInt(colid, 10)}`);
+}
+
+function showSubstitutePopup() {
+    showTextPopup(raw => {
+        const lines = String(raw || '').split(/\r?\n/);
+        const pattern = lines.shift() || '';
+        const replacement = lines.shift() || '';
+        const flags = (lines.shift() || '').trim();
+        const firstLine = (lines.shift() || '').trim();
+        const lastLine = (lines.shift() || '').trim();
+        substitute(pattern, replacement, flags, firstLine || null, lastLine || null);
+    }, 'Substitute: pattern, replacement, optional flags, first line, last line', '');
+}
+
+function substitute(pattern, replacement, flags = '', firstLine = null, lastLine = null, requiredHighlightClass = null) {
+    if (!pattern) {
+        setStatus('sub: pattern is required.');
+        return 0;
+    }
+    if (requiredHighlightClass && !/^highlight[1-7]$/.test(requiredHighlightClass)) {
+        setStatus(`fsub: invalid highlight class ${requiredHighlightClass}.`);
+        return 0;
+    }
+    let regex;
+    try {
+        regex = new RegExp(String(pattern), regexFlagsForSubstitution(flags));
+    } catch (error) {
+        setStatus(`sub: invalid regex: ${error.message}`);
+        return 0;
+    }
+
+    const bounds = standaloneLineBounds(firstLine, lastLine);
+    if (!bounds) {
+        setStatus(`sub: invalid line range ${firstLine}, ${lastLine}.`);
+        return 0;
+    }
+
+    let count = 0;
+    const replacements = collectStandaloneTextNodeSpans(bounds.start, bounds.end)
+        .filter(({ node }) => !requiredHighlightClass || (node.parentElement && node.parentElement.closest(`.${requiredHighlightClass}`)))
+        .map(({ node, startOffset, endOffset }) => {
+            const original = node.textContent || '';
+            const slice = original.slice(startOffset, endOffset);
+            regex.lastIndex = 0;
+            const updatedSlice = slice.replace(regex, (...args) => {
+                count += 1;
+                return replacementValue(replacement, args);
+            });
+            return { node, newText: original.slice(0, startOffset) + updatedSlice + original.slice(endOffset) };
+        });
+
+    if (!count) {
+        setStatus(requiredHighlightClass ? 'fsub: no matches.' : 'sub: no matches.');
+        return 0;
+    }
+    replacements.forEach(({ node, newText }) => {
+        node.textContent = newText;
+    });
+    hydrateEditorControls(document.getElementById('editor'));
+    setStatus(`${requiredHighlightClass ? 'fsub' : 'sub'}: replaced ${count} match${count === 1 ? '' : 'es'}.`);
+    return count;
+}
+
+function regexFlagsForSubstitution(flags) {
+    const flagSet = new Set(String(flags || '').replace(/[gs]/g, '').split('').filter(Boolean));
+    flagSet.add('g');
+    return Array.from(flagSet).join('');
+}
+
+function replacementValue(replacement, regexArgs) {
+    if (typeof replacement === 'function') return replacement(...regexArgs);
+    const match = regexArgs[0] || '';
+    const groups = regexArgs.slice(1, -2);
+    return String(replacement || '').replace(/\$(\$|&|\d{1,2})/g, (_token, ref) => {
+        if (ref === '$') return '$';
+        if (ref === '&') return match;
+        const index = Number.parseInt(ref, 10);
+        return groups[index - 1] == null ? '' : groups[index - 1];
+    });
+}
+
+function standaloneLineBounds(firstLine, lastLine) {
+    const editor = document.getElementById('editor');
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    const text = getTextWithNewlinesFromRange(range).replace(/\r\n|\r/g, '\n');
+    if (firstLine == null || firstLine === '') return { start: 0, end: text.length };
+    const first = Number.parseInt(firstLine, 10);
+    const last = lastLine == null || lastLine === '' ? first : Number.parseInt(lastLine, 10);
+    if (!Number.isFinite(first) || !Number.isFinite(last) || first < 1 || last < first) return null;
+    const lines = text.split('\n');
+    if (first > lines.length) return null;
+    const safeLast = Math.min(last, lines.length);
+    const start = lines.slice(0, first - 1).reduce((sum, line) => sum + line.length + 1, 0);
+    const end = lines.slice(0, safeLast).reduce((sum, line, index) => sum + line.length + (index < lines.length - 1 ? 1 : 0), 0);
+    return { start, end };
+}
+
+function collectStandaloneTextNodeSpans(startOffset, endOffset) {
+    const editor = document.getElementById('editor');
+    const spans = [];
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, null, false);
+    let total = 0;
+    let node;
+    while ((node = walker.nextNode()) && total < endOffset) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            const length = node.textContent.length;
+            if (total + length > startOffset && total < endOffset) {
+                spans.push({
+                    node,
+                    startOffset: Math.max(0, startOffset - total),
+                    endOffset: Math.min(length, endOffset - total)
+                });
+            }
+            total += length;
+        } else if (node.nodeType === Node.ELEMENT_NODE && ['br', 'div', 'p', 'li'].includes(node.tagName.toLowerCase())) {
+            total += 1;
+        }
+    }
+    return spans;
+}
+
 function escapeRegex(str) {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -8370,6 +8610,7 @@ async function dd(n = 1) {
     const range = document.createRange();
     range.setStartBefore(linesToDelete[0]);
     range.setEndAfter(linesToDelete[linesToDelete.length - 1]);
+    extendRangeEndToTrailingLineControls(range, linesToDelete[linesToDelete.length - 1], editor);
 
     // Copy to clipboard
     const div = document.createElement("div");
@@ -8464,6 +8705,7 @@ async function yy(n = 1) {
     const range = document.createRange();
     range.setStartBefore(linesToCopy[0]);
     range.setEndAfter(linesToCopy[linesToCopy.length - 1]);
+    extendRangeEndToTrailingLineControls(range, linesToCopy[linesToCopy.length - 1], editor);
 
     // Extract contents to clipboard
     const div = document.createElement("div");
@@ -8497,6 +8739,112 @@ async function yy(n = 1) {
     } catch (err) {
         setStatus("❌ Failed to copy to clipboard");
     }
+}
+
+function getNextNodeAfterSubtree(node, root) {
+    let current = node;
+    while (current && current !== root) {
+        if (current.nextSibling) return current.nextSibling;
+        current = current.parentNode;
+    }
+    return null;
+}
+
+function isTrailingLineControlCandidate(node) {
+    if (!node) return false;
+    if (node.nodeType === Node.TEXT_NODE) {
+        return node.nodeValue.trim() === '';
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+        return false;
+    }
+    if (node.tagName === 'BR') {
+        return false;
+    }
+    if (node.matches && node.matches('.note-button')) {
+        return true;
+    }
+    return node.textContent.trim() === '';
+}
+
+function extendRangeEndToTrailingLineControls(range, anchorNode, root) {
+    let endNode = anchorNode;
+    let next = getNextNodeAfterSubtree(anchorNode, root);
+
+    while (next && isTrailingLineControlCandidate(next)) {
+        endNode = next;
+        next = getNextNodeAfterSubtree(next, root);
+    }
+
+    if (endNode && endNode !== anchorNode) {
+        range.setEndAfter(endNode);
+    }
+}
+
+async function py() {
+    if (!savedEditorRange || !document.getElementById('editor').contains(savedEditorRange.commonAncestorContainer)) {
+        setStatus('No caret line for py.');
+        return;
+    }
+    const html = await readClipboardHtmlOrTextAsHtml();
+    if (!html) {
+        setStatus('Clipboard is empty.');
+        return;
+    }
+    const lineEnd = getCurrentLineEndIndex();
+    insertHtmlAtIndex(lineEnd, '<br>' + html);
+    setStatus('Pasted clipboard at next line.');
+}
+
+async function yp(n = 1) {
+    const count = Math.max(1, Number.parseInt(n, 10) || 1);
+    await yy(count);
+    await py();
+    setStatus(`Yanked and pasted ${count} line${count === 1 ? '' : 's'} after current line.`);
+}
+
+async function readClipboardHtmlOrTextAsHtml() {
+    if (navigator.clipboard && navigator.clipboard.read) {
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+            if (item.types.includes('text/html')) {
+                return (await item.getType('text/html')).text();
+            }
+        }
+    }
+    if (navigator.clipboard && navigator.clipboard.readText) {
+        return textToSpectralHtml(await navigator.clipboard.readText());
+    }
+    return '';
+}
+
+function textToSpectralHtml(text) {
+    return escapeHtml(String(text || '')).replace(/\r\n/g, '<br>').replace(/\n/g, '<br>');
+}
+
+function getCurrentLineEndIndex() {
+    const editor = document.getElementById('editor');
+    const range = savedEditorRange.cloneRange();
+    const before = document.createRange();
+    before.selectNodeContents(editor);
+    before.setEnd(range.startContainer, range.startOffset);
+    const plainBefore = getTextWithNewlinesFromRange(before).replace(/\r\n|\r/g, '\n');
+    const lineNumber = plainBefore.split('\n').length;
+    return `${lineNumber}.end`;
+}
+
+function insertHtmlAtIndex(indexStr, html) {
+    const pos = getDOMPositionFromIndex(indexStr);
+    if (!pos) {
+        setStatus('Invalid index: ' + indexStr);
+        return;
+    }
+    const range = document.createRange();
+    range.setStart(pos.container, pos.offset);
+    range.collapse(true);
+    const fragment = range.createContextualFragment(String(html || ''));
+    range.insertNode(fragment);
+    hydrateEditorControls(document.getElementById('editor'));
 }
 
 
@@ -8650,6 +8998,66 @@ function sanitizeHtml() {
     editor.innerHTML = processed;
 
     setStatus("Editor content sanitized");
+}
+
+function normalizeEditorDom(root = document.getElementById('editor'), opts = {}) {
+    if (!root) return { removedEmptySpans: 0, unwrappedPlainSpans: 0, mergedSpans: 0 };
+
+    const stats = { removedEmptySpans: 0, unwrappedPlainSpans: 0, mergedSpans: 0 };
+    const isInertPlainSpan = span =>
+        span.tagName === 'SPAN' &&
+        span.attributes.length === 0;
+    const isMergeableSpan = span =>
+        span.tagName === 'SPAN' &&
+        !span.id &&
+        !span.getAttributeNames().some(name => name.startsWith('data-') || name.startsWith('on')) &&
+        span.getAttributeNames().every(name => name === 'class' || name === 'style');
+    const sameSpanPresentation = (a, b) =>
+        a.className === b.className &&
+        (a.getAttribute('style') || '') === (b.getAttribute('style') || '');
+
+    root.normalize();
+
+    root.querySelectorAll('span').forEach(span => {
+        if (!span.parentNode) return;
+        if (isInertPlainSpan(span)) {
+            if (span.childNodes.length === 0) {
+                span.remove();
+                stats.removedEmptySpans++;
+            } else {
+                span.replaceWith(...span.childNodes);
+                stats.unwrappedPlainSpans++;
+            }
+        }
+    });
+
+    root.normalize();
+
+    Array.from(root.querySelectorAll('span')).reverse().forEach(span => {
+        if (!span.parentNode || !isMergeableSpan(span)) return;
+
+        let next = span.nextSibling;
+        while (next && next.nodeType === Node.TEXT_NODE && next.nodeValue === '') {
+            const empty = next;
+            next = next.nextSibling;
+            empty.remove();
+        }
+
+        if (next && next.nodeType === Node.ELEMENT_NODE && isMergeableSpan(next) && sameSpanPresentation(span, next)) {
+            while (next.firstChild) {
+                span.appendChild(next.firstChild);
+            }
+            next.remove();
+            stats.mergedSpans++;
+        }
+    });
+
+    root.normalize();
+
+    if (!opts.quiet) {
+        setStatus(`Normalized editor DOM: removed ${stats.removedEmptySpans} empty span(s), unwrapped ${stats.unwrappedPlainSpans}, merged ${stats.mergedSpans}.`);
+    }
+    return stats;
 }
 
 async function pasteSegmentsAcrossLines() {
@@ -9136,6 +9544,10 @@ function delete_empty_lines() {
     editor.normalize();
     setStatus(`Deleted ${removed} empty line(s).`);
     return removed;
+}
+
+function deleteEmptyLines() {
+    return delete_empty_lines();
 }
 ////////////////////////////////
 // Main function: Reverse selected lines or all lines
@@ -12274,6 +12686,7 @@ text = text.replace(/§§CODESPAN\d+§§/g, '<code></code>');
   Ctrl+Alt+m     Match brackets (+ braces and parenthesis)
   Ctrl+Alt+p     Scale selected or nearby picture(s)
   Ctrl+Alt+P     Iconize selected picture(s)
+  F6             Copy selected editor HTML source to clipboard
   F7             Diff two notes
   F8             Pick and copy token under click
   F9             Annotate nearest image
