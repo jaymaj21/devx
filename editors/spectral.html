@@ -432,9 +432,6 @@ function popupTextSearchHighlightTemporaryOccurrences(root, word) {
         span.style.backgroundColor = color;
         range.surroundContents(span);
     });
-    if (matches.length) {
-        normalizeEditorDom(root, { quiet: true });
-    }
 }
 
 function popupTextSearchCollectWholeWordMatches(node, word) {
@@ -3564,9 +3561,6 @@ if(__fontChooserTouched && fontSel !== "No Selection" && fontSel !== __initialFo
         }
     });
 
-    if (totalMatches > 0) {
-        normalizeEditorDom(editor, { quiet: true });
-    }
     setStatus(`${totalMatches} match(es) for pattern: ${pattern}`);
 }
 
@@ -4249,61 +4243,6 @@ function copyTextToClipboardRobust(text) {
     });
 }
 
-function getCurrentEditorSelectionRange() {
-    const editor = document.getElementById('editor');
-    const selection = window.getSelection();
-    let range = null;
-
-    if (selection && selection.rangeCount > 0) {
-        const liveRange = selection.getRangeAt(0);
-        if (!liveRange.collapsed && editor.contains(liveRange.commonAncestorContainer)) {
-            range = liveRange.cloneRange();
-        }
-    }
-
-    if (!range && savedEditorRange && !savedEditorRange.collapsed && editor.contains(savedEditorRange.commonAncestorContainer)) {
-        range = savedEditorRange.cloneRange();
-    }
-
-    return range;
-}
-
-function getSelectionOuterHtmlFromEditor() {
-    const range = getCurrentEditorSelectionRange();
-    if (!range) return '';
-
-    const container = document.createElement('div');
-    container.appendChild(range.cloneContents());
-    return container.innerHTML;
-}
-
-async function writeHtmlToClipboardUtf8(html, plainText = '') {
-    await copyTextToClipboardRobust(html);
-}
-
-async function copySelectionOuterHtmlToClipboard() {
-    const range = getCurrentEditorSelectionRange();
-    if (!range) {
-        setStatus('F6 copy: no editor selection.');
-        return '';
-    }
-
-    const html = getSelectionOuterHtmlFromEditor();
-    if (!html) {
-        setStatus('F6 copy: selected editor content has no HTML.');
-        return '';
-    }
-
-    try {
-        await writeHtmlToClipboardUtf8(html, range.toString());
-        setStatus(`F6 copy: selected HTML source copied (${html.length} chars).`);
-        return html;
-    } catch (err) {
-        setStatus('F6 copy failed: ' + err.message);
-        return '';
-    }
-}
-
 function showText(str, popupid)
 {
   dec = Base64.decode(str);
@@ -4927,12 +4866,6 @@ document.addEventListener('keydown', function(event) {
     if (uuidPickMode && event.key === 'Escape') {
         event.preventDefault();
         cancelUuidPickMode();
-        return;
-    }
-
-    if (event.key === 'F6') {
-        event.preventDefault();
-        copySelectionOuterHtmlToClipboard();
         return;
     }
 
@@ -6628,8 +6561,6 @@ function evaluateJsCommand(command) {
         yp: () => yp(1),
         delete_empty_lines: () => delete_empty_lines(),
         deleteEmptyLines: () => deleteEmptyLines(),
-        normalizeEditorDom: () => normalizeEditorDom(),
-        copySelectionOuterHtmlToClipboard: () => copySelectionOuterHtmlToClipboard(),
         hl: () => showHighlightPopup(),
         sub: () => showSubstitutePopup(),
         replace: () => showSubstitutePopup()
@@ -6681,7 +6612,6 @@ function commandHelpSections() {
                 ['hl("TODO", 2)', 'Highlight regex matches using search-bar color id 1..7.'],
                 ['sub("foo", "bar", "i", 3, 8)', 'Regex substitution, optionally constrained to inclusive line numbers. Use "s" for case-sensitive.'],
                 ['fsub(2, "foo", "bar", "s", 3, 8)', 'Substitute only inside spans highlighted with color id 2.'],
-                ['copySelectionOuterHtmlToClipboard()', 'Copy the current editor selection as literal UTF-8 HTML source. F6 runs the same command.'],
                 ['incrint("\\\\bitem-\\\\d+\\\\b", 1)', 'Increment integers inside matches of a regex or string pattern, preserving zero padding where possible.']
             ]
         },
@@ -6753,7 +6683,6 @@ function commandHelpSections() {
                 ['keeplines()', 'Keep only lines containing cursors.'],
                 ['dellines()', 'Delete lines containing cursors.'],
                 ['delete_empty_lines()', 'Delete lines whose rendered text is only whitespace, while keeping media/control-only lines.'],
-                ['normalizeEditorDom()', 'Lightly clean editor DOM after span-heavy edits without full HTML reparse.'],
                 ['keeplinesWithHighlights()', 'Keep only lines containing highlight spans.'],
                 ['dellinesWithHighlights()', 'Delete lines containing highlight spans.']
             ]
@@ -8610,7 +8539,6 @@ async function dd(n = 1) {
     const range = document.createRange();
     range.setStartBefore(linesToDelete[0]);
     range.setEndAfter(linesToDelete[linesToDelete.length - 1]);
-    extendRangeEndToTrailingLineControls(range, linesToDelete[linesToDelete.length - 1], editor);
 
     // Copy to clipboard
     const div = document.createElement("div");
@@ -8705,7 +8633,6 @@ async function yy(n = 1) {
     const range = document.createRange();
     range.setStartBefore(linesToCopy[0]);
     range.setEndAfter(linesToCopy[linesToCopy.length - 1]);
-    extendRangeEndToTrailingLineControls(range, linesToCopy[linesToCopy.length - 1], editor);
 
     // Extract contents to clipboard
     const div = document.createElement("div");
@@ -8738,46 +8665,6 @@ async function yy(n = 1) {
         setStatus(`📋 Yanked!`);
     } catch (err) {
         setStatus("❌ Failed to copy to clipboard");
-    }
-}
-
-function getNextNodeAfterSubtree(node, root) {
-    let current = node;
-    while (current && current !== root) {
-        if (current.nextSibling) return current.nextSibling;
-        current = current.parentNode;
-    }
-    return null;
-}
-
-function isTrailingLineControlCandidate(node) {
-    if (!node) return false;
-    if (node.nodeType === Node.TEXT_NODE) {
-        return node.nodeValue.trim() === '';
-    }
-    if (node.nodeType !== Node.ELEMENT_NODE) {
-        return false;
-    }
-    if (node.tagName === 'BR') {
-        return false;
-    }
-    if (node.matches && node.matches('.note-button')) {
-        return true;
-    }
-    return node.textContent.trim() === '';
-}
-
-function extendRangeEndToTrailingLineControls(range, anchorNode, root) {
-    let endNode = anchorNode;
-    let next = getNextNodeAfterSubtree(anchorNode, root);
-
-    while (next && isTrailingLineControlCandidate(next)) {
-        endNode = next;
-        next = getNextNodeAfterSubtree(next, root);
-    }
-
-    if (endNode && endNode !== anchorNode) {
-        range.setEndAfter(endNode);
     }
 }
 
@@ -8998,66 +8885,6 @@ function sanitizeHtml() {
     editor.innerHTML = processed;
 
     setStatus("Editor content sanitized");
-}
-
-function normalizeEditorDom(root = document.getElementById('editor'), opts = {}) {
-    if (!root) return { removedEmptySpans: 0, unwrappedPlainSpans: 0, mergedSpans: 0 };
-
-    const stats = { removedEmptySpans: 0, unwrappedPlainSpans: 0, mergedSpans: 0 };
-    const isInertPlainSpan = span =>
-        span.tagName === 'SPAN' &&
-        span.attributes.length === 0;
-    const isMergeableSpan = span =>
-        span.tagName === 'SPAN' &&
-        !span.id &&
-        !span.getAttributeNames().some(name => name.startsWith('data-') || name.startsWith('on')) &&
-        span.getAttributeNames().every(name => name === 'class' || name === 'style');
-    const sameSpanPresentation = (a, b) =>
-        a.className === b.className &&
-        (a.getAttribute('style') || '') === (b.getAttribute('style') || '');
-
-    root.normalize();
-
-    root.querySelectorAll('span').forEach(span => {
-        if (!span.parentNode) return;
-        if (isInertPlainSpan(span)) {
-            if (span.childNodes.length === 0) {
-                span.remove();
-                stats.removedEmptySpans++;
-            } else {
-                span.replaceWith(...span.childNodes);
-                stats.unwrappedPlainSpans++;
-            }
-        }
-    });
-
-    root.normalize();
-
-    Array.from(root.querySelectorAll('span')).reverse().forEach(span => {
-        if (!span.parentNode || !isMergeableSpan(span)) return;
-
-        let next = span.nextSibling;
-        while (next && next.nodeType === Node.TEXT_NODE && next.nodeValue === '') {
-            const empty = next;
-            next = next.nextSibling;
-            empty.remove();
-        }
-
-        if (next && next.nodeType === Node.ELEMENT_NODE && isMergeableSpan(next) && sameSpanPresentation(span, next)) {
-            while (next.firstChild) {
-                span.appendChild(next.firstChild);
-            }
-            next.remove();
-            stats.mergedSpans++;
-        }
-    });
-
-    root.normalize();
-
-    if (!opts.quiet) {
-        setStatus(`Normalized editor DOM: removed ${stats.removedEmptySpans} empty span(s), unwrapped ${stats.unwrappedPlainSpans}, merged ${stats.mergedSpans}.`);
-    }
-    return stats;
 }
 
 async function pasteSegmentsAcrossLines() {
@@ -12686,7 +12513,6 @@ text = text.replace(/§§CODESPAN\d+§§/g, '<code></code>');
   Ctrl+Alt+m     Match brackets (+ braces and parenthesis)
   Ctrl+Alt+p     Scale selected or nearby picture(s)
   Ctrl+Alt+P     Iconize selected picture(s)
-  F6             Copy selected editor HTML source to clipboard
   F7             Diff two notes
   F8             Pick and copy token under click
   F9             Annotate nearest image
