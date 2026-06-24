@@ -3048,6 +3048,15 @@ var __fontChooserTouched = false;
 var __sizeChooserTouched = false;
 var __initialFontSel = null;
 var __initialSizeSel = null;
+function fontSizeFromChooserValue(value) {
+    switch(String(value || '')) {
+        case "1": return 'x-small';
+        case "3": return 'medium';
+        case "5": return 'x-large';
+        case "7": return 'xx-large';
+        default: return 'medium';
+    }
+}
 function hideInitialInfoOverlay() {
     const overlay = document.getElementById('initialInfoOverlay');
     if (!overlay || overlay.dataset.hidden === '1') return;
@@ -3115,18 +3124,12 @@ function getEditorHTML() {
             if(colorSel && colorSel !== __initialHighlighterFg) {
                 styles['color'] = colorSel;
             }
-if(__fontChooserTouched && fontSel !== "No Selection" && fontSel !== __initialFontSel) {
+            if(fontSel !== "No Selection") {
                styles['fontFamily'] = fontSel;
             }
 
-            if(__sizeChooserTouched && sizeSel !== "No Selection" && sizeSel !== __initialSizeSel) {
-               switch(sizeSel) {
-                   case "1": styles['fontSize'] = 'x-small'; break;   // or '10px'
-                   case "3": styles['fontSize'] = 'medium'; break;    // or '16px'
-                   case "5": styles['fontSize'] = 'x-large'; break;   // or '24px'
-                   case "7": styles['fontSize'] = 'xx-large'; break;  // or '32px'
-                   default: styles['fontSize'] = 'medium';
-               }
+            if(sizeSel && sizeSel !== "0") {
+               styles['fontSize'] = fontSizeFromChooserValue(sizeSel);
             }
             augmentFontWeightStyleAndDecoration(styles);
             applyInlineStyle(styles, 'editor', highlighterId);
@@ -3246,13 +3249,27 @@ if(__fontChooserTouched && fontSel !== "No Selection" && fontSel !== __initialFo
 
          
         function randomHilightColor() {
-            
-            var letters = dark ? '23456' : 'BCDEF'; 
-            let color = '#';
-            for (let i = 0; i < 6; i++) {
-                color += letters[Math.floor(Math.random() * letters.length)];
+            const h = 6.0 * Math.random();
+            const i = Math.min(5, Math.floor(h));
+            const f = h - i;
+            const s = 0.32 + 0.23 * Math.random();
+            const v = 0.94 + 0.06 * Math.random();
+            const p = v * (1.0 - s);
+            const q = v * (1.0 - s * f);
+            const t = v * (1.0 - s * (1.0 - f));
+            let r, g, b;
+
+            switch (i) {
+                case 0: r = v; g = t; b = p; break;
+                case 1: r = q; g = v; b = p; break;
+                case 2: r = p; g = v; b = t; break;
+                case 3: r = p; g = q; b = v; break;
+                case 4: r = t; g = p; b = v; break;
+                default: r = v; g = p; b = q; break;
             }
-            return color;
+
+            const toHex = value => Math.floor(255 * value).toString(16).padStart(2, '0');
+            return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
         }
  
     
@@ -3390,14 +3407,8 @@ if(__fontChooserTouched && fontSel !== "No Selection" && fontSel !== __initialFo
         if (fontSel && fontSel !== "No Selection") {
             tspan.setAttribute('font-family', fontSel);
         }
-        if (sizeSel && sizeSel !== "No Selection") {
-            switch(sizeSel) {
-                case "1": tspan.setAttribute('font-size', 'x-small'); break;
-                case "3": tspan.setAttribute('font-size', 'medium'); break;
-                case "5": tspan.setAttribute('font-size', 'x-large'); break;
-                case "7": tspan.setAttribute('font-size', 'xx-large'); break;
-                default: tspan.setAttribute('font-size', 'medium');
-            }
+        if (sizeSel && sizeSel !== "0") {
+            tspan.setAttribute('font-size', fontSizeFromChooserValue(sizeSel));
         }
         if (boldMode) tspan.setAttribute('font-weight', 'bold');
         if (italicsMode) tspan.setAttribute('font-style', 'italic');
@@ -3491,36 +3502,28 @@ if(__fontChooserTouched && fontSel !== "No Selection" && fontSel !== __initialFo
         if (colid === 0) {
             span.style.backgroundColor = hlColor;
         }
-        else {
-            if(boldMode) span.style.fontWeight = 'bold';
-            if(italicsMode) span.style.fontStyle = 'italic';
-            if(underlineMode) span.style.textDecoration = 'underline solid';
-            if(removeBoldMode) span.style.fontWeight = 'normal';
-            if(removeItalicsMode) span.style.fontStyle = 'normal';
-            
 
-            const colorSel = document.getElementById("colorChooser").value;
-            const fontSel = document.getElementById("fontChooser").value;
-            const sizeSel = document.getElementById("sizeChooser").value;
+        if(boldMode) span.style.fontWeight = 'bold';
+        if(italicsMode) span.style.fontStyle = 'italic';
+        if(underlineMode) span.style.textDecoration = 'underline solid';
+        if(removeBoldMode) span.style.fontWeight = 'normal';
+        if(removeItalicsMode) span.style.fontStyle = 'normal';
 
-            span.style.color = colorSel;
-                    
-          if(fontSel !== "No Selection") {
-             span.style.fontFamily = fontSel;
-          }
-    
-          if(sizeSel !== "No Selection") {
-             switch(sizeSel) {
-                 case "1": span.style.fontSize = 'x-small'; break;   // or '10px'
-                 case "3":  span.style.fontSize = 'medium'; break;    // or '16px'
-                 case "5":  span.style.fontSize = 'x-large'; break;   // or '24px'
-                 case "7":  span.style.fontSize = 'xx-large'; break;  // or '32px'
-                 default:   span.style.fontSize = 'medium';
-             }
-          }
-          // Special handling of underline removal
-          if(removeUnderlineMode) removeUnderlineHelper('editor', range);
-       }
+        const colorSel = document.getElementById("colorChooser").value;
+        const fontSel = document.getElementById("fontChooser").value;
+        const sizeSel = document.getElementById("sizeChooser").value;
+
+        span.style.color = colorSel;
+
+        if(fontSel !== "No Selection") {
+           span.style.fontFamily = fontSel;
+        }
+
+        if(sizeSel && sizeSel !== "0") {
+           span.style.fontSize = fontSizeFromChooserValue(sizeSel);
+        }
+        // Special handling of underline removal
+        if(removeUnderlineMode) removeUnderlineHelper('editor', range);
 
        range.surroundContents(span);
     });
@@ -6640,6 +6643,8 @@ function commandHelpSections() {
         {
             title: 'SVG And Graphics',
             commands: [
+                ['insertSvg()', 'Open an SVG file and insert it inline at the current editor caret.'],
+                ['moveSvg("2.3")', 'Move the SVG containing or nearest the caret to line 2, character offset 3.'],
                 ['svgtext("label")', 'Click inside an SVG to insert text at that point. Esc cancels.'],
                 ['add_svg_text()', 'Shortcut for svgtext("text").'],
                 ['delete_svg_text()', 'Click an SVG text object to delete it. Esc cancels.'],
@@ -6678,6 +6683,7 @@ function commandHelpSections() {
                 ['redo()', 'Reapply an undone saved editor state.'],
                 ['yy(3)', 'Yank three visual lines from the current cursor to the clipboard. The command popup also accepts 3y.'],
                 ['dd(3)', 'Delete and yank three visual lines from the current cursor. The command popup also accepts 3d.'],
+                ['getIndex()', 'Show the current caret index and copy it to the clipboard.'],
                 ['py', 'Paste clipboard content at the start of the next line.'],
                 ['yp, yp(3)', 'Yank current line or next N visual lines, then paste them after the current line.'],
                 ['keeplines()', 'Keep only lines containing cursors.'],
@@ -7156,7 +7162,32 @@ document.getElementById('editor').addEventListener('paste', function (event) {
     }, 100); // small delay to wait for paste to finish
 });
 
+function protectSvgBlocksForStringProcessing(html) {
+  const holder = document.createElement('div');
+  holder.innerHTML = html;
+  const svgBlocks = [];
+
+  holder.querySelectorAll('svg').forEach((svg, index) => {
+    const token = `SPECTRAL_SVG_PLACEHOLDER_${index}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    svgBlocks.push({ token, html: svg.outerHTML });
+    svg.replaceWith(document.createTextNode(token));
+  });
+
+  return { html: holder.innerHTML, svgBlocks };
+}
+
+function restoreSvgBlocksAfterStringProcessing(html, svgBlocks) {
+  let restored = html;
+  svgBlocks.forEach(({ token, html: svgHtml }) => {
+    restored = restored.split(token).join(svgHtml);
+  });
+  return restored;
+}
+
 function postProcessForEmail(html) {
+  const protectedHtml = protectSvgBlocksForStringProcessing(html);
+  html = protectedHtml.html;
+
   const lines = html.split(/(<[A-Za-z][^>]*>)|(\n)/i); // split includes the <br> tags
   let output = '';
   //console.log("lines=" + lines);
@@ -7179,7 +7210,7 @@ function postProcessForEmail(html) {
     }
   }
 
-  return output;
+  return restoreSvgBlocksAfterStringProcessing(output, protectedHtml.svgBlocks);
 }
 
 function copyEditorToClipboard() {
@@ -9682,7 +9713,374 @@ function insertDownloadLinkAtSavedRange() {
     document.body.removeChild(fileInput);
 }
 
+function getCurrentEditorRangeOrSaved() {
+    const editor = document.getElementById('editor');
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+        const liveRange = sel.getRangeAt(0);
+        const liveContainer = liveRange.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+            ? liveRange.commonAncestorContainer
+            : liveRange.commonAncestorContainer.parentNode;
+        if (editor && editor.contains(liveContainer)) {
+            savedEditorRange = liveRange.cloneRange();
+            return liveRange.cloneRange();
+        }
+    }
+
+    if (savedEditorRange) {
+        const savedContainer = savedEditorRange.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+            ? savedEditorRange.commonAncestorContainer
+            : savedEditorRange.commonAncestorContainer.parentNode;
+        if (editor && editor.contains(savedContainer)) {
+            return savedEditorRange.cloneRange();
+        }
+    }
+
+    return null;
+}
+
+function sanitizeImportedSvg(svg) {
+    if (!svg) return null;
+
+    svg.querySelectorAll('script').forEach(node => node.remove());
+    [svg, ...svg.querySelectorAll('*')].forEach(el => {
+        [...el.attributes].forEach(attr => {
+            const name = attr.name;
+            const value = attr.value || '';
+            if (/^on/i.test(name) || (/href$/i.test(name) && /^\s*javascript:/i.test(value))) {
+                el.removeAttribute(name);
+            }
+        });
+    });
+
+    if (!svg.getAttribute('xmlns')) {
+        svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    }
+    svg.setAttribute('data-spectral-inline-svg', '1');
+    svg.style.maxWidth = svg.style.maxWidth || '100%';
+    svg.style.height = svg.style.height || 'auto';
+    return svg;
+}
+
+function parseSvgText(svgText) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(svgText, 'image/svg+xml');
+    const parseError = doc.querySelector('parsererror');
+    if (parseError) {
+        throw new Error(parseError.textContent.trim() || 'Invalid SVG file.');
+    }
+
+    const svg = doc.documentElement;
+    if (!svg || svg.localName.toLowerCase() !== 'svg') {
+        throw new Error('Selected file does not contain an SVG root element.');
+    }
+
+    return sanitizeImportedSvg(document.importNode(svg, true));
+}
+
+function insertNodeAtEditorRange(node, range) {
+    if (!node || !range) return null;
+
+    const editor = document.getElementById('editor');
+    const container = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+        ? range.commonAncestorContainer
+        : range.commonAncestorContainer.parentNode;
+    if (!editor || !editor.contains(container)) return null;
+
+    range.deleteContents();
+    range.insertNode(node);
+
+    const after = document.createRange();
+    after.setStartAfter(node);
+    after.collapse(true);
+
+    const sel = window.getSelection();
+    if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(after);
+    }
+    savedEditorRange = after.cloneRange();
+    return node;
+}
+
+function insertSvg() {
+    const range = getCurrentEditorRangeOrSaved();
+    if (!range) {
+        setStatus('Click in the editor before inserting an SVG.');
+        return null;
+    }
+
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.svg,image/svg+xml';
+    fileInput.style.display = 'none';
+
+    fileInput.addEventListener('change', function () {
+        const file = fileInput.files && fileInput.files[0];
+        fileInput.remove();
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            try {
+                const svg = parseSvgText(e.target.result || '');
+                insertNodeAtEditorRange(svg, range);
+                hydrateEditorControls();
+                setStatus(`Inserted inline SVG: ${file.name}`);
+            } catch (err) {
+                setStatus('Could not insert SVG: ' + err.message);
+            }
+        };
+        reader.onerror = function () {
+            setStatus('Could not read SVG file: ' + file.name);
+        };
+        reader.readAsText(file);
+    });
+
+    document.body.appendChild(fileInput);
+    fileInput.click();
+    return 'Select an SVG file to insert.';
+}
+
+function getEditorCaretRangeForMove() {
+    return getCurrentEditorRangeOrSaved();
+}
+
+function rangeTextLikeOffset(range) {
+    const editor = document.getElementById('editor');
+    if (!editor || !range) return -1;
+
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+        acceptNode(node) {
+            if (node.nodeType === Node.TEXT_NODE) return NodeFilter.FILTER_ACCEPT;
+            if (node.nodeType === Node.ELEMENT_NODE && ['IMG', 'SVG'].includes(node.tagName)) return NodeFilter.FILTER_ACCEPT;
+            return NodeFilter.FILTER_SKIP;
+        }
+    });
+
+    let offset = 0;
+    let node = walker.nextNode();
+    while (node) {
+        if (node === range.startContainer) {
+            return offset + Math.min(range.startOffset, node.textContent ? node.textContent.length : 0);
+        }
+        if (node.nodeType === Node.ELEMENT_NODE && node.contains(range.startContainer)) {
+            return offset;
+        }
+        offset += node.nodeType === Node.TEXT_NODE ? (node.textContent || '').length : 1;
+        node = walker.nextNode();
+    }
+    return -1;
+}
+
+function getDocumentTextLikeOffsetBeforeSvg(svg) {
+    const editor = document.getElementById('editor');
+    if (!svg || !editor || !editor.contains(svg)) return -1;
+
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+        acceptNode(node) {
+            if (node === svg) return NodeFilter.FILTER_ACCEPT;
+            if (node.nodeType === Node.TEXT_NODE) return NodeFilter.FILTER_ACCEPT;
+            if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'IMG') return NodeFilter.FILTER_ACCEPT;
+            return NodeFilter.FILTER_SKIP;
+        }
+    });
+
+    let offset = 0;
+    let node = walker.nextNode();
+    while (node) {
+        if (node === svg) return offset;
+        offset += node.nodeType === Node.TEXT_NODE ? (node.textContent || '').length : 1;
+        node = walker.nextNode();
+    }
+    return -1;
+}
+
+function nearestSvgByDocumentOffset(svgs, caretOffset) {
+    let best = null;
+    let bestDist = Infinity;
+    svgs.forEach(svg => {
+        const svgOffset = getDocumentTextLikeOffsetBeforeSvg(svg);
+        const dist = svgOffset < 0 ? Infinity : Math.abs(svgOffset - caretOffset);
+        if (dist < bestDist) {
+            best = svg;
+            bestDist = dist;
+        }
+    });
+    return best || svgs[0] || null;
+}
+
+function getSvgAtOrNearestCaret() {
+    const editor = document.getElementById('editor');
+    const range = getEditorCaretRangeForMove();
+    if (!editor || !range) return null;
+
+    const container = range.startContainer.nodeType === Node.ELEMENT_NODE
+        ? range.startContainer
+        : range.startContainer.parentNode;
+    const containingSvg = container && container.closest ? container.closest('svg') : null;
+    if (containingSvg && editor.contains(containingSvg)) return containingSvg;
+
+    const svgs = [...editor.querySelectorAll('svg')];
+    if (!svgs.length) return null;
+
+    return nearestSvgByDocumentOffset(svgs, rangeTextLikeOffset(range));
+}
+
+function moveSvg(index) {
+    const editor = document.getElementById('editor');
+    const svg = getSvgAtOrNearestCaret();
+    if (!editor || !svg) {
+        setStatus('No SVG found near the current caret.');
+        return null;
+    }
+
+    const pos = getDOMPositionFromIndex(index);
+    if (!pos) {
+        setStatus('Invalid index for moveSvg: ' + index);
+        return null;
+    }
+    if (svg.contains(pos.container)) {
+        setStatus('Cannot move an SVG to a position inside itself.');
+        return null;
+    }
+
+    const destRange = document.createRange();
+    destRange.setStart(pos.container, pos.offset);
+    destRange.collapse(true);
+
+    const marker = document.createComment('spectral-move-svg-target');
+    destRange.insertNode(marker);
+    marker.parentNode.insertBefore(svg, marker);
+    marker.remove();
+
+    const after = document.createRange();
+    after.setStartAfter(svg);
+    after.collapse(true);
+
+    const sel = window.getSelection();
+    if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(after);
+    }
+    savedEditorRange = after.cloneRange();
+    setStatus(`Moved SVG to ${index}.`);
+    return svg;
+}
+
 /// Index based API
+function getChildIndex(node) {
+    if (!node || !node.parentNode) return -1;
+    return Array.prototype.indexOf.call(node.parentNode.childNodes, node);
+}
+
+function isCaretBeforeNode(range, node) {
+    if (!range || !node || !node.parentNode) return false;
+    return range.startContainer === node.parentNode && range.startOffset <= getChildIndex(node);
+}
+
+function caretOffsetWithinTextLine(text, offset) {
+    const before = String(text || '').slice(0, offset);
+    const lastNewline = Math.max(before.lastIndexOf('\n'), before.lastIndexOf('\r'));
+    return lastNewline === -1 ? before.length : before.length - lastNewline - 1;
+}
+
+function getIndexFromRange(range) {
+    const editor = document.getElementById("editor");
+    if (!editor || !range) return null;
+
+    const container = range.startContainer.nodeType === Node.ELEMENT_NODE
+        ? range.startContainer
+        : range.startContainer.parentNode;
+    if (!editor.contains(container)) return null;
+
+    let line = 1;
+    let charOffset = 0;
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_ALL, null, false);
+
+    function flushLine() {
+        line++;
+        charOffset = 0;
+    }
+
+    let node = walker.nextNode();
+    while (node) {
+        if (isCaretBeforeNode(range, node)) {
+            return `${line}.${charOffset}`;
+        }
+
+        if (node.nodeType === Node.ELEMENT_NODE && ["DIV", "P", "BR"].includes(node.tagName)) {
+            if (node === range.startContainer) {
+                return `${line}.${charOffset}`;
+            }
+            flushLine();
+        } else if (node.nodeType === Node.TEXT_NODE) {
+            const text = node.textContent || '';
+            if (node === range.startContainer) {
+                const offset = Math.min(range.startOffset, text.length);
+                const before = text.slice(0, offset);
+                const newlineMatches = before.match(/\r?\n/g);
+                if (newlineMatches) line += newlineMatches.length;
+                return `${line}.${caretOffsetWithinTextLine(text, offset)}`;
+            }
+
+            const parts = text.split(/\r?\n/);
+            for (let i = 0; i < parts.length; i++) {
+                if (i > 0) flushLine();
+                charOffset += parts[i].length;
+            }
+        }
+
+        node = walker.nextNode();
+    }
+
+    return `${line}.${charOffset}`;
+}
+
+function showIndexPopup(index) {
+    const oldPopup = document.getElementById('getIndexPopup');
+    if (oldPopup) oldPopup.remove();
+
+    const popup = document.createElement('div');
+    popup.id = 'getIndexPopup';
+    popup.style.position = 'fixed';
+    popup.style.top = '20%';
+    popup.style.left = '50%';
+    popup.style.transform = 'translateX(-50%)';
+    popup.style.background = 'white';
+    popup.style.color = 'black';
+    popup.style.padding = '16px';
+    popup.style.border = '1px solid #ccc';
+    popup.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
+    popup.style.zIndex = '10000';
+    popup.style.fontFamily = 'sans-serif';
+    popup.innerHTML = `
+        <div style="font-weight:bold; margin-bottom:8px;">Caret Index</div>
+        <input type="text" readonly value="${escapeHtml(index)}" style="width:160px; font-family:monospace;">
+        <button type="button" onclick="document.getElementById('getIndexPopup').remove()">Close</button>
+    `;
+    document.body.appendChild(popup);
+
+    const input = popup.querySelector('input');
+    input.focus();
+    input.select();
+}
+
+function getIndex() {
+    const range = getCurrentEditorRangeOrSaved();
+    const index = getIndexFromRange(range);
+    if (!index) {
+        setStatus('No editor caret position available.');
+        return null;
+    }
+
+    showIndexPopup(index);
+    copyTextToClipboardRobust(index)
+        .then(() => setStatus('Copied caret index: ' + index))
+        .catch(err => setStatus('Caret index: ' + index + ' (clipboard copy failed: ' + err.message + ')'));
+    return index;
+}
+
 function getDOMPositionFromIndex(indexStr) {
     const editor = document.getElementById("editor");
     if (!editor) return null;
@@ -12532,6 +12930,7 @@ text = text.replace(/§§CODESPAN\d+§§/g, '<code></code>');
   Shift+Tab      Unindent selection
 Text Commands (Can be used with Javascript Eval):
   cmdhelp      → Show command popup command reference
+  getIndex()   → Show and copy current caret index
   wc           → Word count of selection
   reflow(n)    → Reflow selected text to n-character lines
   savesvg      → Save editor SVG content to an SVG file
@@ -12551,6 +12950,8 @@ Text Commands (Can be used with Javascript Eval):
   searchnotes("text") → Search embedded notes
   snake        → Convert identifier to snake_case
   kebab        → Convert identifier to kebab-case
+  insertSvg()  → Insert an SVG file inline at the caret
+  moveSvg("2.3") → Move the nearest/current SVG to line 2 char 3
   uc           → Convert to upper case
   lc           → Convert to lowercase
   title        → Convert to Title Case
