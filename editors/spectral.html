@@ -6503,7 +6503,16 @@ function showJsEvalPopup() {
 
             try {
                 const result = evaluateJsCommand(toEval);
-                setStatus('JS Eval Result: ' + result);
+                if (result && typeof result.then === 'function') {
+                    result
+                        .then(value => setStatus(value === undefined ? 'JS Eval Result: done' : 'JS Eval Result: ' + value))
+                        .catch(e => {
+                            setStatus('Error: ' + e.message);
+                            console.error('[JS Eval Error]', e);
+                        });
+                } else {
+                    setStatus('JS Eval Result: ' + result);
+                }
             } catch (e) {
                 setStatus('Error: ' + e.message);
                 console.error('[JS Eval Error]', e);
@@ -6616,6 +6625,15 @@ function commandHelpSections() {
                 ['sub("foo", "bar", "i", 3, 8)', 'Regex substitution, optionally constrained to inclusive line numbers. Use "s" for case-sensitive.'],
                 ['fsub(2, "foo", "bar", "s", 3, 8)', 'Substitute only inside spans highlighted with color id 2.'],
                 ['incrint("\\\\bitem-\\\\d+\\\\b", 1)', 'Increment integers inside matches of a regex or string pattern, preserving zero padding where possible.']
+            ]
+        },
+        {
+            title: 'Input Dialogs',
+            commands: [
+                ['processTextInput("Insert Text", "Text", text => Spectral.inserText("end", text))', 'Show a multiline text area and pass its text to the callback.'],
+                ['processStringInput("Go To", "Index", index => selectRangeByIndex(index, index))', 'Show a single-line text input and pass the entered value to the callback.'],
+                ['processMultipleStringInputs("Create Note", ["index", "text", "label"], (index, text, label) => Spectral.createNote(index, text, label))', 'Show several named inputs and pass values positionally to the callback.'],
+                ['await processTextInput("Text", "Text", text => console.log(text))', 'The dialog helpers also return a Promise resolving to entered values, or null on Cancel.']
             ]
         },
         {
@@ -10254,6 +10272,174 @@ function selectRangeByIndex(fromIndex, toIndex) {
     setStatus(`✅ Selected range from ${fromIndex} to ${toIndex}`);
 }
 // Index based api ends here
+
+function resolveInputDialogCallback(callback) {
+    if (typeof callback === 'function') return callback;
+    if (typeof callback === 'string' && typeof window[callback] === 'function') return window[callback];
+    return null;
+}
+
+function normalizeInputDialogFields(fields, defaultMultiline = false) {
+    return (Array.isArray(fields) ? fields : [fields]).map(field => {
+        if (typeof field === 'string') {
+            return {
+                name: field,
+                label: field,
+                multiline: defaultMultiline,
+                value: ''
+            };
+        }
+        const name = String(field?.name || field?.label || 'input');
+        return {
+            name,
+            label: String(field?.label || name),
+            multiline: Boolean(field?.multiline ?? field?.textarea ?? defaultMultiline),
+            value: String(field?.value ?? field?.initialText ?? ''),
+            rows: Number.parseInt(field?.rows, 10) || 8
+        };
+    });
+}
+
+function showInputDialog(title, fields, callback = null, options = {}) {
+    const fieldSpecs = normalizeInputDialogFields(fields, Boolean(options.multiline));
+    const oldModal = document.getElementById("input-popup-modal");
+    if (oldModal) oldModal.remove();
+
+    return new Promise(resolve => {
+        const overlay = document.createElement("div");
+        overlay.id = "input-popup-modal";
+        overlay.style.position = "fixed";
+        overlay.style.top = "0";
+        overlay.style.left = "0";
+        overlay.style.width = "100vw";
+        overlay.style.height = "100vh";
+        overlay.style.background = "rgba(0,0,0,0.3)";
+        overlay.style.display = "flex";
+        overlay.style.justifyContent = "center";
+        overlay.style.alignItems = "center";
+        overlay.style.zIndex = 10000;
+
+        const modal = document.createElement("div");
+        modal.style.background = "white";
+        modal.style.color = "black";
+        modal.style.padding = "18px";
+        modal.style.border = "1px solid #ccc";
+        modal.style.boxShadow = "0 4px 20px #0005";
+        modal.style.minWidth = "320px";
+        modal.style.maxWidth = "min(760px, calc(100vw - 32px))";
+        modal.style.maxHeight = "calc(100vh - 32px)";
+        modal.style.overflow = "auto";
+
+        const heading = document.createElement("h3");
+        heading.textContent = title || "Input";
+        heading.style.marginTop = "0";
+        modal.appendChild(heading);
+
+        const form = document.createElement("form");
+        const controls = new Map();
+
+        fieldSpecs.forEach(field => {
+            const label = document.createElement("label");
+            label.textContent = field.label + ":";
+            label.style.display = "block";
+            label.style.margin = "10px 0 3px 0";
+
+            const input = field.multiline ? document.createElement("textarea") : document.createElement("input");
+            if (!field.multiline) input.type = "text";
+            input.name = field.name;
+            input.value = field.value || "";
+            input.style.width = "100%";
+            input.style.boxSizing = "border-box";
+            input.style.marginBottom = "8px";
+            if (field.multiline) {
+                input.rows = field.rows || 8;
+                input.style.minHeight = "120px";
+            }
+
+            controls.set(field.name, input);
+            form.appendChild(label);
+            form.appendChild(input);
+        });
+
+        form.onsubmit = event => {
+            event.preventDefault();
+            const values = fieldSpecs.map(field => controls.get(field.name).value);
+            overlay.remove();
+            const fn = resolveInputDialogCallback(callback);
+            if (fn) fn(...values);
+            resolve(values);
+        };
+
+        const actions = document.createElement("div");
+        actions.style.marginTop = "12px";
+        actions.style.textAlign = "right";
+
+        const okBtn = document.createElement("button");
+        okBtn.type = "submit";
+        okBtn.textContent = "OK";
+        okBtn.style.marginRight = "8px";
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.textContent = "Cancel";
+        cancelBtn.onclick = () => {
+            overlay.remove();
+            resolve(null);
+        };
+
+        actions.appendChild(okBtn);
+        actions.appendChild(cancelBtn);
+        form.appendChild(actions);
+        modal.appendChild(form);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        setTimeout(() => {
+            const firstInput = form.querySelector("input,textarea");
+            if (firstInput) firstInput.focus();
+        }, 10);
+    });
+}
+
+function processStringInput(title, prompt, callback, initialText = '') {
+    return showInputDialog(title, [{ name: prompt, label: prompt, multiline: false, value: initialText }], callback)
+        .then(values => values ? values[0] : null);
+}
+
+function processTextInput(title, prompt, callback, initialText = '') {
+    return showInputDialog(title, [{ name: prompt, label: prompt, multiline: true, value: initialText, rows: 12 }], callback)
+        .then(values => values ? values[0] : null);
+}
+
+function processMultipleStringInputs(title, prompts, callback) {
+    return showInputDialog(title, normalizeInputDialogFields(prompts, false), callback);
+}
+
+window.Spectral = Object.assign(window.Spectral || {}, {
+    version: 1,
+    editor: document.getElementById('editor'),
+    setStatus,
+    showTextPopup,
+    showInputDialog,
+    processStringInput,
+    processTextInput,
+    processMultipleStringInputs,
+    insertText,
+    inserText,
+    createNote,
+    addCursorAtIndex,
+    selectRangeByIndex,
+    getIndex,
+    insertSvg,
+    moveSvg,
+    getEditorHtml: () => document.getElementById('editor')?.innerHTML || '',
+    setEditorHtml: html => {
+        const editor = document.getElementById('editor');
+        if (!editor) return;
+        editor.innerHTML = String(html || '');
+        hydrateEditorControls(editor);
+    }
+});
 
 function promptForFields(fieldNames, callback) {
     // Remove any existing modal
