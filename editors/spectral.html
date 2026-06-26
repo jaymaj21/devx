@@ -141,15 +141,25 @@ function showImageFromButton(btn) {
 function submitTextPopup() {
     const textarea = document.getElementById('popupTextarea');
     const text = textarea.value;
+    const callback = textPopupCallback;
     popupTextSearchClear('popupTextarea');
     closeTextPopup();
-    if (textPopupCallback) {
-        textPopupCallback(text);
+    if (typeof callback === 'function') {
+        callback(text);
     }
+    textPopupCallback = null;
 }
 
 function closeTextPopup() {
-    document.getElementById('textPopup').style.display = 'none';
+    const popup = document.getElementById('textPopup');
+    const textarea = document.getElementById('popupTextarea');
+    const okButton = document.getElementById('popupTextOkButton');
+    const closeButton = document.getElementById('popupTextCloseButton');
+    popup.style.display = 'none';
+    if (textarea) textarea.readOnly = false;
+    if (okButton) okButton.style.display = '';
+    if (closeButton) closeButton.textContent = 'Cancel';
+    textPopupCallback = null;
 }
 
 const popupTextSearchStates = {};
@@ -772,13 +782,24 @@ var Base64 = {
 }
 
 function showTextPopup(callback, heading, initialText = '') {
-    
+    const outputMode = typeof callback !== 'function';
+    if (typeof callback !== 'function') {
+        initialText = callback == null ? '' : String(callback);
+        heading = heading || 'Text';
+        callback = null;
+    }
+
     textPopupCallback = callback;
     const popup = document.getElementById('textPopup');
     const textarea = document.getElementById('popupTextarea');
     const textAreaHeading = document.getElementById('popupTextAreaHeading');
+    const okButton = document.getElementById('popupTextOkButton');
+    const closeButton = document.getElementById('popupTextCloseButton');
     textAreaHeading.innerText = heading;
     textarea.value = initialText;
+    textarea.readOnly = outputMode;
+    if (okButton) okButton.style.display = outputMode ? 'none' : '';
+    if (closeButton) closeButton.textContent = outputMode ? 'Close' : 'Cancel';
     ensurePopupTextSearchControls('textPopup', 'popupTextarea');
     popupTextSearchClear('popupTextarea');
     popup.style.display = 'block';
@@ -6620,6 +6641,9 @@ function commandHelpSections() {
                 ['camel()', 'Convert selected text to camelCase.'],
                 ['snake()', 'Convert selected text to snake_case.'],
                 ['kebab()', 'Convert selected text to kebab-case.'],
+                ['getEditorSelectionText()', 'Return selected editor text, or null when there is no saved/live selection.'],
+                ['getEditorSelectionHtml()', 'Return selected editor HTML, or null when there is no saved/live selection.'],
+                ['showTextPopup(getEditorSelectionText())', 'Show text in a searchable read-only popup with a Close button.'],
                 ['replace("find", "replace")', 'Replace text in the editor. Uses regex by default; pass false as the third argument for literal text.'],
                 ['hl("TODO", 2)', 'Highlight regex matches using search-bar color id 1..7.'],
                 ['sub("foo", "bar", "i", 3, 8)', 'Regex substitution, optionally constrained to inclusive line numbers. Use "s" for case-sensitive.'],
@@ -10415,6 +10439,83 @@ function processMultipleStringInputs(title, prompts, callback) {
     return showInputDialog(title, normalizeInputDialogFields(prompts, false), callback);
 }
 
+function getNonCollapsedEditorSelectionRange() {
+    const editor = document.getElementById('editor');
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        const container = range.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+            ? range.commonAncestorContainer
+            : range.commonAncestorContainer.parentNode;
+        if (!range.collapsed && editor && editor.contains(container)) {
+            savedEditorRange = range.cloneRange();
+            return range.cloneRange();
+        }
+    }
+
+    if (savedEditorRange && !savedEditorRange.collapsed) {
+        const savedContainer = savedEditorRange.commonAncestorContainer.nodeType === Node.ELEMENT_NODE
+            ? savedEditorRange.commonAncestorContainer
+            : savedEditorRange.commonAncestorContainer.parentNode;
+        if (editor && editor.contains(savedContainer)) {
+            return savedEditorRange.cloneRange();
+        }
+    }
+
+    return null;
+}
+
+function getEditorSelectionText() {
+    const range = getNonCollapsedEditorSelectionRange();
+    if (!range) return null;
+    const container = document.createElement('div');
+    container.appendChild(range.cloneContents());
+    return cleanEditorSelectionText(extractSelectionTextWithLineBreaks(container));
+}
+
+function getEditorSelectionHtml() {
+    const range = getNonCollapsedEditorSelectionRange();
+    if (!range) return null;
+    const container = document.createElement('div');
+    container.appendChild(range.cloneContents());
+    return container.innerHTML;
+}
+
+function extractSelectionTextWithLineBreaks(node) {
+    let text = '';
+
+    node.childNodes.forEach(child => {
+        if (child.nodeType === Node.TEXT_NODE) {
+            text += child.textContent || '';
+        } else if (child.nodeType === Node.ELEMENT_NODE || child.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+            const tag = child.tagName ? child.tagName.toUpperCase() : '';
+
+            if (tag === 'BR') {
+                text += '\n';
+            } else if (['P', 'DIV', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(tag)) {
+                text += extractSelectionTextWithLineBreaks(child) + '\n';
+            } else if (tag === 'TR') {
+                text += extractSelectionTextWithLineBreaks(child).replace(/\t+$/, '') + '\n';
+            } else if (tag === 'TD' || tag === 'TH') {
+                text += extractSelectionTextWithLineBreaks(child) + '\t';
+            } else {
+                text += extractSelectionTextWithLineBreaks(child);
+            }
+        }
+    });
+
+    return text;
+}
+
+function cleanEditorSelectionText(text) {
+    return String(text || '')
+        .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, ' ')
+        .replace(/\r\n|\r/g, '\n')
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .replace(/^\n+|\n+$/g, '');
+}
+
 window.Spectral = Object.assign(window.Spectral || {}, {
     version: 1,
     editor: document.getElementById('editor'),
@@ -10430,6 +10531,8 @@ window.Spectral = Object.assign(window.Spectral || {}, {
     addCursorAtIndex,
     selectRangeByIndex,
     getIndex,
+    getEditorSelectionText,
+    getEditorSelectionHtml,
     insertSvg,
     moveSvg,
     getEditorHtml: () => document.getElementById('editor')?.innerHTML || '',
@@ -12986,8 +13089,8 @@ text = text.replace(/§§CODESPAN\d+§§/g, '<code></code>');
      background:white; padding:20px; border:1px solid #ccc; box-shadow: 0 4px 8px rgba(0,0,0,0.2); z-index:9999;">
   <h4 id="popupTextAreaHeading">Text Input:</h4>
   <textarea id="popupTextarea" rows="12" cols="80" style="width:100%;"></textarea><br><br>
-  <button onclick="submitTextPopup()">OK</button>
-  <button onclick="closeTextPopup()">Cancel</button>
+  <button id="popupTextOkButton" onclick="submitTextPopup()">OK</button>
+  <button id="popupTextCloseButton" onclick="closeTextPopup()">Cancel</button>
 </div>
 
 <div id="diffNotesPopup" style="display:none; position:fixed; top:10%; left:50%; transform:translateX(-50%);

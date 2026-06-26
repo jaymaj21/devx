@@ -19312,6 +19312,509 @@ proc commands {{pattern .} args} {
      return $result;
 }
 
+proc cmdhelp {{pattern {}}} {
+    showOutput [cmdhelp_text $pattern] cmdhelp "Spectral Command Reference" end
+}
+
+proc cmdhelp_text {{pattern {}}} {
+    global all_commands
+    set docs [cmdhelp_doc_map]
+    set text "Spectral Command Reference\n"
+    append text "==========================\n\n"
+    append text "Usage:\n"
+    append text "  cmdhelp                 Show this searchable reference.\n"
+    append text "  cmdhelp regex           Show only commands whose name or help matches regex.\n"
+    append text "  commands regex          Return matching command names only.\n"
+    append text "  args command            Return Tcl argument names for a proc.\n\n"
+    append text "Search: use the Find toolbar at the top of this popup, then press Enter for next match.\n\n"
+
+    set grouped {}
+    foreach cmd [cmdhelp_command_names] {
+        set entry [cmdhelp_entry $cmd $docs]
+        if {$entry eq ""} {
+            continue
+        }
+        lassign $entry category signature description
+        set haystack "$cmd $category $signature $description"
+        if {$pattern ne "" && ![regexp -nocase -- $pattern $haystack]} {
+            continue
+        }
+        dict lappend grouped $category [list $cmd $signature $description]
+    }
+
+    foreach category [cmdhelp_category_order] {
+        if {![dict exists $grouped $category]} {
+            continue
+        }
+        append text "\n$category\n"
+        append text [string repeat "-" [string length $category]] "\n"
+        foreach entry [lsort -dictionary -index 0 [dict get $grouped $category]] {
+            lassign $entry cmd signature description
+            append text "\n  $signature\n"
+            append text "      $description\n"
+        }
+        dict unset grouped $category
+    }
+
+    foreach category [lsort -dictionary [dict keys $grouped]] {
+        append text "\n$category\n"
+        append text [string repeat "-" [string length $category]] "\n"
+        foreach entry [lsort -dictionary -index 0 [dict get $grouped $category]] {
+            lassign $entry cmd signature description
+            append text "\n  $signature\n"
+            append text "      $description\n"
+        }
+    }
+    return $text
+}
+
+proc cmdhelp_command_names {} {
+    global all_commands
+    set result {}
+    foreach cmd $all_commands {
+        set cmd [string trim $cmd]
+        if {$cmd ne "" && [cmdhelp_should_include_command $cmd]} {
+            lappend result $cmd
+        }
+    }
+    return [lsort -dictionary -unique $result]
+}
+
+proc cmdhelp_should_include_command {cmd} {
+    if {[string match .* $cmd]} {
+        return 0
+    }
+    if {[string match _* $cmd]} {
+        return 0
+    }
+    if {[regexp -nocase {^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$} $cmd]} {
+        return 0
+    }
+    return 1
+}
+
+proc cmdhelp_entry {cmd docs} {
+    if {[dict exists $docs $cmd]} {
+        lassign [dict get $docs $cmd] category description
+    } elseif {[cmdhelp_is_external_utility $cmd]} {
+        set category "External Utilities"
+        set description "Run the bundled external utility named '$cmd' through tk_exec."
+    } else {
+        return {}
+    }
+    return [list $category [cmdhelp_signature $cmd] $description]
+}
+
+proc cmdhelp_signature {cmd} {
+    global qcInterp
+    set args {}
+    if {[llength [info commands $cmd]] > 0 && ![catch {info args $cmd} args]} {
+        return [cmdhelp_format_signature $cmd $args]
+    }
+    if {[info exists qcInterp] && [interp exists $qcInterp]} {
+        if {![catch {interp eval $qcInterp [list info args $cmd]} args]} {
+            return "$cmd [join $args { }]"
+        }
+    }
+    return $cmd
+}
+
+proc cmdhelp_format_signature {cmd argList} {
+    set parts {}
+    foreach arg $argList {
+        if {[catch {info default $cmd $arg default} hasDefault]} {
+            lappend parts $arg
+        } elseif {$hasDefault} {
+            lappend parts [format "{%s %s}" $arg [list $default]]
+        } else {
+            lappend parts $arg
+        }
+    }
+    return "$cmd [join $parts { }]"
+}
+
+proc cmdhelp_default_description {cmd} {
+    if {[cmdhelp_is_external_utility $cmd]} {
+        return "Run the bundled external utility named '$cmd' through tk_exec."
+    }
+    if {[llength [info commands $cmd]] > 0} {
+        return "Exported Tcl proc. See its signature and source for detailed behavior."
+    }
+    return "Exported command or widget alias."
+}
+
+proc cmdhelp_category_for {cmd} {
+    if {[cmdhelp_is_external_utility $cmd]} {return "External Utilities"}
+    if {[regexp {^(sel|unsel|invsel|copySelection|quotesel|selfrom|selto|selend|selstart|selmove|seltag|seltags|alltags|tags_|add_tags|selexpand|match_)} $cmd]} {return "Selection And Tags"}
+    if {[regexp {(note|notes|Note)} $cmd]} {return "Notes"}
+    if {[regexp {(hl|highlight|color|bg|fg|font|border|block_color|nested_block_color)} $cmd]} {return "Highlighting And Formatting"}
+    if {[regexp {(grep|search|find|re|regex|regexp|substitute|replace|diff)} $cmd]} {return "Search Replace And Diff"}
+    if {[regexp {(file|folder|dir|load|save|read|write|html|coverage|trace)} $cmd]} {return "Files Data And Reports"}
+    if {[regexp {(insert|delete|paste|yank|yy|yp|dd|delline|dellines|keeplines|sort|wrap|reflow|case|camel|snake|kebab|upper|lower|reverse)} $cmd]} {return "Editing Text"}
+    if {[regexp {(image|media|audio|slides|ocr|watermark|tesseract)} $cmd]} {return "Media"}
+    if {[regexp {(hex|bin|base64|url|ascii|binary|encode|decode)} $cmd]} {return "Encoding And Binary"}
+    if {[regexp {(test|assert|check|verifier|generator|rest|curl|abort)} $cmd]} {return "Testing And Automation"}
+    if {[regexp {(menu|popup|show_|tk_|bind|clipboard|font|tooltip|status|cmd|recent|history|help|exit)} $cmd]} {return "UI And Session"}
+    if {[regexp {^(:|/|dw|cc|p|u|yw|d/|dx/|sel/|selx/)} $cmd]} {return "Vim-Style Shortcuts"}
+    return "Miscellaneous"
+}
+
+proc cmdhelp_is_external_utility {cmd} {
+    set external {
+        HtmlClipboard agrep ansi2knr basename bc bison bunzip2 bzip2 bzip2recover
+        cat chgrp chmod chown cksum cmp comm compress cp csplit cut date dc df
+        diff diff3 dircolors dirname du echo egrep env expand factor fgrep find
+        flex fmt fold fsplit gawk gclip gplay grep gsar gunzip gzip head id
+        indent install jwhois less lesskey ln logname ls m4 make makedepend
+        makemsg man md5sum mkdir mkfifo mknod mv mvdir nl od paste patch
+        pathchk pclip pr printenv printf ptx recode rm rman rmdir sdiff sed
+        seq sha1sum shar sleep sort stego su sum sync tac tail tar tee test
+        touch tr tsort type uname unexpand uniq unrar unshar unzip uudecode
+        uuencode wc wget which whoami xargs yes zcat zip
+    }
+    return [expr {[lsearch -exact $external $cmd] >= 0}]
+}
+
+proc cmdhelp_category_order {} {
+    return {
+        Core
+        Input Dialogs
+        Editing Text
+        Selection And Tags
+        Search Replace And Diff
+        Highlighting And Formatting
+        Notes
+        Files Data And Reports
+        Media
+        Encoding And Binary
+        Testing And Automation
+        UI And Session
+        Vim-Style Shortcuts
+        External Utilities
+        Miscellaneous
+    }
+}
+
+proc cmdhelp_doc_map {} {
+    set docs {}
+    foreach {cmd category description} {
+        cmdhelp {Core} {Open this searchable command reference. Pass a regex to filter entries.}
+        commands {Core} {Return exported command names matching an optional regular expression.}
+        args {Core} {Return Tcl argument names for a command.}
+        puts {Core} {Write text to the status pane, or to the editor when cmd_to_editor is enabled.}
+        cmd_to_editor {Core} {Report whether command output should be inserted into the editor.}
+        guid {Core} {Return a generated unique identifier string.}
+        processStringInput {Input Dialogs} {Show a single-line input dialog and call a callback proc with the entered string.}
+        processTextInput {Input Dialogs} {Show a multiline input dialog and call a callback proc with the entered text.}
+        processMultipleStringInputs {Input Dialogs} {Show multiple named input fields and call a callback proc with all entered values.}
+        show_text_input {Input Dialogs} {Show the legacy multiline input dialog used by note, search, and image tools.}
+        show_choice {Input Dialogs} {Show a choice dialog and return or process the selected value.}
+        insert_text {Editing Text} {Insert text at an explicit text index, optionally tagged.}
+        insert_at {Editing Text} {Insert text at the current insert position.}
+        insert_before {Editing Text} {Insert text before the current line or position.}
+        insert_after {Editing Text} {Insert text after the current line or position.}
+        hlt_insert_at {Editing Text} {Insert text at a highlighter/text index.}
+        pasteMultiLine {Editing Text} {Paste multiline content into the editor.}
+        pasteMultiLineEnd {Editing Text} {Paste multiline content at the end of the current content.}
+        pasteMultiselClipAtEnd {Editing Text} {Paste multi-selection clipboard content at the end.}
+        yy {Editing Text} {Yank/copy the current line or requested lines.}
+        yp {Editing Text} {Yank current line(s), then paste after the current line.}
+        dd {Editing Text} {Delete and yank the current line or requested lines.}
+        delline {Editing Text} {Delete the current line.}
+        dellines {Editing Text} {Delete matching or selected lines.}
+        keeplines {Editing Text} {Keep matching lines and remove others.}
+        delete_empty_lines {Editing Text} {Remove blank or whitespace-only lines.}
+        delete_notes {Editing Text} {Delete note buttons from the current text.}
+        delete_selected_notes {Editing Text} {Delete selected note buttons.}
+        delete_notes_by_content {Editing Text} {Delete notes whose content matches criteria.}
+        reverse_line_order {Editing Text} {Reverse the order of selected or current lines.}
+        reverse_char_order {Editing Text} {Reverse character order in selected text.}
+        sort_lines {Editing Text} {Sort selected lines.}
+        sort_selected {Editing Text} {Sort the selected text or selected lines.}
+        sortuniq {Editing Text} {Sort and uniquify selected lines.}
+        wrap {Editing Text} {Wrap selected or current text.}
+        reflow {Editing Text} {Reflow selected prose to a target width.}
+        upper_case {Editing Text} {Return the supplied string in uppercase.}
+        lower_case {Editing Text} {Return the supplied string in lowercase.}
+        uc {Editing Text} {Uppercase selected text.}
+        lc {Editing Text} {Lowercase selected text.}
+        camel {Editing Text} {Convert selected text to camelCase.}
+        camel_case {Editing Text} {Convert text to camelCase.}
+        pascal {Editing Text} {Convert selected text to PascalCase.}
+        pascal_case {Editing Text} {Convert text to PascalCase.}
+        snake {Editing Text} {Convert selected text to snake_case.}
+        snake_case {Editing Text} {Convert text to snake_case.}
+        kebab {Editing Text} {Convert selected text to kebab-case.}
+        kebab_case {Editing Text} {Convert text to kebab-case.}
+        quoteSel {Editing Text} {Quote the selected text.}
+        quotesel {Editing Text} {Quote the selected text.}
+        comma_separate {Editing Text} {Format values as comma-separated text.}
+        prefixes {Editing Text} {Return or process prefixes for the supplied words.}
+        suffixes {Editing Text} {Return or process suffixes for the supplied words.}
+        sel {Selection And Tags} {Select text or manipulate the current selection.}
+        selre {Selection And Tags} {Select text matching a regular expression.}
+        unselre {Selection And Tags} {Remove selection from text matching a regular expression.}
+        invsel {Selection And Tags} {Invert the current selection.}
+        selOnly {Selection And Tags} {Keep or operate only on selected text.}
+        selskip {Selection And Tags} {Skip or remove parts of the selection by pattern.}
+        selexpand {Selection And Tags} {Expand the current selection.}
+        selexpandendl {Selection And Tags} {Expand selection to the end of line.}
+        selendl {Selection And Tags} {Select to the end of line.}
+        selfromstart {Selection And Tags} {Select from line/start boundary to the caret.}
+        seltoend {Selection And Tags} {Select from the caret to the end.}
+        selend {Selection And Tags} {Return or move to the selection end.}
+        selstart {Selection And Tags} {Return or move to the selection start.}
+        selmove {Selection And Tags} {Move the current selection.}
+        selrect {Selection And Tags} {Create or operate on a rectangular selection.}
+        seltag {Selection And Tags} {Select text carrying a tag.}
+        seltags {Selection And Tags} {Return tags on selected text.}
+        alltags {Selection And Tags} {Return all editor tags.}
+        tags_in_range {Selection And Tags} {Return tags present in a text range.}
+        tags_overlapping_selection {Selection And Tags} {Return tags overlapping the current selection.}
+        tags_contained_in_selection {Selection And Tags} {Return tags fully contained in the current selection.}
+        add_tags_to_sel {Selection And Tags} {Apply tags to the current selection.}
+        add_hypertarget {Selection And Tags} {Add a hyperlink target at the current location.}
+        get_hypertarget {Selection And Tags} {Return hyperlink target metadata.}
+        add_hypertargets_at_sel {Selection And Tags} {Add hyperlink targets at selected locations.}
+        clear_hyperlink_targets {Selection And Tags} {Remove hyperlink targets.}
+        show_hyperlink_targets {Selection And Tags} {Show hyperlink target information.}
+        hyperlink_to_selected {Selection And Tags} {Create a hyperlink to selected text.}
+        hyperlink_selected_grep_lines {Selection And Tags} {Create hyperlinks from selected grep result lines.}
+        add_ref_to_listed_files {Selection And Tags} {Add a reference to files listed in the editor.}
+        copySelection {Selection And Tags} {Copy or cut the selection from a text widget.}
+        match_longest {Selection And Tags} {Use longest-match behavior for selection/search helpers.}
+        match_shortest {Selection And Tags} {Use shortest-match behavior for selection/search helpers.}
+        hl {Highlighting And Formatting} {Highlight matches or selected text.}
+        hlre {Highlighting And Formatting} {Highlight text matching a regular expression.}
+        set_hl_bg {Highlighting And Formatting} {Set highlighter background color.}
+        set_hl_fg {Highlighting And Formatting} {Set highlighter foreground color.}
+        set_hl_font {Highlighting And Formatting} {Set highlighter font.}
+        pickColor {Highlighting And Formatting} {Open the color picker and return/apply the selected color.}
+        block_color {Highlighting And Formatting} {Color or select top-level brace blocks matching regex filters.}
+        nested_block_color {Highlighting And Formatting} {Color or select nested brace blocks at a requested nesting level.}
+        clearHighlightsInRange {Highlighting And Formatting} {Clear highlighting tags within a range.}
+        add_border {Highlighting And Formatting} {Add a border style to selected or tagged content.}
+        remove_border {Highlighting And Formatting} {Remove a border style from selected or tagged content.}
+        set_bg {Highlighting And Formatting} {Set background color.}
+        set_fg {Highlighting And Formatting} {Set foreground color.}
+        enlarge_font {Highlighting And Formatting} {Increase font size for the editor or widget.}
+        enlargeFonts {Highlighting And Formatting} {Recursively increase widget font sizes.}
+        substitute {Search Replace And Diff} {Run substitution on editor text.}
+        replace_in_file {Search Replace And Diff} {Replace matching text in a specified file.}
+        replace_in_listed_files {Search Replace And Diff} {Replace matching text in files listed in the editor.}
+        replace_by_analogy {Search Replace And Diff} {Replace whole-word text by analogy from target/replacement examples.}
+        replace_substring_by_analogy {Search Replace And Diff} {Replace substring text by analogy from target/replacement examples.}
+        regexRepeatedWord {Search Replace And Diff} {Regex helper for repeated words.}
+        regexNonAsciiChar {Search Replace And Diff} {Regex helper for non-ASCII characters.}
+        signedRegexp {Search Replace And Diff} {Build a regex from positive and negative pattern terms.}
+        search_multiple {Search Replace And Diff} {Search for multiple patterns.}
+        count_re {Search Replace And Diff} {Count regular-expression matches.}
+        count {Search Replace And Diff} {Count matches or selected items.}
+        idcount {Search Replace And Diff} {Count identifier occurrences.}
+        symcount {Search Replace And Diff} {Count symbol occurrences.}
+        annot_search {Search Replace And Diff} {Search annotation content.}
+        grepnotes {Search Replace And Diff} {Search note files or embedded notes.}
+        notesgrep {Search Replace And Diff} {Search notes.}
+        notesgrep_postfilter {Search Replace And Diff} {Filter notesgrep results.}
+        visit_re {Search Replace And Diff} {Visit matches of a regular expression.}
+        visit_re_quiet {Search Replace And Diff} {Visit regex matches without noisy status output.}
+        strdiff {Search Replace And Diff} {Show a diff between two strings or selected note contents.}
+        strdiff++ {Search Replace And Diff} {Show a diff while ignoring text matching a regex.}
+        strdiff_files {Search Replace And Diff} {Diff two files.}
+        strdiff_focus {Search Replace And Diff} {Focus the string diff popup.}
+        set_strdiff_context {Search Replace And Diff} {Set context lines for string diffs.}
+        clear_strdiff_context {Search Replace And Diff} {Clear string diff context.}
+        diffhl {Search Replace And Diff} {Diff text collected from two highlight colors.}
+        diffdiff {Search Replace And Diff} {Compare diff outputs.}
+        create_note {Notes} {Create an inline note button at an index with note text.}
+        note {Notes} {Create or manipulate notes.}
+        add_sel_as_notes {Notes} {Turn selected text into notes.}
+        addNotesForNumbers {Notes} {Add note buttons for numeric values.}
+        addAudioReadoutsOfNotes {Notes} {Create audio readouts for notes.}
+        add_note_context_menu_item {Notes} {Add an item to the note context menu.}
+        heal_note_button_bindings {Notes} {Restore note button event bindings.}
+        embed_html_notes {Notes} {Embed notes into HTML output.}
+        embed_images {Notes} {Embed image data into HTML or notes.}
+        get_notefiles {Notes} {Return note file paths.}
+        delete_images {Media} {Delete embedded images.}
+        insert_image {Media} {Insert an image into the editor.}
+        add_media_file_at {Media} {Attach or insert a media file at an index.}
+        add_file_at {Media} {Attach or insert a file at an index.}
+        applyWatermark {Media} {Apply a watermark to an image.}
+        convert_images {Media} {Convert image files.}
+        set_image_editor {Media} {Set the external image editor command.}
+        tesseract_ocr {Media} {Run OCR through Tesseract.}
+        readTextAloud {Media} {Read text aloud.}
+        load_slides {Media} {Load slide content.}
+        make_slides_template {Media} {Create a slides template.}
+        load_html {Files Data And Reports} {Load HTML content into the editor.}
+        save_html_files {Files Data And Reports} {Save editor HTML files.}
+        save_context_annotated_html {Files Data And Reports} {Save context-annotated HTML.}
+        save_context_annotated_ehtml {Files Data And Reports} {Save context-annotated extended HTML.}
+        save_coverage_annotated_html {Files Data And Reports} {Save coverage-annotated HTML.}
+        load_coverage_hits {Files Data And Reports} {Load coverage hits into the editor.}
+        load_coverage_hits_multifile {Files Data And Reports} {Load coverage hits from multiple files.}
+        clear_coverage_hits {Files Data And Reports} {Clear coverage hit annotations.}
+        annotate_coverage {Files Data And Reports} {Annotate coverage information.}
+        annotate_coverage_inline {Files Data And Reports} {Annotate coverage inline.}
+        annotate_contexts {Files Data And Reports} {Annotate context snippets.}
+        collect_trace_snippets {Files Data And Reports} {Collect snippets from trace data.}
+        trace_locations {Files Data And Reports} {Show trace locations.}
+        trace_hotspots {Files Data And Reports} {Show trace hotspots.}
+        read_trace_lookup {Files Data And Reports} {Read a trace lookup file.}
+        load_trace_lookup {Files Data And Reports} {Load trace lookup data.}
+        get_linenumbers_with_tag_in_trace_file {Files Data And Reports} {Return line numbers carrying a tag in a trace file.}
+        call_stack_from_reversed_trace_file {Files Data And Reports} {Create a call stack from a reversed trace file.}
+        read_file_contents {Files Data And Reports} {Return the contents of a file.}
+        read_ascii_file_contents {Files Data And Reports} {Return ASCII file contents.}
+        get_listed_files {Files Data And Reports} {Return file paths listed in the editor.}
+        get_all_filenames {Files Data And Reports} {Scan the editor text for filename:line or filename(line) style entries and return existing unique file paths.}
+        get_base_dirs {Files Data And Reports} {Spring plugin helper: return base directories searched when resolving imported Spring XML resources.}
+        load_all_listed_files {Files Data And Reports} {Load every file listed in the editor.}
+        load_more_lines {Files Data And Reports} {Load more lines around current context.}
+        load_more_lines_at_sel {Files Data And Reports} {Load more lines around selected context.}
+        load_one_line_before {Files Data And Reports} {Load one line before current context.}
+        load_one_line_after {Files Data And Reports} {Load one line after current context.}
+        load_sample_lines {Files Data And Reports} {Load sample lines from data.}
+        insert_line_after_grepline {Files Data And Reports} {Insert a line after a grep-result line.}
+        find_files {Files Data And Reports} {Find files matching criteria.}
+        find_in_folder_or_parents {Files Data And Reports} {Find a file in the current folder or parent folders.}
+        complete_filenames {Files Data And Reports} {Complete filenames.}
+        get_current_filename {Files Data And Reports} {Return the current filename.}
+        get_current_folder {Files Data And Reports} {Return the current folder.}
+        filepath {Files Data And Reports} {Return or manipulate the current file path.}
+        choosedir {Files Data And Reports} {Choose a directory.}
+        tempfilename {Files Data And Reports} {Return a temporary filename.}
+        saveWalkthroughZip {Files Data And Reports} {Save a walkthrough ZIP archive.}
+        exportButtonsToHtml {Files Data And Reports} {Export button content to HTML.}
+        reformat_xml {Files Data And Reports} {Reformat selected XML.}
+        reformat_xml_file {Files Data And Reports} {Reformat an XML file.}
+        reindent_json_file {Files Data And Reports} {Reindent a JSON file.}
+        quilt {Files Data And Reports} {Run or support quilt-style text/report generation.}
+        htmlClipboard {Encoding And Binary} {Work with HTML clipboard content.}
+        urlencode {Encoding And Binary} {URL-encode text.}
+        urldecode {Encoding And Binary} {URL-decode text.}
+        base64::encode {Encoding And Binary} {Base64-encode text.}
+        base64::decode {Encoding And Binary} {Base64-decode text.}
+        str2hex {Encoding And Binary} {Convert a string to hex.}
+        hex2bin {Encoding And Binary} {Convert hex to binary.}
+        bin2hex {Encoding And Binary} {Convert binary to hex.}
+        bin2chex {Encoding And Binary} {Convert binary to C-style hex.}
+        hex2dec {Encoding And Binary} {Convert hex to decimal.}
+        bin2dec {Encoding And Binary} {Convert binary to decimal.}
+        int2bin {Encoding And Binary} {Convert integer to binary representation.}
+        bin2int {Encoding And Binary} {Convert binary representation to integer.}
+        float2bin {Encoding And Binary} {Convert float to binary representation.}
+        bin2float {Encoding And Binary} {Convert binary representation to float.}
+        double2bin {Encoding And Binary} {Convert double to binary representation.}
+        bin2double {Encoding And Binary} {Convert binary representation to double.}
+        save_binary {Encoding And Binary} {Save binary data.}
+        load_binary {Encoding And Binary} {Load binary data.}
+        save_hex {Encoding And Binary} {Save hex data.}
+        load_hex {Encoding And Binary} {Load hex data.}
+        resttest {Testing And Automation} {Open or run a REST test helper.}
+        curltest {Testing And Automation} {Run curl-based tests.}
+        generaltest {Testing And Automation} {Run general tests.}
+        run_test_suite {Testing And Automation} {Run the test suite.}
+        rebaseline_tests {Testing And Automation} {Refresh test baselines.}
+        abort_tests {Testing And Automation} {Abort running tests.}
+        assert {Testing And Automation} {Assert a condition in scripts/tests.}
+        ascheck {Testing And Automation} {Run assertion/check helpers.}
+        add_generator {Testing And Automation} {Register a generator.}
+        run_generators {Testing And Automation} {Run registered generators.}
+        add_verifier {Testing And Automation} {Register a verifier.}
+        run_verifiers {Testing And Automation} {Run registered verifiers.}
+        every {Testing And Automation} {Run a command repeatedly on a timer.}
+        stopevery {Testing And Automation} {Stop a repeated every command.}
+        tk_exec {Testing And Automation} {Run an external command through the Tk execution wrapper.}
+        show_tooltip {UI And Session} {Show a tooltip.}
+        popupStatusContent {UI And Session} {Show the status pane content in a searchable popup.}
+        add_popup_menu_item {UI And Session} {Add an item to a popup menu.}
+        addmenu {UI And Session} {Add a menu.}
+        addmenucommand {UI And Session} {Add a command to a menu.}
+        getmenu {UI And Session} {Return a menu widget.}
+        menu {UI And Session} {Create or manipulate a Tk menu.}
+        .menu {UI And Session} {Main menu widget alias.}
+        bind {UI And Session} {Create a Tk binding.}
+        clipboard {UI And Session} {Access the Tk clipboard command.}
+        tk_getOpenFile {UI And Session} {Open a file chooser.}
+        tk_messageBox {UI And Session} {Open a message box.}
+        tk_chooseDirectory {UI And Session} {Open a directory chooser.}
+        tk_chooseColor {UI And Session} {Open a color chooser.}
+        recent_commands {UI And Session} {Show recent command history.}
+        cmdhistory {UI And Session} {Show command history, optionally filtered by regex.}
+        recent_files {UI And Session} {Show recent file history.}
+        clear_command_history {UI And Session} {Clear command history.}
+        clear_file_history {UI And Session} {Clear file history.}
+        set_evalmode {UI And Session} {Set command evaluation mode.}
+        toggleTopFrames {UI And Session} {Show or hide top frame/tool areas.}
+        set_case_sensitive_mode {UI And Session} {Enable or disable case-sensitive matching.}
+        get_case_sensitive_mode {UI And Session} {Return current case-sensitive matching mode.}
+        set_multiword_mode {UI And Session} {Enable or disable multiword matching mode.}
+        get_multiword_mode {UI And Session} {Return current multiword matching mode.}
+        configure_send_bgerror_to_status {UI And Session} {Configure errors to be routed to the status pane.}
+        addToStatus {UI And Session} {Append text to the status pane.}
+        bgerror {UI And Session} {Handle or report background errors.}
+        really_exit {UI And Session} {Exit after confirmation or cleanup.}
+        exit {UI And Session} {Exit the application/interpreter.}
+        edit {UI And Session} {Open or focus an editor.}
+        edit:close {UI And Session} {Close an editor.}
+        save {UI And Session} {Save the current document.}
+        title {UI And Session} {Get or set the window title.}
+        vanillaMode {UI And Session} {Switch to plain text widget mode.}
+        ctextMode {UI And Session} {Switch to ctext mode.}
+        forText {UI And Session} {Run a command for a text widget.}
+        editor {UI And Session} {Return or operate on the editor widget.}
+        hlt:save {UI And Session} {Save highlight/tag state.}
+        hlt:restore {UI And Session} {Restore highlight/tag state.}
+        spectral_script {UI And Session} {Run a Spectral script.}
+        load_plugin {UI And Session} {Load a plugin.}
+        set_spectral_subfolder {UI And Session} {Set the Spectral subfolder.}
+        userproc {UI And Session} {Define or run a user proc.}
+        add_to_all_commands {UI And Session} {Add a command name to command completion/help lists.}
+        registry {UI And Session} {Access registry helpers.}
+        installdir {UI And Session} {Return the installation directory.}
+        selected_device {UI And Session} {Return or set the selected device.}
+        arithmetic {Miscellaneous} {Evaluate arithmetic helpers.}
+        sum {Miscellaneous} {Return the sum of numeric arguments.}
+        prod {Miscellaneous} {Return the product of numeric arguments.}
+        min {Miscellaneous} {Return the minimum numeric value.}
+        max {Miscellaneous} {Return the maximum numeric value.}
+        lunique {Miscellaneous} {Return unique list elements.}
+        puts_list {Miscellaneous} {Print list elements.}
+        enumerate {Miscellaneous} {Enumerate list elements or lines.}
+        shuffle {Miscellaneous} {Shuffle list elements or lines.}
+        macex {Miscellaneous} {Macro expansion/helper command.}
+        defmacro {Miscellaneous} {Define a macro.}
+        def_p_macro {Miscellaneous} {Define a parameterized macro.}
+        expand_macro {Miscellaneous} {Expand a macro.}
+        dyslexiaOfNumbers {Miscellaneous} {Transform or inspect numbers using the dyslexia helper.}
+        selfrac {Miscellaneous} {Run the selfrac helper.}
+        adhd {Miscellaneous} {Run the ADHD helper.}
+        f1 {Miscellaneous} {Function-key helper command.}
+        embedded_content_on_single_line {Miscellaneous} {Convert embedded content to a single-line representation.}
+        gentablelogger {Miscellaneous} {Generate or use a table logger.}
+        : {Vim-Style Shortcuts} {Command-line style prefix/helper.}
+        :w {Vim-Style Shortcuts} {Save the current document.}
+        :w! {Vim-Style Shortcuts} {Force save the current document.}
+        :q {Vim-Style Shortcuts} {Quit or close.}
+        :wq {Vim-Style Shortcuts} {Save and quit.}
+        / {Vim-Style Shortcuts} {Search command shortcut.}
+        p {Vim-Style Shortcuts} {Paste shortcut.}
+        u {Vim-Style Shortcuts} {Undo shortcut.}
+        dw {Vim-Style Shortcuts} {Delete word shortcut.}
+        cc {Vim-Style Shortcuts} {Change current line shortcut.}
+        yw {Vim-Style Shortcuts} {Yank word shortcut.}
+        d/ {Vim-Style Shortcuts} {Delete through search match shortcut.}
+        dx/ {Vim-Style Shortcuts} {Delete excluding/around search match shortcut.}
+        sel/ {Vim-Style Shortcuts} {Select through search match shortcut.}
+        selx/ {Vim-Style Shortcuts} {Select excluding/around search match shortcut.}
+    } {
+        dict set docs $cmd [list $category $description]
+    }
+    return $docs
+}
+
 proc upper_case {string} {
     return [string toupper $string];
 }
@@ -19982,7 +20485,7 @@ proc processStringInput {title prompt callback} {
     button .dialog${suffix}.ok -text "OK" -command "
         set result \[.dialog${suffix}.entry get\]
         destroy .dialog${suffix};
-        eval \[list {*}$callback \$result\]
+        invokeProcessInputCallback [list $callback] \$result
         
     "
     pack .dialog${suffix}.ok -side left -padx 4 -pady 4
@@ -19998,6 +20501,62 @@ proc processStringInput {title prompt callback} {
     
     # Start the Tk event loop
     tkwait window .dialog${suffix}
+}
+
+proc processTextInput {title prompt callback} {
+     set suffix [guid]
+    # Create a dialog window
+    toplevel .dialog${suffix}
+    wm title .dialog${suffix} $title
+    wm geometry .dialog${suffix} 600x360
+
+    # Create a label with the prompt
+    label .dialog${suffix}.label -text $prompt
+    pack .dialog${suffix}.label -padx 4 -pady 4 -fill x
+
+    # Create a multiline text widget with a vertical scrollbar
+    frame .dialog${suffix}.textframe
+    text .dialog${suffix}.textframe.text -wrap word -undo true
+    scrollbar .dialog${suffix}.textframe.yscroll -orient vertical -command ".dialog${suffix}.textframe.text yview"
+    .dialog${suffix}.textframe.text configure -yscrollcommand ".dialog${suffix}.textframe.yscroll set"
+    pack .dialog${suffix}.textframe.yscroll -side right -fill y
+    pack .dialog${suffix}.textframe.text -side left -fill both -expand yes
+
+    # Create an OK button
+    frame .dialog${suffix}.buttons
+    button .dialog${suffix}.buttons.ok -text "OK" -command "
+        set result \[.dialog${suffix}.textframe.text get 1.0 end-1c\]
+        destroy .dialog${suffix};
+        invokeProcessInputCallback [list $callback] \$result
+    "
+    pack .dialog${suffix}.buttons.ok -side left -padx 4 -pady 4 -fill x -expand yes
+
+    # Create a Cancel button
+    button .dialog${suffix}.buttons.cancel -text "Cancel" -command "
+        destroy .dialog${suffix}
+    "
+    pack .dialog${suffix}.buttons.cancel -side right -padx 4 -pady 4 -fill x -expand yes
+
+    pack .dialog${suffix}.buttons -side bottom -fill x
+    pack .dialog${suffix}.textframe -side top -padx 4 -pady 4 -fill both -expand yes
+
+    # Focus the text widget
+    focus .dialog${suffix}.textframe.text
+
+    # Start the Tk event loop
+    tkwait window .dialog${suffix}
+}
+
+proc invokeProcessInputCallback {callback args} {
+    global qcInterp
+    set cmd [lindex $callback 0]
+    if {[llength [info commands $cmd]] > 0} {
+        uplevel #0 [list {*}$callback {*}$args]
+    } elseif {[info exists qcInterp] && [interp exists $qcInterp] && [llength [interp eval $qcInterp [list info commands $cmd]]] > 0} {
+        interp eval $qcInterp [list {*}$callback {*}$args]
+    } else {
+        error "process input callback not found: $callback"
+    }
 }
 
 
@@ -20024,7 +20583,7 @@ proc processMultipleStringInputs {title prompts callback} {
            lappend result \[.dialog${suffix}.entry\${prompt} get\] 
         \}
         destroy .dialog${suffix};
-        eval \[list {*}$callback {*}\$result\]
+        invokeProcessInputCallback [list $callback] {*}\$result
         
     "
     pack .dialog${suffix}.ok -side left -padx 4 -pady 4
@@ -20246,6 +20805,7 @@ add_spectral_alias add_note_context_menu_item;
 add_spectral_alias popupStatusContent;
 add_spectral_alias selected_device;
 add_spectral_alias processStringInput;
+add_spectral_alias processTextInput;
 add_spectral_alias saveWalkthroughZip;
 add_spectral_alias clear_hyperlink_targets;
 add_spectral_alias clear_hyperlinks;
@@ -20444,6 +21004,7 @@ add_spectral_alias  clipboard;
 add_spectral_alias  addmenucommand;
 add_spectral_alias  .menu;
 add_spectral_alias  menu;
+add_spectral_alias  cmdhelp;
 add_spectral_alias  set_image_editor;
 add_spectral_alias  enumerate;
 add_spectral_alias  hex2bin  
