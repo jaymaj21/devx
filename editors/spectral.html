@@ -19,6 +19,15 @@
 <div class="toolbars" id="top_toolbars">
     <div class="toolbar">
         <input type="file" id="fileLoader" title="Open file ...">
+        <details class="toolbar-menu">
+            <summary title="Search options">Options</summary>
+            <div class="toolbar-menu-panel">
+                <label><input type="checkbox" id="showSearchResults" title="Show listing of search results"> Show search results</label>
+                <label><input type="checkbox" id="doubleClickMultiwordMode" title="Double-click highlights adjacent space-separated tokens"> Double-click phrase tokens</label>
+                <label><input type="checkbox" id="doubleClickPunctuationTokenMode" title="Double-click highlights tokens joined by punctuation separators"> Double-click punctuation tokens</label>
+                <label><input type="checkbox" id="doubleClickHyphenatedMode" title="Double-click highlights a full hyphenated token"> Double-click hyphenated tokens</label>
+            </div>
+        </details>
 
         <button onclick="execBold()" id="boldButton" title="Boldface the selection">B</button>
         <button onclick="execItalic()" id="italicsButton" title="Italicize the selection">I</button>
@@ -32,14 +41,14 @@
         <button onclick="target()" title="Set target">🎯</button>
         <button onclick="link()" title="Create link to target">[🔗]</button>    
         <button onclick="xlink()" title="Create external link">ext🔗</button> 
-        <button onclick="execCmd('removeFormat')" title="Clear highlighting/formatting from selection">Clear Formatting</button>
+        <button onclick="clearFormattingInSelection()" title="Clear highlighting/formatting from selection">Clear Formatting</button>
         <input type="color" id="editorBgColor" title="Editor Background Color" value="#ffffff">
         <button onclick="setDefaultFont()" title="Set default font and size">𝒟ℱ</button>
         <button onclick="copyEditorToClipboard()" title="Copy editor content to clipboard">📋 Copy</button>
         
         <button onclick="showAWSConfigPopup()" title="Configure S3 details">S3 🔧🔑</button>
-        <button onclick="promptAndSaveToS3()" title="Save to S3 storage">💾 Save to S3</button>
-        <button onclick="promptAndLoadFromS3()" title="Load from S3 storage">📂 Load from S3</button>
+        <button onclick="promptAndSaveToS3()" title="Save to S3 storage">💾 S3</button>
+        <button onclick="promptAndLoadFromS3()" title="Load from S3 storage">📂 S3</button>
         <button title="Clean up MathML" onclick="tidyUp()">🧹 MathML</button> 
 
         
@@ -103,8 +112,6 @@
         <input type="text" id="searchBox7" placeholder="Enter regex, press enter">
         <button id="hlButton7" class="hlButton"> 🖍️</button>
         <button onclick="showMultiRegexHighlightPopup()" title="Highlight multiple regexes (one per line)">🖍*</button>
-
-        <label> <input type="checkbox" id="showSearchResults" title="Show listing of search results">≣</label>
     </div>
     <div class="toolbar" id="statusBar">
       <textarea id="statusText" rows="2" readonly></textarea>
@@ -442,6 +449,9 @@ function popupTextSearchHighlightTemporaryOccurrences(root, word) {
         span.style.backgroundColor = color;
         range.surroundContents(span);
     });
+    if (matches.length) {
+        normalizeEditorDom(root, { quiet: true });
+    }
 }
 
 function popupTextSearchCollectWholeWordMatches(node, word) {
@@ -2143,6 +2153,49 @@ function selectText(containerid) {
         .toolbar button, select, input[type="text"] {
             margin-right: 5px;
         }
+        .toolbar-menu {
+            position: relative;
+            display: inline-block;
+            margin-right: 5px;
+        }
+        .toolbar-menu > summary {
+            list-style: none;
+            cursor: pointer;
+            user-select: none;
+            border: 1px solid #aaa;
+            background: #eee;
+            padding: 3px 8px;
+            min-height: 20px;
+            line-height: 20px;
+        }
+        .toolbar-menu > summary::-webkit-details-marker {
+            display: none;
+        }
+        .toolbar-menu > summary::after {
+            content: " v";
+            font-size: 0.85em;
+        }
+        .toolbar-menu[open] > summary::after {
+            content: " ^";
+        }
+        .toolbar-menu-panel {
+            position: absolute;
+            left: 0;
+            top: calc(100% + 2px);
+            z-index: 1000;
+            min-width: 180px;
+            max-width: calc(100vw - 16px);
+            padding: 6px 8px;
+            border: 1px solid #aaa;
+            background: #fff;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+        }
+        .toolbar-menu-panel label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
         .highlight1 {
             background-color: #f0f583;
         }
@@ -2525,6 +2578,95 @@ let savedEditorRange = null;
         }
         function execCmd(command, value = null) {
             document.execCommand(command, false, value);
+        }
+
+        function getEditorSelectionRangeForFormatting() {
+            const editor = document.getElementById('editor');
+            const selection = window.getSelection();
+            if (selection && selection.rangeCount > 0) {
+                const liveRange = selection.getRangeAt(0);
+                if (!liveRange.collapsed && editor.contains(liveRange.commonAncestorContainer)) {
+                    return liveRange.cloneRange();
+                }
+            }
+            if (savedEditorRange && !savedEditorRange.collapsed && editor.contains(savedEditorRange.commonAncestorContainer)) {
+                return savedEditorRange.cloneRange();
+            }
+            return null;
+        }
+
+        function clearFormattingElementLooksPresentational(el) {
+            if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
+            const tag = el.tagName.toLowerCase();
+            if (tag !== 'span') return true;
+
+            const className = el.className || '';
+            if (/\b(?:highlight|highlight[1-7]|block-color-highlight|popup-overlay-temp-highlight|popup-search-hit|popup-search-current)\b/.test(className)) {
+                return true;
+            }
+
+            const styleText = el.getAttribute('style') || '';
+            if (/(?:background|color|font|text-decoration|text-shadow|letter-spacing|white-space|vertical-align)/i.test(styleText)) {
+                return true;
+            }
+
+            const names = el.getAttributeNames();
+            return names.length === 0 || names.every(name => name === 'class' || name === 'style');
+        }
+
+        function unwrapElementPreservingChildren(el) {
+            const parent = el.parentNode;
+            if (!parent) return;
+            while (el.firstChild) {
+                parent.insertBefore(el.firstChild, el);
+            }
+            el.remove();
+        }
+
+        function clearFormattingInFragment(fragment) {
+            const selectors = [
+                'span', 'font', 'b', 'strong', 'i', 'em', 'u', 's',
+                'strike', 'mark', 'small', 'big', 'sub', 'sup'
+            ].join(',');
+
+            Array.from(fragment.querySelectorAll(selectors)).reverse().forEach(el => {
+                if (clearFormattingElementLooksPresentational(el)) {
+                    unwrapElementPreservingChildren(el);
+                }
+            });
+        }
+
+        function clearFormattingInSelection() {
+            const editor = document.getElementById('editor');
+            const range = getEditorSelectionRangeForFormatting();
+            if (!range) {
+                setStatus("Select content in the editor before clearing formatting.");
+                return;
+            }
+
+            save();
+            const fragment = range.extractContents();
+            clearFormattingInFragment(fragment);
+
+            const startMarker = document.createTextNode('');
+            const endMarker = document.createTextNode('');
+            fragment.insertBefore(startMarker, fragment.firstChild);
+            fragment.appendChild(endMarker);
+            range.insertNode(fragment);
+
+            const restored = document.createRange();
+            restored.setStartAfter(startMarker);
+            restored.setEndBefore(endMarker);
+            startMarker.remove();
+            endMarker.remove();
+
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(restored);
+            savedEditorRange = restored.cloneRange();
+
+            normalizeEditorDom(editor, { quiet: true });
+            setStatus("Cleared formatting from selection.");
         }
         
         function execItalic() {
@@ -3216,8 +3358,7 @@ function getEditorHTML() {
         
 
         document.getElementById('editor').addEventListener('dblclick', function(event) {
-            const selection = window.getSelection();
-            let word = selection.toString().trim();
+            let word = getDoubleClickHighlightText(event);
             // For inline SVG text, selection can be empty; fall back to target text
             if (!word && event.target && event.target.closest('svg')) {
                 word = (event.target.textContent || '').trim();
@@ -3227,6 +3368,80 @@ function getEditorHTML() {
                 
             }
         });
+
+        function getDoubleClickHighlightText(event) {
+            const selection = window.getSelection();
+            const selected = selection ? selection.toString().trim() : '';
+            const multiwordMode = document.getElementById('doubleClickMultiwordMode')?.checked;
+            const punctuationTokenMode = document.getElementById('doubleClickPunctuationTokenMode')?.checked;
+            const hyphenatedMode = document.getElementById('doubleClickHyphenatedMode')?.checked;
+            if (!multiwordMode && !punctuationTokenMode && !hyphenatedMode) {
+                return selected;
+            }
+
+            const range = selection && selection.rangeCount ? selection.getRangeAt(0) : null;
+            const textNode = getTextNodeForDoubleClickRange(range, event);
+            if (!textNode) {
+                return selected;
+            }
+
+            const offset = getDoubleClickTextOffset(textNode, range);
+            let expanded = '';
+            if (multiwordMode) {
+                expanded = getTokenSequenceAtTextOffset(textNode.nodeValue || '', offset, 'phrase');
+            } else if (punctuationTokenMode) {
+                expanded = getTokenSequenceAtTextOffset(textNode.nodeValue || '', offset, 'punctuation');
+            } else {
+                expanded = getTokenSequenceAtTextOffset(textNode.nodeValue || '', offset, 'hyphen');
+            }
+            return expanded || selected;
+        }
+
+        function getTextNodeForDoubleClickRange(range, event) {
+            if (range) {
+                if (range.startContainer && range.startContainer.nodeType === Node.TEXT_NODE) {
+                    return range.startContainer;
+                }
+                if (range.commonAncestorContainer && range.commonAncestorContainer.nodeType === Node.TEXT_NODE) {
+                    return range.commonAncestorContainer;
+                }
+            }
+            if (event?.target?.nodeType === Node.TEXT_NODE) {
+                return event.target;
+            }
+            if (event?.target) {
+                const walker = document.createTreeWalker(event.target, NodeFilter.SHOW_TEXT);
+                return walker.nextNode();
+            }
+            return null;
+        }
+
+        function getDoubleClickTextOffset(textNode, range) {
+            if (!range) return 0;
+            if (range.startContainer === textNode) return range.startOffset;
+            if (range.endContainer === textNode) return Math.max(0, range.endOffset - 1);
+            return 0;
+        }
+
+        function getTokenSequenceAtTextOffset(text, offset, mode) {
+            const source = String(text || '');
+            if (!source) return '';
+            const safeOffset = Math.max(0, Math.min(offset, Math.max(0, source.length - 1)));
+            const tokenPattern = mode === 'phrase'
+                ? /[A-Za-z0-9_]+(?:[ -]+[A-Za-z0-9_]+)*/g
+                : mode === 'punctuation'
+                    ? /[A-Za-z0-9_]+(?:[-.,/:+*&]+[A-Za-z0-9_]+)*/g
+                    : /[A-Za-z0-9_]+(?:-+[A-Za-z0-9_]+)*/g;
+            let match;
+            while ((match = tokenPattern.exec(source)) !== null) {
+                const start = match.index;
+                const end = start + match[0].length;
+                if (safeOffset >= start && safeOffset <= end) {
+                    return match[0].trim();
+                }
+            }
+            return '';
+        }
         
         function rgbToHex(rgb) {
             const match = rgb.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
@@ -3394,8 +3609,33 @@ function getEditorHTML() {
         });
     }
 
-    // Sort and apply highlights in reverse DOM order
-    highlights.sort((a, b) => {
+    if(showResultsListing && colid >= 1 && colid <= 7){
+        highlights.forEach(({ node, spanStart, spanEnd }, index) => {
+            const range = document.createRange();
+            range.setStart(node, spanStart);
+            range.setEnd(node, spanEnd);
+            const anchorId = `srch_${generateGUID()}`;
+            highlights[index].anchorId = anchorId;
+            const afterText = getTextFromRangeEndToNextNewline(range);
+            const beforeText = getTextFromLastNewlineToRangeStart(range);
+
+            ++ resultCount;
+            resultListing.appendChild(document.createTextNode("#"+resultCount+"\t"+ escapeTextWithLineBreaks(beforeText.substr(-40))));
+
+            const resultAnchor = document.createElement('a');
+            resultAnchor.href = `#${anchorId}`;
+            resultAnchor.innerText = range.toString();
+            resultAnchor.style.display = 'inline';
+            resultAnchor.setAttribute("onclick","selectText('"+anchorId + "')");
+
+            resultListing.appendChild(resultAnchor);
+            resultListing.appendChild(document.createTextNode(escapeTextWithLineBreaks(afterText.substr(0,40))));
+            resultListing.appendChild(document.createElement('br'));
+        });
+    }
+
+    // Apply highlights in reverse DOM order so wrapping ranges does not disturb later offsets.
+    const highlightsToApply = highlights.slice().sort((a, b) => {
         if (a.node === b.node) return b.spanStart - a.spanStart;
         return textNodes.indexOf(b.node) - textNodes.indexOf(a.node);
     });
@@ -3457,32 +3697,17 @@ function getEditorHTML() {
     const effectiveColor = colid === 0 ? hlColor : (colorFromButton || hlColor);
 
     let totalMatches = highlights.length;
-    highlights.forEach(({ node, spanStart, spanEnd }) => {
+    highlightsToApply.forEach(({ node, spanStart, spanEnd, anchorId }) => {
         const range = document.createRange();
         range.setStart(node, spanStart);
         range.setEnd(node, spanEnd);
         const matchText = range.toString();
         const isSvg = isSvgTextNode(node);
 
-        let anchorId = null;
-        if(showResultsListing && colid >= 1 && colid <= 7){
-            anchorId = `srch_${generateGUID()}`;
-        }
-
         if (isSvg) {
             clearHighlightsInRange(range, editor);
             const tspan = createSvgHighlight(node, spanStart, spanEnd, { color: effectiveColor, colid, anchorId });
-            if (showResultsListing && anchorId && tspan) {
-                ++ resultCount; 
-                resultListing.appendChild(document.createTextNode("#"+resultCount+"\t"));
-                const resultAnchor = document.createElement('a');
-                resultAnchor.href = `#${anchorId}`;
-                resultAnchor.innerText = matchText;
-                resultAnchor.style.display = 'inline';
-                resultAnchor.setAttribute("onclick","selectText('"+anchorId + "')");
-                resultListing.appendChild(resultAnchor);
-                resultListing.appendChild(document.createElement('br'));
-            }
+            void tspan;
             return;
         }
         
@@ -3496,27 +3721,6 @@ function getEditorHTML() {
         
         if(showResultsListing && colid >= 1 && colid <= 7){
             span.id = anchorId;
-            
-            var afterText = getTextFromRangeEndToNextNewline(range);
-            var beforeText = getTextFromLastNewlineToRangeStart(range);
-            
-            ++ resultCount; 
-            resultListing.appendChild(document.createTextNode("#"+resultCount+"\t"+ escapeTextWithLineBreaks(beforeText.substr(-40))));
-
-           
-            
-            const resultAnchor = document.createElement('a');
-            resultAnchor.href = `#${anchorId}`;
-            resultAnchor.innerText = range.toString();
-            resultAnchor.style.display = 'inline';
-            resultAnchor.setAttribute("onclick","selectText('"+anchorId + "')");
-            
-            resultListing.appendChild(resultAnchor);
-            
-            resultListing.appendChild(document.createTextNode(   escapeTextWithLineBreaks(afterText.substr(0,40))) );
-
-            
-            resultListing.appendChild(document.createElement('br'));
         }
         
         
@@ -3585,6 +3789,9 @@ function getEditorHTML() {
         }
     });
 
+    if (totalMatches > 0) {
+        normalizeEditorDom(editor, { quiet: true });
+    }
     setStatus(`${totalMatches} match(es) for pattern: ${pattern}`);
 }
 
@@ -4267,6 +4474,61 @@ function copyTextToClipboardRobust(text) {
     });
 }
 
+function getCurrentEditorSelectionRange() {
+    const editor = document.getElementById('editor');
+    const selection = window.getSelection();
+    let range = null;
+
+    if (selection && selection.rangeCount > 0) {
+        const liveRange = selection.getRangeAt(0);
+        if (!liveRange.collapsed && editor.contains(liveRange.commonAncestorContainer)) {
+            range = liveRange.cloneRange();
+        }
+    }
+
+    if (!range && savedEditorRange && !savedEditorRange.collapsed && editor.contains(savedEditorRange.commonAncestorContainer)) {
+        range = savedEditorRange.cloneRange();
+    }
+
+    return range;
+}
+
+function getSelectionOuterHtmlFromEditor() {
+    const range = getCurrentEditorSelectionRange();
+    if (!range) return '';
+
+    const container = document.createElement('div');
+    container.appendChild(range.cloneContents());
+    return container.innerHTML;
+}
+
+async function writeHtmlToClipboardUtf8(html, plainText = '') {
+    await copyTextToClipboardRobust(html);
+}
+
+async function copySelectionOuterHtmlToClipboard() {
+    const range = getCurrentEditorSelectionRange();
+    if (!range) {
+        setStatus('F6 copy: no editor selection.');
+        return '';
+    }
+
+    const html = getSelectionOuterHtmlFromEditor();
+    if (!html) {
+        setStatus('F6 copy: selected editor content has no HTML.');
+        return '';
+    }
+
+    try {
+        await writeHtmlToClipboardUtf8(html, range.toString());
+        setStatus(`F6 copy: selected HTML source copied (${html.length} chars).`);
+        return html;
+    } catch (err) {
+        setStatus('F6 copy failed: ' + err.message);
+        return '';
+    }
+}
+
 function showText(str, popupid)
 {
   dec = Base64.decode(str);
@@ -4890,6 +5152,12 @@ document.addEventListener('keydown', function(event) {
     if (uuidPickMode && event.key === 'Escape') {
         event.preventDefault();
         cancelUuidPickMode();
+        return;
+    }
+
+    if (event.key === 'F6') {
+        event.preventDefault();
+        copySelectionOuterHtmlToClipboard();
         return;
     }
 
@@ -6594,6 +6862,8 @@ function evaluateJsCommand(command) {
         yp: () => yp(1),
         delete_empty_lines: () => delete_empty_lines(),
         deleteEmptyLines: () => deleteEmptyLines(),
+        normalizeEditorDom: () => normalizeEditorDom(),
+        copySelectionOuterHtmlToClipboard: () => copySelectionOuterHtmlToClipboard(),
         hl: () => showHighlightPopup(),
         sub: () => showSubstitutePopup(),
         replace: () => showSubstitutePopup()
@@ -6648,6 +6918,7 @@ function commandHelpSections() {
                 ['hl("TODO", 2)', 'Highlight regex matches using search-bar color id 1..7.'],
                 ['sub("foo", "bar", "i", 3, 8)', 'Regex substitution, optionally constrained to inclusive line numbers. Use "s" for case-sensitive.'],
                 ['fsub(2, "foo", "bar", "s", 3, 8)', 'Substitute only inside spans highlighted with color id 2.'],
+                ['copySelectionOuterHtmlToClipboard()', 'Copy the current editor selection as literal UTF-8 HTML source. F6 runs the same command.'],
                 ['incrint("\\\\bitem-\\\\d+\\\\b", 1)', 'Increment integers inside matches of a regex or string pattern, preserving zero padding where possible.']
             ]
         },
@@ -6731,6 +7002,7 @@ function commandHelpSections() {
                 ['keeplines()', 'Keep only lines containing cursors.'],
                 ['dellines()', 'Delete lines containing cursors.'],
                 ['delete_empty_lines()', 'Delete lines whose rendered text is only whitespace, while keeping media/control-only lines.'],
+                ['normalizeEditorDom()', 'Lightly clean editor DOM after span-heavy edits without full HTML reparse.'],
                 ['keeplinesWithHighlights()', 'Keep only lines containing highlight spans.'],
                 ['dellinesWithHighlights()', 'Delete lines containing highlight spans.']
             ]
@@ -8612,6 +8884,7 @@ async function dd(n = 1) {
     const range = document.createRange();
     range.setStartBefore(linesToDelete[0]);
     range.setEndAfter(linesToDelete[linesToDelete.length - 1]);
+    extendRangeEndToTrailingLineControls(range, linesToDelete[linesToDelete.length - 1], editor);
 
     // Copy to clipboard
     const div = document.createElement("div");
@@ -8706,6 +8979,7 @@ async function yy(n = 1) {
     const range = document.createRange();
     range.setStartBefore(linesToCopy[0]);
     range.setEndAfter(linesToCopy[linesToCopy.length - 1]);
+    extendRangeEndToTrailingLineControls(range, linesToCopy[linesToCopy.length - 1], editor);
 
     // Extract contents to clipboard
     const div = document.createElement("div");
@@ -8738,6 +9012,46 @@ async function yy(n = 1) {
         setStatus(`📋 Yanked!`);
     } catch (err) {
         setStatus("❌ Failed to copy to clipboard");
+    }
+}
+
+function getNextNodeAfterSubtree(node, root) {
+    let current = node;
+    while (current && current !== root) {
+        if (current.nextSibling) return current.nextSibling;
+        current = current.parentNode;
+    }
+    return null;
+}
+
+function isTrailingLineControlCandidate(node) {
+    if (!node) return false;
+    if (node.nodeType === Node.TEXT_NODE) {
+        return node.nodeValue.trim() === '';
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+        return false;
+    }
+    if (node.tagName === 'BR') {
+        return false;
+    }
+    if (node.matches && node.matches('.note-button')) {
+        return true;
+    }
+    return node.textContent.trim() === '';
+}
+
+function extendRangeEndToTrailingLineControls(range, anchorNode, root) {
+    let endNode = anchorNode;
+    let next = getNextNodeAfterSubtree(anchorNode, root);
+
+    while (next && isTrailingLineControlCandidate(next)) {
+        endNode = next;
+        next = getNextNodeAfterSubtree(next, root);
+    }
+
+    if (endNode && endNode !== anchorNode) {
+        range.setEndAfter(endNode);
     }
 }
 
@@ -8958,6 +9272,66 @@ function sanitizeHtml() {
     editor.innerHTML = processed;
 
     setStatus("Editor content sanitized");
+}
+
+function normalizeEditorDom(root = document.getElementById('editor'), opts = {}) {
+    if (!root) return { removedEmptySpans: 0, unwrappedPlainSpans: 0, mergedSpans: 0 };
+
+    const stats = { removedEmptySpans: 0, unwrappedPlainSpans: 0, mergedSpans: 0 };
+    const isInertPlainSpan = span =>
+        span.tagName === 'SPAN' &&
+        span.attributes.length === 0;
+    const isMergeableSpan = span =>
+        span.tagName === 'SPAN' &&
+        !span.id &&
+        !span.getAttributeNames().some(name => name.startsWith('data-') || name.startsWith('on')) &&
+        span.getAttributeNames().every(name => name === 'class' || name === 'style');
+    const sameSpanPresentation = (a, b) =>
+        a.className === b.className &&
+        (a.getAttribute('style') || '') === (b.getAttribute('style') || '');
+
+    root.normalize();
+
+    root.querySelectorAll('span').forEach(span => {
+        if (!span.parentNode) return;
+        if (isInertPlainSpan(span)) {
+            if (span.childNodes.length === 0) {
+                span.remove();
+                stats.removedEmptySpans++;
+            } else {
+                span.replaceWith(...span.childNodes);
+                stats.unwrappedPlainSpans++;
+            }
+        }
+    });
+
+    root.normalize();
+
+    Array.from(root.querySelectorAll('span')).reverse().forEach(span => {
+        if (!span.parentNode || !isMergeableSpan(span)) return;
+
+        let next = span.nextSibling;
+        while (next && next.nodeType === Node.TEXT_NODE && next.nodeValue === '') {
+            const empty = next;
+            next = next.nextSibling;
+            empty.remove();
+        }
+
+        if (next && next.nodeType === Node.ELEMENT_NODE && isMergeableSpan(next) && sameSpanPresentation(span, next)) {
+            while (next.firstChild) {
+                span.appendChild(next.firstChild);
+            }
+            next.remove();
+            stats.mergedSpans++;
+        }
+    });
+
+    root.normalize();
+
+    if (!opts.quiet) {
+        setStatus(`Normalized editor DOM: removed ${stats.removedEmptySpans} empty span(s), unwrapped ${stats.unwrappedPlainSpans}, merged ${stats.mergedSpans}.`);
+    }
+    return stats;
 }
 
 async function pasteSegmentsAcrossLines() {
@@ -13200,6 +13574,7 @@ text = text.replace(/§§CODESPAN\d+§§/g, '<code></code>');
   Ctrl+Alt+m     Match brackets (+ braces and parenthesis)
   Ctrl+Alt+p     Scale selected or nearby picture(s)
   Ctrl+Alt+P     Iconize selected picture(s)
+  F6             Copy selected editor HTML source to clipboard
   F7             Diff two notes
   F8             Pick and copy token under click
   F9             Annotate nearest image
