@@ -1,0 +1,31 @@
+{
+  "name": "jsexpect",
+  "version": "0.1.0",
+  "description": "A small Expect-like automation library and CLI for Node.js, built on a real pseudo-terminal.",
+  "type": "module",
+  "bin": {
+    "jsexpect": "./bin/jsexpect.js"
+  },
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "check": "node --check src/index.js && node --check bin/jsexpect.js && node --check examples/ssh-login.js && node --check examples/shell-demo.js && node --check examples/telehack.js && node --check examples/mock-login-terminal.js && node --check examples/mock-login-expect.js && node --check examples/multi-host-support.js && node --check examples/ephemeral-session-terminal.js && node --check examples/ephemeral-reconnect-support.js && node --check test/smoke.js",
+    "test": "node test/smoke.js"
+  },
+  "keywords": [
+    "expect",
+    "pty",
+    "terminal",
+    "automation",
+    "interact"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "node-pty": "^1.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
