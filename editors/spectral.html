@@ -6843,6 +6843,39 @@ function hideCmd() {
     return '';
 }
 
+function scrollEditorToEdge(edge) {
+    const editor = document.getElementById('editor');
+    if (!editor) return '';
+
+    if (edge === 'bottom') {
+        const marker = document.createElement('span');
+        marker.style.cssText = 'display:inline-block;width:1px;height:1px;overflow:hidden;';
+        marker.setAttribute('data-spectral-scroll-marker', 'true');
+        editor.appendChild(marker);
+        editor.scrollTop = editor.scrollHeight;
+        marker.scrollIntoView({ block: 'end', inline: 'nearest', behavior: 'auto' });
+        marker.remove();
+        editor.scrollTop = editor.scrollHeight;
+        setStatus('Scrolled to editor bottom.');
+        return '';
+    }
+
+    editor.scrollTop = 0;
+    editor.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'auto' });
+    const scroller = document.scrollingElement || document.documentElement;
+    if (scroller) scroller.scrollTop = Math.min(scroller.scrollTop, editor.offsetTop);
+    setStatus('Scrolled to editor top.');
+    return '';
+}
+
+function scrollToBottom() {
+    return scrollEditorToEdge('bottom');
+}
+
+function scrollToTop() {
+    return scrollEditorToEdge('top');
+}
+
 function evaluateJsCommand(command) {
     const text = String(command || '').trim();
     const lineCommand = parseLineCommand(text);
@@ -6864,6 +6897,8 @@ function evaluateJsCommand(command) {
         deleteEmptyLines: () => deleteEmptyLines(),
         normalizeEditorDom: () => normalizeEditorDom(),
         copySelectionOuterHtmlToClipboard: () => copySelectionOuterHtmlToClipboard(),
+        scrollToBottom: () => scrollToBottom(),
+        scrollToTop: () => scrollToTop(),
         hl: () => showHighlightPopup(),
         sub: () => showSubstitutePopup(),
         replace: () => showSubstitutePopup()
@@ -6897,7 +6932,9 @@ function commandHelpSections() {
             commands: [
                 ['cmdhelp()', 'Show this command reference.'],
                 ['help()', 'Show the keyboard shortcut help popup.'],
-                ['hideCmd()', 'Hide the bottom command bar.']
+                ['hideCmd()', 'Hide the bottom command bar.'],
+                ['scrollToTop()', 'Scroll the editor view to the top of the content.'],
+                ['scrollToBottom()', 'Scroll the editor view to the bottom of the content.']
             ]
         },
         {
@@ -10905,6 +10942,8 @@ window.Spectral = Object.assign(window.Spectral || {}, {
     addCursorAtIndex,
     selectRangeByIndex,
     getIndex,
+    scrollToBottom,
+    scrollToTop,
     getEditorSelectionText,
     getEditorSelectionHtml,
     insertSvg,
