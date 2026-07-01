@@ -1629,6 +1629,7 @@ proc add_double_click_handler {cmd menutxt} {
 
 add_double_click_handler load_one_line_before "Bind double-click to load one line before the grep line under cursor"
 add_double_click_handler load_one_line_after "Bind double-click to load one line after the grep line under cursor"
+add_double_click_handler quick_command_word "Bind double-click to append word/phrase to Quick Command"
 
 proc load_one_line_after {args} {
     load_more_lines 0 1;
@@ -1636,6 +1637,35 @@ proc load_one_line_after {args} {
 
 proc load_one_line_before {args} {
     load_more_lines 1 0;
+}
+
+proc quick_command_word {pos} {
+    global multiword_mode;
+    global hyphenated_word_mode;
+    global quickCommand;
+
+    if {$multiword_mode} {
+        set current_word [get_multiword_at_pos $pos];
+    } elseif {$hyphenated_word_mode} {
+        set current_word [get_hyphenated_word_at_pos $pos];
+    } else {
+        set current_word [.t get "$pos wordstart" "$pos wordend"];
+    }
+
+    set current_word [string trim $current_word];
+    if {$current_word == ""} {
+        return;
+    }
+
+    set entry [$quickCommand component entry];
+    set existing [$entry get];
+    if {$existing ne "" && ![regexp {\s$} $existing]} {
+        $entry insert end " ";
+    }
+    $entry insert end "$current_word ";
+    $entry icursor end;
+    focus $entry;
+    $entry configure -background lightblue;
 }
 $menu.options add separator;
 $menu.options add command -label "Default Font" -command "setDefaultFont";
