@@ -1,0 +1,4 @@
+interface:
+  display_name: "Gruggle"
+  short_description: "Manipulate, query, and render Graphviz DOT graphs with Gruggle."
+  default_prompt: "Use Gruggle to build, merge, filter, annotate, query, and render DOT graphs."
