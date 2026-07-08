@@ -115,6 +115,31 @@ TCP admin: 8084
 trace files: code-analytics\plant-trace-*.txt
 ```
 
+## Smoke-Test Code Analytics With capinger
+
+Use `capinger.java` when the user wants to verify that a running `code-analytics` UDP server accepts hits, logs, context changes, and remote export commands without launching an instrumented application.
+
+```powershell
+javac capinger.java
+java capinger CMD status
+java capinger CTX smoke-test
+java capinger HIT 1 1 7 2 1234 10
+java capinger LOG 1 1 7 2 smoke test log
+java capinger CTX_WITHDRAW smoke-test
+java capinger CMD coverage-report 1 1 capinger-smoke.cov
+java capinger CMD coverage-hits capinger-smoke-hits.csv
+java capinger CMD flush-trace
+```
+
+For a longer scripted run:
+
+```bat
+capinger_sequence.bat
+capinger_sequence.bat 127.0.0.1 8083
+```
+
+`capinger_sequence.bat` does not stop the server unless `SEND_EXIT=1` is set in the batch file.
+
 ## Run An Instrumented Java App
 
 Windows classpath:

@@ -1,6 +1,6 @@
 ---
 name: cov-for-distributed-systems-java
-description: Use when Codex needs to work with the Java side of CovForDistributedSystems, including source-level Java instrumentation with instr2.py, bytecode/JAR instrumentation with the branch-probe instrumenter, allocating probe id ranges across multiple source files or JARs, recording probe hits with mprewriter and code-analytics, loading branch-probe CSV metadata or grep-style scope_START metadata, loading Java class maps, filtering traces by class/path/method/probe kind/id, producing coverage reports, and annotating Java source JARs or source trees with probe hit counts.
+description: Use when Codex needs to work with the Java side of CovForDistributedSystems, including source-level Java instrumentation with instr2.py, bytecode/JAR instrumentation with the branch-probe instrumenter, allocating probe id ranges across multiple source files or JARs, recording probe hits with mprewriter and code-analytics, remotely triggering code-analytics exports over UDP, testing collectors with capinger, loading branch-probe CSV metadata or grep-style scope_START metadata, loading Java class maps, filtering traces by class/path/method/probe kind/id, producing coverage reports, and annotating Java source JARs or source trees with probe hit counts.
 ---
 
 # CovForDistributedSystems Java
@@ -21,6 +21,7 @@ Key components:
 - `instr2.py`: regex-based Java source rewriter that injects `mprewriter.scope_START(id)` calls and can emit CSV and grep-style metadata.
 - `branch-probe-suite/mprewriter-runtime`: runtime JAR required by instrumented applications.
 - `code-analytics`: Java/Clojure analytics server, UDP hit receiver, interactive shell, trace writer, trace analyzer, and metadata filter host.
+- `capinger.java` and `capinger_sequence.bat`: standalone UDP smoke-test client and scripted command sequence for sending `CMD`, `HIT`, `LOG`, and context packets to `code-analytics`.
 - `list_java_classes.tcl`: source indexer that maps Java class names to relative source paths.
 - `annotate_source_coverage.tcl`: annotates extracted Java sources from a sources JAR using coverage reports and branch probe CSVs.
 - `plant_trace_tool.tcl`: Tcl trace summary and dump wrapper.
@@ -78,11 +79,12 @@ Preserve generated artifacts in a timestamped folder under `development_tools/Co
 - Use Windows classpath separator `;` on this machine and `:` on Linux/macOS.
 - Prefer Maven commands shown in the references when both Maven and Gradle artifacts exist, unless the user is already working in Gradle.
 - Use `:help`, `:help trace`, `:help metadata`, `:help runtime`, and `:concepts` inside `ClojureShell` as the local source of truth for shell command details.
+- Use remote UDP `CMD ...` commands or `capinger` only for the fixed code-analytics allowlist; never expose or depend on remote Clojure evaluation.
 
 ## References
 
 - Use `references/java-workflows.md` for build, instrumentation, runtime, and end-to-end command recipes.
 - Use `references/source-level-instrumentation.md` for `instr2.py`, source-tree instrumentation, grep-style metadata, and Spectral/JMWrap trace lookup compatibility.
-- Use `references/code-analytics.md` for ClojureShell commands, trace analysis, metadata loading, filtering, and subset creation.
+- Use `references/code-analytics.md` for ClojureShell commands, remote UDP commands, `capinger`, trace analysis, metadata loading, filtering, and subset creation.
 - Use `references/source-annotation.md` for Java source JAR annotation with coverage reports and probe CSV metadata.
 - Use `references/troubleshooting.md` for common failure modes and checks.

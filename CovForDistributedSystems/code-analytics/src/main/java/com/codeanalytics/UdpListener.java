@@ -10,13 +10,11 @@ import java.util.concurrent.*;
 public class UdpListener implements Runnable {
     private final int port;
     private final Map<String, Integer> hitRecords;
-    private final HitTraceWriter traceWriter;
     private final ExecutorService parsePool;
 
-    public UdpListener(int port, Map<String, Integer> hitRecords, HitTraceWriter traceWriter) {
+    public UdpListener(int port, Map<String, Integer> hitRecords) {
         this.port = port;
         this.hitRecords = hitRecords;
-        this.traceWriter = traceWriter;
         int n = Math.max(2, Runtime.getRuntime().availableProcessors());
         this.parsePool = Executors.newFixedThreadPool(n, r -> {
             Thread t = new Thread(r, "UDP-Parser");
@@ -41,17 +39,33 @@ public class UdpListener implements Runnable {
                 byte[] payload = new byte[packetLen];
                 System.arraycopy(packet.getData(), 0, payload, 0, packetLen);
 
+                if (isRemoteCommand(payload)) {
+                    String command = new String(payload, 4, payload.length - 4, StandardCharsets.UTF_8);
+                    String result = RuntimeCommands.executeRemoteCommand(command, hitRecords);
+                    byte[] response = result.getBytes(StandardCharsets.UTF_8);
+                    DatagramPacket responsePacket = new DatagramPacket(
+                            response, response.length, packet.getAddress(), packet.getPort());
+                    serverSocket.send(responsePacket);
+                    System.out.println("[UDP-CMD] " + command.trim() + " -> " + result);
+                    continue;
+                }
+
+                HitTraceWriter traceWriter = RuntimeCommands.getTraceWriter();
                 if (traceWriter != null) {
-                    short mt = 1;
                     try {
-                        mt = ByteBuffer.wrap(payload).getShort(0);
-                    } catch (Exception ignore) {}
-                    short flag;
-                    if (mt == 2) flag = HitTraceWriter.FLAG_LOG;
-                    else if (mt == 3) flag = HitTraceWriter.FLAG_CTX_ATTACH;
-                    else if (mt == 4) flag = HitTraceWriter.FLAG_CTX_WITHDRAW;
-                    else flag = HitTraceWriter.FLAG_HIT;
-                    traceWriter.writeRaw(flag, HitTraceWriter.SRC_UDP, payload, 0, packetLen);
+                        short mt = 1;
+                        try {
+                            mt = ByteBuffer.wrap(payload).getShort(0);
+                        } catch (Exception ignore) {}
+                        short flag;
+                        if (mt == 2) flag = HitTraceWriter.FLAG_LOG;
+                        else if (mt == 3) flag = HitTraceWriter.FLAG_CTX_ATTACH;
+                        else if (mt == 4) flag = HitTraceWriter.FLAG_CTX_WITHDRAW;
+                        else flag = HitTraceWriter.FLAG_HIT;
+                        traceWriter.writeRaw(flag, HitTraceWriter.SRC_UDP, payload, 0, packetLen);
+                    } catch (IOException e) {
+                        System.err.println("[UDP] Trace write error: " + e.getMessage());
+                    }
                 }
 
                 parsePool.execute(() -> parsePacket(ByteBuffer.wrap(payload), hitRecords));
@@ -59,6 +73,14 @@ public class UdpListener implements Runnable {
         } catch (IOException e) {
             System.err.println("[UDP] Socket error: " + e.getMessage());
         }
+    }
+
+    private static boolean isRemoteCommand(byte[] payload) {
+        return payload.length > 4
+                && payload[0] == 'C'
+                && payload[1] == 'M'
+                && payload[2] == 'D'
+                && Character.isWhitespace((char) payload[3]);
     }
 
     private static void parsePacket(ByteBuffer messageBuffer, Map<String, Integer> hitRecords) {

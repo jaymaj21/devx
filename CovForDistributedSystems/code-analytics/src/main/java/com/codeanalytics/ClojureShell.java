@@ -6,7 +6,6 @@ import clojure.lang.IFn;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -17,22 +16,6 @@ public class ClojureShell {
     private final Map<String, Integer> hitRecords;
     private final TraceMetadataRegistry traceMetadata = new TraceMetadataRegistry();
     private File loadedTraceFile;
-    private static HitTraceWriter writer = null;
-
-    static {
-        // Add this block for trace streaming
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS");
-        Calendar cal = Calendar.getInstance();
-        String traceFileName="plant-trace-" + sdf.format(cal.getTime()) + ".txt";
-        
-        try {
-            writer = new HitTraceWriter(new File(traceFileName), /*append*/ true);
-
-        } catch (IOException e) {
-            System.err.println("Error initializing trace writer: " + e.getMessage());
-        }
-        
-    }
     public interface Command { void execute(String args); }
 
     public ClojureShell(Map<String, Integer> hitRecords) {
@@ -45,12 +28,10 @@ public class ClojureShell {
                 "Explain outer trace records, inner HIT messages, probe metadata, and subset context windows.", args -> printConcepts());
         addCommand(":exit", ":exit",
                 "Close the current trace writer and stop the shell.", args -> {
-            if (writer != null) {
-                try {
-                    writer.close();
-                } catch (IOException e) {
-                    System.err.println("Error closing trace writer: " + e.getMessage());
-                }
+            try {
+                RuntimeCommands.closeTraceWriter();
+            } catch (IOException e) {
+                System.err.println("Error closing trace writer: " + e.getMessage());
             }
             System.out.println("Bye!"); 
             System.exit(0);
@@ -101,8 +82,7 @@ public class ClojureShell {
         addCommand(":flush-trace", ":flush-trace",
                 "Flush trace buffers so external tools can read the latest live trace data.", args -> {
             try {
-                if (writer != null) { writer.flush(); System.out.println("Trace flushed"); }
-                else System.out.println("No trace writer active");
+                System.out.println(RuntimeCommands.flushTrace());
             } catch (IOException e) {
                 System.out.println("ERROR: " + e.getMessage());
             }
@@ -112,8 +92,21 @@ public class ClojureShell {
         addCommand(":trace-persist", ":trace-persist",
                 "Force a durable fsync of the live trace file.", args -> {
             try {
-                if (writer != null) { writer.persist(); System.out.println("Trace persisted"); }
-                else System.out.println("No trace writer active");
+                System.out.println(RuntimeCommands.persistTrace());
+            } catch (IOException e) {
+                System.out.println("ERROR: " + e.getMessage());
+            }
+        });
+
+        addCommand(":trace-rotate", ":trace-rotate <filename>",
+                "Close the current trace and start writing live trace data to another file.", args -> {
+            String[] toks = splitArgs(args);
+            if (toks.length != 1) {
+                System.out.println("Usage: :trace-rotate <filename>");
+                return;
+            }
+            try {
+                System.out.println(RuntimeCommands.rotateTrace(new File(toks[0])));
             } catch (IOException e) {
                 System.out.println("ERROR: " + e.getMessage());
             }
@@ -511,7 +504,7 @@ public class ClojureShell {
     private void printHelp(String args) {
         String topic = args.trim();
         if (topic.isEmpty()) {
-            printHelpGroup("Runtime and Live Coverage", "runtime", ":help", ":status", ":concepts", ":hits", ":apply-context", ":withdraw-context", ":coverage-report", ":flush-trace", ":trace-persist", ":exit");
+            printHelpGroup("Runtime and Live Coverage", "runtime", ":help", ":status", ":concepts", ":hits", ":apply-context", ":withdraw-context", ":coverage-report", ":flush-trace", ":trace-persist", ":trace-rotate", ":exit");
             printHelpGroup("Trace Files", "trace", ":trace-load", ":trace-current", ":trace-summary", ":trace-dump", ":trace-histogram", ":trace-save-subset");
             printHelpGroup("Metadata Filtering", "metadata", ":probe-metadata-load", ":probe-metadata-load-classes", ":probe-metadata-clear", ":probe-metadata-summary",
                     ":probe-metadata-find-class", ":probe-metadata-find-path", ":probe-metadata-find-method", ":probe-metadata-find-where", ":probe-metadata-find-filter", ":probe-metadata-show",
@@ -535,7 +528,7 @@ public class ClojureShell {
             return;
         }
         if ("runtime".equalsIgnoreCase(topic) || "live".equalsIgnoreCase(topic)) {
-            printHelpGroup("Runtime and Live Coverage", "runtime", ":help", ":status", ":concepts", ":hits", ":apply-context", ":withdraw-context", ":coverage-report", ":flush-trace", ":trace-persist", ":exit");
+            printHelpGroup("Runtime and Live Coverage", "runtime", ":help", ":status", ":concepts", ":hits", ":apply-context", ":withdraw-context", ":coverage-report", ":flush-trace", ":trace-persist", ":trace-rotate", ":exit");
             return;
         }
 
@@ -569,7 +562,8 @@ public class ClojureShell {
         System.out.println("  Live hit keys: " + hitRecords.size());
         System.out.println("  Loaded probe metadata entries: " + metadataSummary.probeCount);
         System.out.println("  Loaded class path mappings: " + metadataSummary.classMapCount);
-        System.out.println("  Trace writer: " + (writer == null ? "<not active>" : "active"));
+        System.out.println("  Trace writer: " + (RuntimeCommands.getTraceWriter() == null ? "<not active>" : "active"));
+        System.out.println("  Live trace file: " + RuntimeCommands.getTraceFilePath());
     }
 
     private void printConcepts() {
@@ -740,15 +734,15 @@ public class ClojureShell {
     public static void main(String[] args) throws Exception {
         final Map<String, Integer> hitRecords = new ConcurrentHashMap<>();
 
-        
+        RuntimeCommands.initializeDefaultTraceWriter();
 
         // Start UDP listener
-        Thread udpThread = new Thread(new UdpListener(8083, hitRecords, writer), "UDPListener");
+        Thread udpThread = new Thread(new UdpListener(8083, hitRecords), "UDPListener");
         udpThread.setDaemon(true);
         udpThread.start();
 
         // Start TCP listener
-        Thread tcpThread = new Thread(new TcpListener(8084, hitRecords, writer), "TCPListener");
+        Thread tcpThread = new Thread(new TcpListener(8084, hitRecords), "TCPListener");
         tcpThread.setDaemon(true);
         tcpThread.start();
 
@@ -757,6 +751,7 @@ public class ClojureShell {
             while (true) {
                 try { Thread.sleep(10_000); } catch (InterruptedException ie) { return; }
                 try {
+                    HitTraceWriter writer = RuntimeCommands.getTraceWriter();
                     if (writer != null) {
                         byte[] payload = ByteBuffer.allocate(8).order(ByteOrder.BIG_ENDIAN).putLong(System.currentTimeMillis()).array();
                         writer.writeRaw(HitTraceWriter.FLAG_TS, HitTraceWriter.SRC_INTERNAL, payload);

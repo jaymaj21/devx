@@ -28,6 +28,7 @@ Use these inside the shell:
 :coverage-report <appId> <instanceId> <filename>
 :flush-trace
 :trace-persist
+:trace-rotate <filename>
 :exit
 ```
 
@@ -41,6 +42,73 @@ HITS M
 ```
 
 Context id `1` is normally `default`. `locId` is the branch probe id from the instrumenter CSV.
+
+## Remote UDP Commands
+
+`code-analytics` also accepts a small allowlist of UTF-8 UDP control packets on the normal UDP receiver port. Payloads must begin with `CMD ` and are not evaluated by Clojure or any interpreter.
+
+Supported payloads:
+
+```text
+CMD help
+CMD status
+CMD coverage-report <appId> <instanceId> <filename>
+CMD save-hits <filename>
+CMD flush-trace
+CMD trace-persist
+CMD trace-rotate <filename>
+CMD exit
+```
+
+Remote output paths must be relative and must not contain empty, `.`, or `..` path segments. The server replies to the sender with one UTF-8 status datagram.
+
+Use remote commands when the server is running unattended and the user wants to trigger coverage/hit/trace export without opening the Clojure shell. Do not add arbitrary remote evaluation; keep this surface to explicit runtime/export operations.
+
+## capinger UDP Tester
+
+`capinger.java` is a single-file JDK-only client in the repository root. Compile it directly:
+
+```powershell
+javac capinger.java
+```
+
+Common commands:
+
+```powershell
+java capinger CMD status
+java capinger CMD coverage-report 1 1 app.cov
+java capinger CMD coverage-hits hits.csv
+java capinger HIT 1 1 7 2 1234
+java capinger HIT 1 1 7 2 1234 100
+java capinger LOG 1 1 7 2 hello from capinger
+java capinger CTX test-run-42
+java capinger CTX_WITHDRAW test-run-42
+java capinger CMD flush-trace
+java capinger CMD trace-persist
+java capinger CMD exit
+```
+
+Defaults are `127.0.0.1:8083`; override them when needed:
+
+```powershell
+java capinger --host 192.168.1.10 --port 8083 CMD status
+```
+
+Packet formats sent by `capinger`:
+
+- `HIT <appId> <instanceId> <threadId> <stackDepth> <locationId> [repeatCount]` sends one or more 20-byte big-endian hit records.
+- `LOG <appId> <instanceId> <threadId> <stackDepth> <message...>` sends message type `2` with UTF-8 log text.
+- `CTX <label...>` sends context attach message type `3`.
+- `CTX_WITHDRAW <label...>` sends context withdraw message type `4`.
+- `CMD coverage-hits <file>` is an alias for remote `save-hits`.
+- `CMD coverage <appId> <instanceId> <file>` is an alias for remote `coverage-report`.
+
+`capinger_sequence.bat` compiles `capinger.java`, sends a longer mixed sequence of `CMD`, `CTX`, `HIT`, `LOG`, and export commands, and skips `CMD exit` by default. Run from the repository root:
+
+```bat
+capinger_sequence.bat
+capinger_sequence.bat 127.0.0.1 8083
+```
 
 ## Trace Analyzer CLI
 

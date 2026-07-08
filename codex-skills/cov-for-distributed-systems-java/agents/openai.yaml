@@ -1,3 +1,3 @@
 display_name: CovForDistributedSystems Java
-short_description: Use the Java branch-probe and code-analytics workflow.
-default_prompt: Use CovForDistributedSystems Java to instrument jars, collect probe hits, analyze traces, and annotate Java source coverage.
+short_description: Use Java branch-probe, code-analytics, and capinger workflows.
+default_prompt: Use CovForDistributedSystems Java to instrument jars, collect or remotely export probe hits, test code-analytics with capinger, analyze traces, and annotate Java source coverage.

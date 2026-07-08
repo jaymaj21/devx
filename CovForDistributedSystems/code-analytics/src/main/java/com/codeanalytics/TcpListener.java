@@ -10,12 +10,10 @@ import java.util.concurrent.ConcurrentHashMap;
 public class TcpListener implements Runnable {
     private final int port;
     private final Map<String, Integer> hitRecords;
-    private final HitTraceWriter traceWriter;
 
-    public TcpListener(int port, Map<String, Integer> hitRecords, HitTraceWriter traceWriter) {
+    public TcpListener(int port, Map<String, Integer> hitRecords) {
         this.port = port;
         this.hitRecords = hitRecords;
-        this.traceWriter = traceWriter;
     }
 
     @Override
@@ -68,9 +66,10 @@ public class TcpListener implements Runnable {
                         ContextManager.recordHit(appId, instanceId, locationId);
 
                         // Trace with per-record flag
+                        HitTraceWriter traceWriter = RuntimeCommands.getTraceWriter();
                         if (traceWriter != null) {
                             int recLen = 20;
-                            traceWriter.writeRaw(HitTraceWriter.FLAG_HIT, HitTraceWriter.SRC_TCP, data, recordStart, recLen);
+                            writeTrace(traceWriter, HitTraceWriter.FLAG_HIT, data, recordStart, recLen);
                         }
 
                         processed += 20;
@@ -91,9 +90,10 @@ public class TcpListener implements Runnable {
                             String logMsg = new String(logBytes, StandardCharsets.UTF_8);
                             System.out.printf("[LOG] AppID=%d InstanceID=%d ThreadID=%d StackDepth=%d: %s%n", appId, instanceId, threadId, stackDepth, logMsg);
 
+                            HitTraceWriter traceWriter = RuntimeCommands.getTraceWriter();
                             if (traceWriter != null) {
                                 int recLen = 18 + logLen;
-                                traceWriter.writeRaw(HitTraceWriter.FLAG_LOG, HitTraceWriter.SRC_TCP, data, recordStart, recLen);
+                                writeTrace(traceWriter, HitTraceWriter.FLAG_LOG, data, recordStart, recLen);
                             }
 
                             processed += (18 + logLen);
@@ -114,16 +114,18 @@ public class TcpListener implements Runnable {
                         if (messageType == 3) {
                             ContextManager.applyContext(context);
                             System.out.println("[CTX] Applied context: " + context);
+                            HitTraceWriter traceWriter = RuntimeCommands.getTraceWriter();
                             if (traceWriter != null) {
                                 int recLen = 2 + ctxLen;
-                                traceWriter.writeRaw(HitTraceWriter.FLAG_CTX_ATTACH, HitTraceWriter.SRC_TCP, data, recordStart, recLen);
+                                writeTrace(traceWriter, HitTraceWriter.FLAG_CTX_ATTACH, data, recordStart, recLen);
                             }
                         } else {
                             ContextManager.withdrawContext(context);
                             System.out.println("[CTX] Withdrew context: " + context);
+                            HitTraceWriter traceWriter = RuntimeCommands.getTraceWriter();
                             if (traceWriter != null) {
                                 int recLen = 2 + ctxLen;
-                                traceWriter.writeRaw(HitTraceWriter.FLAG_CTX_WITHDRAW, HitTraceWriter.SRC_TCP, data, recordStart, recLen);
+                                writeTrace(traceWriter, HitTraceWriter.FLAG_CTX_WITHDRAW, data, recordStart, recLen);
                             }
                         }
                         processed = messageBuffer.position();
@@ -145,6 +147,14 @@ public class TcpListener implements Runnable {
             System.err.println("[TCP] Client error (" + clientAddr + "): " + e.getMessage());
         } finally {
             try { client.close(); } catch (IOException ignore) {}
+        }
+    }
+
+    private static void writeTrace(HitTraceWriter traceWriter, short flag, byte[] data, int offset, int length) {
+        try {
+            traceWriter.writeRaw(flag, HitTraceWriter.SRC_TCP, data, offset, length);
+        } catch (IOException e) {
+            System.err.println("[TCP] Trace write error: " + e.getMessage());
         }
     }
 }
