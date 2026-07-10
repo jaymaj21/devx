@@ -1,6 +1,6 @@
 ---
 name: cov-for-distributed-systems-java
-description: Use when Codex needs to work with the Java side of CovForDistributedSystems, including source-level Java instrumentation with instr2.py, bytecode/JAR instrumentation with the branch-probe instrumenter, allocating probe id ranges across multiple source files or JARs, recording probe hits with mprewriter and code-analytics, remotely triggering code-analytics exports over UDP, testing collectors with capinger, loading branch-probe CSV metadata or grep-style scope_START metadata, loading Java class maps, filtering traces by class/path/method/probe kind/id, producing coverage reports, and annotating Java source JARs or source trees with probe hit counts.
+description: Use when Codex needs to work with the Java side of CovForDistributedSystems, including source-level Java instrumentation with instr2.py, bytecode/JAR instrumentation with the branch-probe instrumenter, allocating probe id ranges across multiple source files or JARs, recording probe hits with mprewriter and code-analytics, remotely triggering code-analytics exports over UDP, testing collectors with capinger, loading branch-probe CSV metadata or grep-style scope_START metadata, loading Java class maps, filtering traces by class/path/method/probe kind/id, producing coverage reports, and annotating Java source JARs or source trees with branch edge markers, context hit counts, and hit counts.
 ---
 
 # CovForDistributedSystems Java
@@ -23,7 +23,7 @@ Key components:
 - `code-analytics`: Java/Clojure analytics server, UDP hit receiver, interactive shell, trace writer, trace analyzer, and metadata filter host.
 - `capinger.java` and `capinger_sequence.bat`: standalone UDP smoke-test client and scripted command sequence for sending `CMD`, `HIT`, `LOG`, and context packets to `code-analytics`.
 - `list_java_classes.tcl`: source indexer that maps Java class names to relative source paths.
-- `annotate_source_coverage.tcl`: annotates extracted Java sources from a sources JAR using coverage reports and branch probe CSVs.
+- `annotate_source_coverage.tcl`: annotates extracted Java sources from a sources JAR using coverage reports and branch probe CSVs. Current annotations use `/*COV T+ context_hit_count hit_count probe_id*/` style comments, with `NOHIT` when no selected context hit the probe.
 - `plant_trace_tool.tcl`: Tcl trace summary and dump wrapper.
 - `run_dstr_code_analytics.ps1`, `run_dstr_instrumented_testsuite.tcl`, `demo_source_coverage_annotation.tcl`: end-to-end examples.
 

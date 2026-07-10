@@ -1,255 +1,290 @@
 package com.trading.domain;
 
-import java.io.*;
-import java.net.*;
+import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.lang.StackWalker;
-import java.nio.file.*;
-import java.util.Arrays;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 
-public class mprewriter {
-    private static final String RECEIVER_HOST = "127.0.0.1";
-    private static final int UDP_PORT = 8083;
-    private static final short APPLICATION_ID = 12345;
-    private static final int INSTANCE_ID = 2;
-    //private static final String TIMING_FILE = "timings.csv";
+/**
+ * UDP probe runtime for sample apps.
+ *
+ * Wire protocol:
+ *   HIT:          type:u16=1, appId:u16, instanceId:u32, threadId:u32, stackDepth:u32, locationId:u32
+ *   LOG:          type:u16=2, appId:u16, instanceId:u32, threadId:u32, stackDepth:u32, len:u16, utf8[len]
+ *   CTX_ATTACH:   type:u16=3, utf8(context)
+ *   CTX_WITHDRAW: type:u16=4, utf8(context)
+ */
+public final class mprewriter {
+    private static final short MSG_HIT = 1;
+    private static final short MSG_LOG = 2;
+    private static final short MSG_CTX_ATTACH = 3;
+    private static final short MSG_CTX_WITHDRAW = 4;
 
-    private static DatagramSocket udpSocket;
-    private static InetAddress receiverAddress;
+    private static final String HOST = System.getProperty("mprewriter.host", "127.0.0.1");
+    private static final int PORT = Integer.getInteger("mprewriter.port", 8083);
+    private static final short APPLICATION_ID = unsignedShortProperty("mprewriter.appId", 12345);
+    private static final int INSTANCE_ID = Integer.getInteger("mprewriter.instanceId", 2);
 
     private static final int MAX_HITS_PER_PACKET = 72;
-    private static final int BATCH_INTERVAL_MS = 5;
-    private static final int QUEUE_CAPACITY = 10000;
-    private static final ArrayBlockingQueue<Long> probeQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
-    private static final ArrayBlockingQueue<byte[]> logQueue = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
-    private static final ByteBuffer sendBuffer = ByteBuffer.allocate(20 * MAX_HITS_PER_PACKET);
-    private static DatagramPacket batchPacket;
+    private static final int MAX_LOG_BYTES = 1184;
+    private static final int QUEUE_CAPACITY = Integer.getInteger("mprewriter.queueCapacity", 1_000_000);
+    private static final BlockingQueue<OutboundMessage> QUEUE = new ArrayBlockingQueue<>(QUEUE_CAPACITY);
 
-    private static final int MAX_LOG_LENGTH = 1400;
-    private static final ByteBuffer logSendBuffer = ByteBuffer.allocate(MAX_LOG_LENGTH);
-    private static final DatagramPacket logPacket;
+    private static DatagramSocket socket;
+    private static InetAddress address;
+    private static ByteBuffer sendBuffer;
+    private static DatagramPacket packet;
+    private static final Object SHUTDOWN_LOCK = new Object();
 
     private static volatile boolean running = true;
+    private static volatile boolean shutdownComplete = false;
     private static Thread senderThread;
 
-    // StackWalker-based app-frame depth
-    private static final StackWalker WALKER = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
-    private static final String[] DEFAULT_PREFIXES = new String[]{"com.trading.", "com.example."};
-    private static boolean isAppFrame(String cn) {
-        for (String p : DEFAULT_PREFIXES) if (cn.startsWith(p)) return true;
-        return false;
+    private static final ThreadLocal<int[]> DEPTH = ThreadLocal.withInitial(() -> new int[1]);
+
+    private interface OutboundMessage { }
+
+    private static final class HitMessage implements OutboundMessage {
+        private final long packed;
+
+        private HitMessage(long packed) {
+            this.packed = packed;
+        }
     }
-    private static int stackDepth() {
-        return WALKER.walk(stream -> {
-            int depth = 0;
-            for (StackWalker.StackFrame f : (Iterable<StackWalker.StackFrame>) stream::iterator) {
-                String cn = f.getClassName();
-                if (cn.equals(mprewriter.class.getName())) continue; // skip probe utility frames
-                if (isAppFrame(cn)) depth++;
-            }
-            return depth;
-        });
+
+    private static final class RawMessage implements OutboundMessage {
+        private final byte[] payload;
+
+        private RawMessage(byte[] payload) {
+            this.payload = payload;
+        }
+    }
+
+    public static final class Scope implements AutoCloseable {
+        private Scope(int locationId) {
+            scope_ENTER();
+            hit(locationId);
+        }
+
+        @Override
+        public void close() {
+            scope_EXIT();
+        }
     }
 
     static {
         try {
-            receiverAddress = InetAddress.getByName(RECEIVER_HOST);
-            udpSocket = new DatagramSocket();
-            batchPacket = new DatagramPacket(sendBuffer.array(), 0, receiverAddress, UDP_PORT);
-            logPacket = new DatagramPacket(logSendBuffer.array(), 0, receiverAddress, UDP_PORT);
+            address = InetAddress.getByName(HOST);
+            socket = new DatagramSocket();
+            try { socket.setSendBufferSize(1 << 20); } catch (Exception ignored) {}
+            sendBuffer = ByteBuffer.allocate(MAX_HITS_PER_PACKET * 20);
+            packet = new DatagramPacket(sendBuffer.array(), 0, address, PORT);
 
-            // Initialize timings file with header if it does not exist
-            /*
-            if (!Files.exists(Paths.get(TIMING_FILE))) {
-                Files.write(Paths.get(TIMING_FILE), "locationId,timeTakenNanos\n".getBytes(), StandardOpenOption.CREATE);
-            }
-            */
-
-            senderThread = new Thread(() -> {
-                while (running && !Thread.currentThread().isInterrupted()) {
-                    try {
-                        Thread.sleep(BATCH_INTERVAL_MS);
-                        sendBuffer.clear();
-                        int hitsProcessed = 0;
-
-                        Long hit;
-                        while (hitsProcessed < MAX_HITS_PER_PACKET && (hit = probeQueue.poll()) != null) {
-                            int threadId = (int)((hit >>> 48) & 0xFFFF);
-                            int depth    = (int)((hit >>> 32) & 0xFFFF);
-                            int locationId = (int)(hit & 0xFFFFFFFFL);
-
-                            if (locationId == 0) {
-                                // If locationId == 0, that's not treated as a hit
-                                // Instead it's a marker for the presence of a log message
-                                byte[] logBytes = logQueue.poll();
-                                if (logBytes != null) {
-                                    logSendBuffer.rewind();
-                                    logSendBuffer.putShort((short)2);
-                                    logSendBuffer.putShort(APPLICATION_ID);
-                                    logSendBuffer.putInt(INSTANCE_ID);
-                                    logSendBuffer.putInt(threadId);
-                                    logSendBuffer.putInt(depth);
-                                    logSendBuffer.putShort((short)logBytes.length);
-                                    logSendBuffer.put(logBytes);
-                                    logPacket.setLength(18+logBytes.length);
-                                    udpSocket.send(logPacket);
-                                }
-                            } else {
-                                    sendBuffer.putShort((short) 1); // messageType
-                                    sendBuffer.putShort(APPLICATION_ID);
-                                    sendBuffer.putInt(INSTANCE_ID);
-                                    sendBuffer.putInt(threadId);
-                                    sendBuffer.putInt(depth);
-                                    sendBuffer.putInt(locationId);
-                                hitsProcessed++;
-                            }
-                        }
-
-                        if (hitsProcessed > 0) {
-                            //Files.write(Paths.get(TIMING_FILE), ("Hits processed "+hitsProcessed + "\n").getBytes(), StandardOpenOption.APPEND);
-                            batchPacket.setLength(hitsProcessed * 20);
-                            udpSocket.send(batchPacket);
-                        }
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                    } catch (IOException ioe) {
-                        ioe.printStackTrace();
-                    }
-                }
-            }, "ProbeSenderThread");
-
+            senderThread = new Thread(mprewriter::runSender, "mprewriter-udp-sender");
             senderThread.setDaemon(true);
             senderThread.start();
 
-        } catch (IOException e) {
-            throw new RuntimeException("Initialization failed", e);
+            Runtime.getRuntime().addShutdownHook(new Thread(mprewriter::shutdown));
+        } catch (Exception e) {
+            running = false;
+        }
+    }
+
+    private mprewriter() {
+    }
+
+    private static void runSender() {
+        try {
+            while (running || !QUEUE.isEmpty()) {
+                OutboundMessage first = QUEUE.poll(2, TimeUnit.MILLISECONDS);
+                if (first == null) continue;
+                if (first instanceof HitMessage) {
+                    sendBuffer.rewind();
+                    int hits = 0;
+                    hits += writeHitFromPacked(((HitMessage) first).packed);
+                    while (hits < MAX_HITS_PER_PACKET) {
+                        OutboundMessage next = QUEUE.peek();
+                        if (!(next instanceof HitMessage)) break;
+                        next = QUEUE.poll();
+                        if (!(next instanceof HitMessage)) break;
+                        writeHitFromPacked(((HitMessage) next).packed);
+                        hits++;
+                    }
+                    packet.setLength(hits * 20);
+                    socket.send(packet);
+                    sendBuffer.clear();
+                } else if (first instanceof RawMessage) {
+                    byte[] payload = ((RawMessage) first).payload;
+                    DatagramPacket rawPacket = new DatagramPacket(payload, payload.length, address, PORT);
+                    socket.send(rawPacket);
+                }
+            }
+        } catch (IOException | InterruptedException ignored) {
+        } finally {
+            try { socket.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    private static int writeHitFromPacked(long packed) {
+        int threadId = (int) ((packed >>> 48) & 0xFFFF);
+        int depth = (int) ((packed >>> 32) & 0xFFFF);
+        int locId = (int) (packed & 0xFFFFFFFFL);
+        sendBuffer.putShort(MSG_HIT);
+        sendBuffer.putShort(APPLICATION_ID);
+        sendBuffer.putInt(INSTANCE_ID);
+        sendBuffer.putInt(threadId);
+        sendBuffer.putInt(depth);
+        sendBuffer.putInt(locId);
+        return 1;
+    }
+
+    public static void scope_ENTER() {
+        DEPTH.get()[0]++;
+    }
+
+    public static void scope_EXIT() {
+        int[] d = DEPTH.get();
+        if (d[0] > 0) d[0]--;
+    }
+
+    public static int current_depth() {
+        return DEPTH.get()[0];
+    }
+
+    public static void hit(int locationId) {
+        if (!running) return;
+        int threadId = (int) (Thread.currentThread().getId() & 0x7fffffff);
+        int depth = current_depth();
+        long packed = ((((long) threadId) & 0xFFFFL) << 48)
+                    | ((((long) depth) & 0xFFFFL) << 32)
+                    | (locationId & 0xFFFFFFFFL);
+        try {
+            QUEUE.put(new HitMessage(packed));
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
         }
     }
 
     public static void scope_START(int locationId) {
-        int threadId = (int) (Thread.currentThread().getId() & 0x7FFFFFFF);
-        int depth = stackDepth();
-        long packed = ((((long)threadId) & 0xFFFFL) << 48)
-                    | ((((long)depth) & 0xFFFFL) << 32)
-                    | (locationId & 0xFFFFFFFFL);
-        probeQueue.offer(packed);
-        /*
-        long endTime = System.nanoTime();
-        long duration = endTime - startTime;
-        try {
-            Files.write(Paths.get(TIMING_FILE), (locationId + "," + duration + "\n").getBytes(), StandardOpenOption.APPEND);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-         */
+        hit(locationId);
     }
 
-    public static void log(String logMessage) {
-        String remainingMessage = logMessage;
-        while (true) {
-            if(remainingMessage.isEmpty()) {
-                return;
-            }
-            boolean isWithinRange = false;
-            byte[] logBytes = remainingMessage.getBytes(StandardCharsets.UTF_8);
-
-            // 2. Final check
-            final int MAX_LOG_BYTES = 1184;
-            if (logBytes.length > MAX_LOG_BYTES) {
-                // Fallback: keep only first MAX_LOG_BYTES bytes (may split character)
-                // For safety: decode bytes to string and back, to ensure no partial characters
-                int safeLen = MAX_LOG_BYTES;
-                while (safeLen > 0 && (logBytes[safeLen - 1] & 0xC0) == 0x80) {
-                    // UTF-8 continuation byte, step back to char boundary
-                    safeLen--;
-                }
-                logBytes = Arrays.copyOf(logBytes, safeLen);
-                String truncatedMessage = new String(logBytes, StandardCharsets.UTF_8);
-                int lengthCoveredSoFar = truncatedMessage.length();
-                logBytes = truncatedMessage.getBytes(StandardCharsets.UTF_8); // Re-encode for safety
-                remainingMessage = remainingMessage.substring(lengthCoveredSoFar);
-            } else {
-                isWithinRange = true;
-            }
-            // Now logBytes is always <= MAX_LOG_BYTES
-            int threadId = (int) (Thread.currentThread().getId() & 0x7FFFFFFF);
-            int depth = stackDepth();
-            long packed = ((((long)threadId) & 0xFFFFL) << 48) | ((((long)depth) & 0xFFFFL) << 32);
-            synchronized (mprewriter.class) {
-                probeQueue.offer(packed);
-                logQueue.offer(logBytes);
-            }
-
-            if(isWithinRange) break;
-        }
-
+    public static Scope scopeStart(int locationId) {
+        return new Scope(locationId);
     }
 
-    public static void close() {
-        running = false;
-        senderThread.interrupt();
+    public static void apply_context(String context) {
+        sendContextMessage(MSG_CTX_ATTACH, context);
+    }
 
-        try {
-            senderThread.join();
+    public static void applyContext(String context) {
+        apply_context(context);
+    }
 
-            // Final flush: drain any remaining hits
-            sendBuffer.clear();
-            int hitsProcessed = 0;
-            Long hit;
-            while ((hit = probeQueue.poll()) != null) {
-                int threadId = (int)((hit >>> 48) & 0xFFFF);
-                int depth    = (int)((hit >>> 32) & 0xFFFF);
-                int locationId = (int)(hit & 0xFFFFFFFFL);
+    public static void withdraw_context(String context) {
+        sendContextMessage(MSG_CTX_WITHDRAW, context);
+    }
 
-                if (locationId == 0) {
-                    byte[] logBytes = logQueue.poll();
-                    if (logBytes != null) {
-                        logSendBuffer.rewind();
-                        logSendBuffer.putShort((short)2);
-                        logSendBuffer.putShort(APPLICATION_ID);
-                        logSendBuffer.putInt(INSTANCE_ID);
-                        logSendBuffer.putInt(threadId);
-                        logSendBuffer.putInt(depth);
-                        logSendBuffer.putShort((short)logBytes.length);
-                        logSendBuffer.put(logBytes);
-                        logPacket.setLength(18+logBytes.length);
-                        udpSocket.send(logPacket);
-                    }
-                } else {
+    public static void withdrawContext(String context) {
+        withdraw_context(context);
+    }
 
-                    sendBuffer.putShort((short) 1);
-                    sendBuffer.putShort(APPLICATION_ID);
-                    sendBuffer.putInt(INSTANCE_ID);
-                    sendBuffer.putInt(threadId);
-                    sendBuffer.putInt(depth);
-                    sendBuffer.putInt(locationId);
-                    hitsProcessed++;
+    public static void reset_context_to(String context) {
+        withdraw_context("ALL");
+        apply_context(context);
+    }
 
-                    if (hitsProcessed == MAX_HITS_PER_PACKET) {
-                        batchPacket.setLength(hitsProcessed * 20);
-                        //Files.write(Paths.get(TIMING_FILE), ("Hits processed "+hitsProcessed + "\n").getBytes(), StandardOpenOption.APPEND);
-                        udpSocket.send(batchPacket);
-                        sendBuffer.clear();
-                        hitsProcessed = 0;
-                    }
-                }
-            }
-
-            if (hitsProcessed > 0) {
-                batchPacket.setLength(hitsProcessed * 20);
-                //Files.write(Paths.get(TIMING_FILE), ("Hits processed "+hitsProcessed + "\n").getBytes(), StandardOpenOption.APPEND);
-                udpSocket.send(batchPacket);
-            }
-        } catch (InterruptedException | IOException e) {
-            e.printStackTrace();
-        }
-
-        udpSocket.close();
+    public static void resetContextTo(String context) {
+        reset_context_to(context);
     }
 
     public static void add_context_from_callstack() {
-        // Implementation placeholder
+        // Compatibility hook retained for older samples.
+    }
+
+    public static void log(String message) {
+        if (!running || message == null) return;
+        byte[] utf8 = message.getBytes(StandardCharsets.UTF_8);
+        int offset = 0;
+        while (offset < utf8.length) {
+            int chunkLen = Math.min(utf8.length - offset, MAX_LOG_BYTES);
+            while (chunkLen > 0 && offset + chunkLen < utf8.length && (utf8[offset + chunkLen] & 0xC0) == 0x80) {
+                chunkLen--;
+            }
+            if (chunkLen <= 0) {
+                chunkLen = Math.min(utf8.length - offset, MAX_LOG_BYTES);
+            }
+            try {
+                QUEUE.put(new RawMessage(buildLogPayload(utf8, offset, chunkLen)));
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            offset += chunkLen;
+        }
+    }
+
+    public static void shutdown() {
+        synchronized (SHUTDOWN_LOCK) {
+            if (shutdownComplete) return;
+            running = false;
+            try {
+                if (senderThread != null) {
+                    while (senderThread.isAlive()) {
+                        senderThread.join(500);
+                    }
+                }
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            } finally {
+                shutdownComplete = true;
+            }
+        }
+    }
+
+    public static void close() {
+        shutdown();
+    }
+
+    private static void sendContextMessage(short messageType, String context) {
+        if (!running || context == null) return;
+        byte[] contextBytes = context.getBytes(StandardCharsets.UTF_8);
+        ByteBuffer buffer = ByteBuffer.allocate(2 + contextBytes.length);
+        buffer.putShort(messageType);
+        buffer.put(contextBytes);
+        byte[] payload = new byte[buffer.position()];
+        System.arraycopy(buffer.array(), 0, payload, 0, payload.length);
+        try {
+            QUEUE.put(new RawMessage(payload));
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private static byte[] buildLogPayload(byte[] utf8, int offset, int length) {
+        int threadId = (int) (Thread.currentThread().getId() & 0x7fffffff);
+        int depth = current_depth();
+        ByteBuffer buffer = ByteBuffer.allocate(18 + length);
+        buffer.putShort(MSG_LOG);
+        buffer.putShort(APPLICATION_ID);
+        buffer.putInt(INSTANCE_ID);
+        buffer.putInt(threadId);
+        buffer.putInt(depth);
+        buffer.putShort((short) length);
+        buffer.put(utf8, offset, length);
+        return buffer.array();
+    }
+
+    private static short unsignedShortProperty(String name, int defaultValue) {
+        int value = Integer.getInteger(name, defaultValue);
+        if (value < 0 || value > 0xFFFF) {
+            throw new IllegalArgumentException(name + " must be in range 0..65535");
+        }
+        return (short) value;
     }
 }

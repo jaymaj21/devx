@@ -15,8 +15,7 @@ public class UdpListener implements Runnable {
     public UdpListener(int port, Map<String, Integer> hitRecords) {
         this.port = port;
         this.hitRecords = hitRecords;
-        int n = Math.max(2, Runtime.getRuntime().availableProcessors());
-        this.parsePool = Executors.newFixedThreadPool(n, r -> {
+        this.parsePool = Executors.newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, "UDP-Parser");
             t.setDaemon(true);
             return t;
@@ -50,25 +49,10 @@ public class UdpListener implements Runnable {
                     continue;
                 }
 
-                HitTraceWriter traceWriter = RuntimeCommands.getTraceWriter();
-                if (traceWriter != null) {
-                    try {
-                        short mt = 1;
-                        try {
-                            mt = ByteBuffer.wrap(payload).getShort(0);
-                        } catch (Exception ignore) {}
-                        short flag;
-                        if (mt == 2) flag = HitTraceWriter.FLAG_LOG;
-                        else if (mt == 3) flag = HitTraceWriter.FLAG_CTX_ATTACH;
-                        else if (mt == 4) flag = HitTraceWriter.FLAG_CTX_WITHDRAW;
-                        else flag = HitTraceWriter.FLAG_HIT;
-                        traceWriter.writeRaw(flag, HitTraceWriter.SRC_UDP, payload, 0, packetLen);
-                    } catch (IOException e) {
-                        System.err.println("[UDP] Trace write error: " + e.getMessage());
-                    }
-                }
-
-                parsePool.execute(() -> parsePacket(ByteBuffer.wrap(payload), hitRecords));
+                parsePool.execute(() -> {
+                    writeTracePacket(payload);
+                    parsePacket(ByteBuffer.wrap(payload), hitRecords);
+                });
             }
         } catch (IOException e) {
             System.err.println("[UDP] Socket error: " + e.getMessage());
@@ -81,6 +65,27 @@ public class UdpListener implements Runnable {
                 && payload[1] == 'M'
                 && payload[2] == 'D'
                 && Character.isWhitespace((char) payload[3]);
+    }
+
+    private static void writeTracePacket(byte[] payload) {
+        HitTraceWriter traceWriter = RuntimeCommands.getTraceWriter();
+        if (traceWriter == null) {
+            return;
+        }
+        try {
+            short mt = 1;
+            try {
+                mt = ByteBuffer.wrap(payload).getShort(0);
+            } catch (Exception ignore) {}
+            short flag;
+            if (mt == 2) flag = HitTraceWriter.FLAG_LOG;
+            else if (mt == 3) flag = HitTraceWriter.FLAG_CTX_ATTACH;
+            else if (mt == 4) flag = HitTraceWriter.FLAG_CTX_WITHDRAW;
+            else flag = HitTraceWriter.FLAG_HIT;
+            traceWriter.writeRaw(flag, HitTraceWriter.SRC_UDP, payload, 0, payload.length);
+        } catch (IOException e) {
+            System.err.println("[UDP] Trace write error: " + e.getMessage());
+        }
     }
 
     private static void parsePacket(ByteBuffer messageBuffer, Map<String, Integer> hitRecords) {

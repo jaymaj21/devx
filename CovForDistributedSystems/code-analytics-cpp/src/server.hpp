@@ -56,12 +56,8 @@ public:
         running_.store(true);
         if (!cfg_.tracePath.empty()) trace_.open(cfg_.tracePath);
 
-        // Spawn UDP parse workers
-        unsigned hw = std::thread::hardware_concurrency();
-        unsigned workers = hw ? (std::max)(2u, hw) : 2u;
-        for (unsigned i=0; i<workers; ++i) {
-            udpParsers_.emplace_back(&Server::udpParserLoop, this);
-        }
+        // Keep UDP parsing ordered while leaving the receive thread free to enqueue.
+        udpParsers_.emplace_back(&Server::udpParserLoop, this);
 
         udpThread_ = std::thread(&Server::udpLoop, this);
         tcpThread_ = std::thread(&Server::tcpLoop, this);
@@ -336,7 +332,6 @@ private:
         uint16_t type = be16(p);
         uint16_t flag = (type==3 ? 3 : 4);
         trace_.writeFrame(flag, src, std::vector<uint8_t>(p, p+len));
-        uint16_t type = be16(p);
         std::string name;
         if (len>2) name.assign((const char*)(p+2), (const char*)(p+len));
         if (type==3) { ctx_.attach(name); std::cout<<"[CTX] attach "<<name<<"\n"; }

@@ -11,9 +11,12 @@
 #   - an extracted source tree whose Java lines with reported probe hits have
 #     trailing comments like:
 #
-#       /*COV 42 10001*/
+#       /*COV T+ 42 57 10001*/
 #
-#     where 42 is the aggregated hit count and 10001 is the probe id.
+#     where T+ is the branch edge/sense marker, 42 is the number of distinct
+#     matching contexts that hit the probe, 57 is the matching-context hit
+#     count, and 10001 is the probe id. If no matching context hit the probe,
+#     the context count is written as NOHIT.
 #
 # Usage:
 #   tclsh annotate_source_coverage.tcl ?--context <label-regex>|<id>? <source-jar> <coverage-report> <output-dir> <csv-or-dir> ?<csv-or-dir> ...?
@@ -143,7 +146,9 @@ namespace eval ::sourcecov {
         set lines [read_lines $path]
         set contexts [dict create]
         set contextLabels [dict create]
-        set hitCounts [dict create]
+        set contextHitCounts [dict create]
+        set selectedHitCounts [dict create]
+        set totalHitCounts [dict create]
         set mode ""
         set expectedContexts -1
         set expectedHits -1
@@ -180,8 +185,10 @@ namespace eval ::sourcecov {
                 if {![regexp {^([0-9]+)[ \t]+([0-9]+)[ \t]+(-?[0-9]+)$} $line -> ctxId locId count]} {
                     error "Invalid HITS row in $path: $line"
                 }
+                dict incr totalHitCounts $locId $count
                 if {[context_matches $ctxId $contextSpec $contexts $contextLabels]} {
-                    dict incr hitCounts $locId $count
+                    dict incr contextHitCounts $locId 1
+                    dict incr selectedHitCounts $locId $count
                 }
                 incr hitsSeen
                 continue
@@ -197,7 +204,7 @@ namespace eval ::sourcecov {
             puts stderr "WARNING: $path declared $expectedHits hits but contained $hitsSeen"
         }
 
-        return [list $contexts $hitCounts]
+        return [list $contexts $contextHitCounts $selectedHitCounts $totalHitCounts]
     }
 
     proc context_matches {ctxId contextSpec contexts contextLabels} {
@@ -274,9 +281,16 @@ namespace eval ::sourcecov {
         return $rel
     }
 
-    proc load_probe_annotations {csvFiles hitCounts fileByRel filesByBase} {
+    proc branch_marker {edge sense} {
+        if {$edge ne "" && $sense ne ""} {
+            return "$edge$sense"
+        }
+        return ""
+    }
+
+    proc load_probe_annotations {csvFiles contextHitCounts selectedHitCounts totalHitCounts fileByRel filesByBase} {
         set annotations [dict create]
-        set stats [dict create csv_files 0 csv_rows 0 probe_rows 0 matched_probes 0 skipped_no_line 0 skipped_no_hit 0 unresolved_sources 0]
+        set stats [dict create csv_files 0 csv_rows 0 probe_rows 0 matched_probes 0 skipped_no_line 0 zero_context_hits 0 zero_selected_hits 0 unresolved_sources 0]
 
         foreach csvFile $csvFiles {
             dict incr stats csv_files 1
@@ -286,7 +300,7 @@ namespace eval ::sourcecov {
             }
 
             set header [parse_csv_line [lindex $lines 0]]
-            if {[llength $header] < 6 || [lrange $header 0 5] ne [list id class method where source line]} {
+            if {[llength $header] < 9 || [lrange $header 0 8] ne [list id class method where source line edge opcode sense]} {
                 puts stderr "WARNING: skipping non branch-probe CSV: $csvFile"
                 continue
             }
@@ -297,7 +311,7 @@ namespace eval ::sourcecov {
                 }
                 dict incr stats csv_rows 1
                 set fields [parse_csv_line $line]
-                if {[llength $fields] < 6} {
+                if {[llength $fields] < 9} {
                     puts stderr "WARNING: skipping malformed CSV row in $csvFile: $line"
                     continue
                 }
@@ -307,14 +321,12 @@ namespace eval ::sourcecov {
                 set where [string trim [lindex $fields 3]]
                 set sourceName [string trim [lindex $fields 4]]
                 set lineNo [string trim [lindex $fields 5]]
+                set edge [string trim [lindex $fields 6]]
+                set sense [string trim [lindex $fields 8]]
                 dict incr stats probe_rows 1
 
                 if {$lineNo eq "" || ![string is integer -strict $lineNo] || $lineNo < 1} {
                     dict incr stats skipped_no_line 1
-                    continue
-                }
-                if {![dict exists $hitCounts $id]} {
-                    dict incr stats skipped_no_hit 1
                     continue
                 }
 
@@ -325,9 +337,20 @@ namespace eval ::sourcecov {
                     continue
                 }
 
-                set hits [dict get $hitCounts $id]
+                set contextHits 0
+                if {[dict exists $contextHitCounts $id]} {
+                    set contextHits [dict get $contextHitCounts $id]
+                } else {
+                    dict incr stats zero_context_hits 1
+                }
+                set selectedHits 0
+                if {[dict exists $selectedHitCounts $id]} {
+                    set selectedHits [dict get $selectedHitCounts $id]
+                } else {
+                    dict incr stats zero_selected_hits 1
+                }
                 set key "$rel\t$lineNo"
-                dict lappend annotations $key [list $id $hits $where $methodName]
+                dict lappend annotations $key [list $id $contextHits $selectedHits [branch_marker $edge $sense] $where $methodName]
                 dict incr stats matched_probes 1
             }
         }
@@ -351,8 +374,19 @@ namespace eval ::sourcecov {
         set pieces {}
         foreach entry [lsort -command ::sourcecov::compare_annotation_entry $entries] {
             set id [lindex $entry 0]
-            set hits [lindex $entry 1]
-            lappend pieces "/*COV $hits $id*/"
+            set contextHits [lindex $entry 1]
+            set totalHits [lindex $entry 2]
+            set marker [lindex $entry 3]
+            if {$contextHits == 0} {
+                set contextText "NOHIT"
+            } else {
+                set contextText $contextHits
+            }
+            if {$marker eq ""} {
+                lappend pieces "/*COV $contextText $totalHits $id*/"
+            } else {
+                lappend pieces "/*COV $marker $contextText $totalHits $id*/"
+            }
         }
         return [join $pieces " "]
     }
@@ -460,9 +494,11 @@ namespace eval ::sourcecov {
 
         set coverage [parse_coverage_report $coverageReport $contextSpec]
         set contexts [lindex $coverage 0]
-        set hitCounts [lindex $coverage 1]
+        set contextHitCounts [lindex $coverage 1]
+        set selectedHitCounts [lindex $coverage 2]
+        set totalHitCounts [lindex $coverage 3]
 
-        set loaded [load_probe_annotations $csvFiles $hitCounts $fileByRel $filesByBase]
+        set loaded [load_probe_annotations $csvFiles $contextHitCounts $selectedHitCounts $totalHitCounts $fileByRel $filesByBase]
         set annotations [lindex $loaded 0]
         set loadStats [lindex $loaded 1]
         set applyStats [apply_annotations $outputDir $annotations $fileByRel]
@@ -471,12 +507,14 @@ namespace eval ::sourcecov {
         puts "OUTPUT_DIR [file normalize $outputDir]"
         puts "CONTEXT $contextSpec"
         puts "CONTEXTS_IN_REPORT [dict size $contexts]"
-        puts "HIT_PROBES_IN_SCOPE [dict size $hitCounts]"
+        puts "HIT_PROBES_IN_SCOPE [dict size $selectedHitCounts]"
+        puts "HIT_PROBES_TOTAL [dict size $totalHitCounts]"
         puts "CSV_FILES [dict get $loadStats csv_files]"
         puts "CSV_ROWS [dict get $loadStats csv_rows]"
         puts "MATCHED_PROBES [dict get $loadStats matched_probes]"
         puts "SKIPPED_NO_LINE [dict get $loadStats skipped_no_line]"
-        puts "SKIPPED_NO_HIT [dict get $loadStats skipped_no_hit]"
+        puts "ZERO_CONTEXT_HITS [dict get $loadStats zero_context_hits]"
+        puts "ZERO_SELECTED_HITS [dict get $loadStats zero_selected_hits]"
         puts "UNRESOLVED_SOURCES [dict get $loadStats unresolved_sources]"
         puts "FILES_ANNOTATED [dict get $applyStats files_annotated]"
         puts "LINES_ANNOTATED [dict get $applyStats lines_annotated]"

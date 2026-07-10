@@ -33,3 +33,8 @@ inline uint64_t now_nanos(){
     using namespace std::chrono;
     return duration_cast<nanoseconds>(steady_clock::now().time_since_epoch()).count();
 }
+
+inline uint64_t now_millis(){
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}

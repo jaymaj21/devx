@@ -25,7 +25,24 @@ Runtime Commands
 - `:coverage-report <appId> <instanceId> <filename>` writes a compact context-aware coverage report.
 - `:flush-trace` flushes trace buffers so external tools can read the latest data.
 - `:trace-persist` forces a durable fsync of the live trace file.
+- `:trace-rotate <filename>` closes the current trace and starts writing live trace data to another file.
 - `:exit` closes the trace writer and stops the shell.
+
+UDP Remote Commands
+
+- Send a UTF-8 UDP datagram to the normal analytics UDP port, prefixed with `CMD `.
+- These commands are an allowlist only; UDP input is never evaluated by Clojure or any other interpreter.
+- Remote output file paths must be relative and must not contain empty, `.`, or `..` path segments.
+- Supported payloads:
+  - `CMD help`
+  - `CMD status`
+  - `CMD coverage-report <appId> <instanceId> <filename>`
+  - `CMD save-hits <filename>`
+  - `CMD flush-trace`
+  - `CMD trace-persist`
+  - `CMD trace-rotate <filename>`
+  - `CMD exit`
+- The server replies to the sender with a single UTF-8 status datagram.
 
 Trace Analyzer CLI
 

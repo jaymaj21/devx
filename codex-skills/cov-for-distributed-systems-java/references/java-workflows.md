@@ -54,8 +54,10 @@ LAST_ID=<n>
 Probe CSV columns:
 
 ```text
-id,class,method,where,source,line
+id,class,method,where,source,line,edge,opcode,sense
 ```
+
+For conditional branch probes, `edge` is `T` for then/fall-through or `E` for else/jump-target; `sense` is `+` or `-` for the source-level subexpression sense. Source-level `instr2.py` metadata is separate and may still use its simpler source-scope CSV shape.
 
 ## Instrument Multiple JARs
 

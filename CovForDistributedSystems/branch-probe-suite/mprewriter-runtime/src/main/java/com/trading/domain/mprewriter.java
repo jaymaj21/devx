@@ -29,7 +29,7 @@ public final class mprewriter {
     private static final short MSG_CTX_WITHDRAW = 4;
     private static final String HOST = System.getProperty("mprewriter.host", "127.0.0.1");
     private static final int PORT = Integer.getInteger("mprewriter.port", 8083);
-    private static final short APPLICATION_ID = Short.parseShort(System.getProperty("mprewriter.appId", "12345"));
+    private static final short APPLICATION_ID = unsignedShortProperty("mprewriter.appId", 12345);
     private static final int INSTANCE_ID = Integer.getInteger("mprewriter.instanceId", 2);
 
     private static final int MAX_HITS_PER_PACKET = 72; // 72*20 = 1440 bytes
@@ -50,6 +50,18 @@ public final class mprewriter {
     private static final ThreadLocal<int[]> DEPTH = ThreadLocal.withInitial(() -> new int[1]);
 
     private interface OutboundMessage { }
+
+    public static final class Scope implements AutoCloseable {
+        private Scope(int locationId) {
+            scope_ENTER();
+            hit(locationId);
+        }
+
+        @Override
+        public void close() {
+            scope_EXIT();
+        }
+    }
 
     private static final class HitMessage implements OutboundMessage {
         private final long packed;
@@ -160,18 +172,27 @@ public final class mprewriter {
     /** Backward compatibility: original name used by legacy instruments. */
     public static void scope_START(int locationId) { hit(locationId); }
 
+    /** Try-with-resources helper used by standalone samples. */
+    public static Scope scopeStart(int locationId) { return new Scope(locationId); }
+
     public static void apply_context(String context) {
         sendContextMessage(MSG_CTX_ATTACH, context);
     }
+
+    public static void applyContext(String context) { apply_context(context); }
 
     public static void withdraw_context(String context) {
         sendContextMessage(MSG_CTX_WITHDRAW, context);
     }
 
+    public static void withdrawContext(String context) { withdraw_context(context); }
+
     public static void reset_context_to(String context) {
         withdraw_context("ALL");
         apply_context(context);
     }
+
+    public static void resetContextTo(String context) { reset_context_to(context); }
 
     public static void add_context_from_callstack() { /* no-op */ }
 
@@ -216,6 +237,8 @@ public final class mprewriter {
         }
     }
 
+    public static void close() { shutdown(); }
+
     private static void sendContextMessage(short messageType, String context) {
         if (!running || context == null) return;
         byte[] contextBytes = context.getBytes(StandardCharsets.UTF_8);
@@ -243,5 +266,13 @@ public final class mprewriter {
         buffer.putShort((short) length);
         buffer.put(utf8, offset, length);
         return buffer.array();
+    }
+
+    private static short unsignedShortProperty(String name, int defaultValue) {
+        int value = Integer.getInteger(name, defaultValue);
+        if (value < 0 || value > 0xFFFF) {
+            throw new IllegalArgumentException(name + " must be in range 0..65535");
+        }
+        return (short) value;
     }
 }

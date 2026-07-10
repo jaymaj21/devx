@@ -26,7 +26,7 @@ import static org.objectweb.asm.Opcodes.*;
 public class JarInstrumenter {
 
     private static final AtomicInteger PROBE_COUNTER = new AtomicInteger(1);
-    private static final StringBuilder PROBE_INDEX = new StringBuilder("id,class,method,where,source,line\n");
+    private static final StringBuilder PROBE_INDEX = new StringBuilder("id,class,method,where,source,line,edge,opcode,sense\n");
     private static final java.util.Set<String> ALLOWED_KINDS;
     private static final ExclusionMatcher EXCLUSIONS = ExclusionMatcher.fromFile(System.getProperty("bp.excludefile", ""));
     private static final InclusionMatcher INCLUSIONS = InclusionMatcher.fromFile(System.getProperty("bp.includefile", ""));
@@ -79,13 +79,17 @@ public class JarInstrumenter {
         System.out.println("LAST_ID=" + (PROBE_COUNTER.get() - 1));
     }
 
-    private static synchronized void addIndex(int id, String cls, String method, String where, String source, int line) {
+    private static synchronized void addIndex(int id, String cls, String method, String where, String source, int line,
+                                              String edge, String opcode, String sense) {
         PROBE_INDEX.append(id).append(',')
                 .append(cls).append(',')
                 .append(method).append(',')
                 .append(where).append(',')
                 .append(source == null ? "" : source).append(',')
-                .append(line >= 0 ? line : "").append('\n');
+                .append(line >= 0 ? line : "").append(',')
+                .append(edge == null ? "" : edge).append(',')
+                .append(opcode == null ? "" : opcode).append(',')
+                .append(sense == null ? "" : sense).append('\n');
     }
 
     private static void instrumentJar(File inJar, File outJar) throws IOException {
@@ -181,6 +185,7 @@ public class JarInstrumenter {
         private boolean pendingEntry = true;
 
         private final Set<Label> branchTargets = Collections.newSetFromMap(new IdentityHashMap<>());
+        private final Map<Label, BranchProbeInfo> conditionalTargets = new IdentityHashMap<>();
         private final Map<Label, Integer> lineAtLabel = new IdentityHashMap<>();
 
         // Handler label -> set of types (null means FINALLY)
@@ -284,7 +289,12 @@ public class JarInstrumenter {
                 handlerProbed.add(label);
             }
 
-            if (branchTargets.remove(label)) {
+            BranchProbeInfo branchInfo = conditionalTargets.remove(label);
+            if (branchInfo != null) {
+                branchTargets.remove(label);
+                int ln = resolveLine(label);
+                emitProbe("IF_FALSE", ln, "E", branchInfo.opcodeName, oppositeSense(branchInfo.jumpSense));
+            } else if (branchTargets.remove(label)) {
                 int ln = resolveLine(label);
                 emitProbe("IF_FALSE", ln);
             }
@@ -296,7 +306,10 @@ public class JarInstrumenter {
                     (opcode >= IFEQ && opcode <= IF_ACMPNE) || opcode == IFNULL || opcode == IFNONNULL;
             super.visitJumpInsn(opcode, label);
             if (isConditional) {
-                emitProbe("IF_TRUE", currentLine);
+                String opcodeName = opcodeName(opcode);
+                String jumpSense = jumpSense(opcode);
+                emitProbe("IF_TRUE", currentLine, "T", opcodeName, jumpSense);
+                conditionalTargets.put(label, new BranchProbeInfo(opcodeName, jumpSense));
                 branchTargets.add(label);
             } else if (opcode == GOTO) {
                 branchTargets.add(label);
@@ -318,6 +331,10 @@ public class JarInstrumenter {
         }
 
         private void emitProbe(String where, int line) {
+            emitProbe(where, line, "", "", "");
+        }
+
+        private void emitProbe(String where, int line, String edge, String opcode, String sense) {
             String kind = where;
             if (where.startsWith("CATCH_ENTRY")) kind = "CATCH_ENTRY";
             if (where.startsWith("FINALLY_ENTRY")) kind = "FINALLY_ENTRY";
@@ -332,7 +349,70 @@ public class JarInstrumenter {
                     "hit",
                     "(I)V",
                     false);
-            addIndex(id, prettyClass, methodName, where, sourceFile, line);
+            addIndex(id, prettyClass, methodName, where, sourceFile, line, edge, opcode, sense);
+        }
+
+        private static String jumpSense(int opcode) {
+            switch (opcode) {
+                case IFEQ:
+                    return "-";
+                case IFNE:
+                case IFLT:
+                case IFGE:
+                case IFGT:
+                case IFLE:
+                case IF_ICMPEQ:
+                case IF_ICMPNE:
+                case IF_ICMPLT:
+                case IF_ICMPGE:
+                case IF_ICMPGT:
+                case IF_ICMPLE:
+                case IF_ACMPEQ:
+                case IF_ACMPNE:
+                case IFNULL:
+                case IFNONNULL:
+                    return "+";
+                default:
+                    return "";
+            }
+        }
+
+        private static String oppositeSense(String sense) {
+            if ("+".equals(sense)) return "-";
+            if ("-".equals(sense)) return "+";
+            return "";
+        }
+
+        private static String opcodeName(int opcode) {
+            switch (opcode) {
+                case IFEQ: return "IFEQ";
+                case IFNE: return "IFNE";
+                case IFLT: return "IFLT";
+                case IFGE: return "IFGE";
+                case IFGT: return "IFGT";
+                case IFLE: return "IFLE";
+                case IF_ICMPEQ: return "IF_ICMPEQ";
+                case IF_ICMPNE: return "IF_ICMPNE";
+                case IF_ICMPLT: return "IF_ICMPLT";
+                case IF_ICMPGE: return "IF_ICMPGE";
+                case IF_ICMPGT: return "IF_ICMPGT";
+                case IF_ICMPLE: return "IF_ICMPLE";
+                case IF_ACMPEQ: return "IF_ACMPEQ";
+                case IF_ACMPNE: return "IF_ACMPNE";
+                case IFNULL: return "IFNULL";
+                case IFNONNULL: return "IFNONNULL";
+                default: return Integer.toString(opcode);
+            }
+        }
+
+        private static final class BranchProbeInfo {
+            final String opcodeName;
+            final String jumpSense;
+
+            BranchProbeInfo(String opcodeName, String jumpSense) {
+                this.opcodeName = opcodeName;
+                this.jumpSense = jumpSense;
+            }
         }
 
         private void emitEnter() {

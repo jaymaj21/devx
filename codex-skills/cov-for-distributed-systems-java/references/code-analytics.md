@@ -43,6 +43,15 @@ HITS M
 
 Context id `1` is normally `default`. `locId` is the branch probe id from the instrumenter CSV.
 
+Each `HITS` row records the hit count for one context/probe pair. Source annotation derives two different numbers from this:
+
+- context hit count: the number of distinct selected contexts that contain a row for the probe;
+- hit count: the sum of the row counts for the selected contexts.
+
+Do not conflate these when explaining annotations.
+
+The UDP receive thread should stay lightweight: receive datagrams and enqueue them in arrival order for subsequent parsing. Context changes are order-sensitive, especially common `withdraw_context(ALL)` followed by `add_context(...)` sequences, so Java `code-analytics` parsing should preserve packet order with a single parser consumer while keeping the UDP receive thread unblocked.
+
 ## Remote UDP Commands
 
 `code-analytics` also accepts a small allowlist of UTF-8 UDP control packets on the normal UDP receiver port. Payloads must begin with `CMD ` and are not evaluated by Clojure or any interpreter.
@@ -60,7 +69,7 @@ CMD trace-rotate <filename>
 CMD exit
 ```
 
-Remote output paths must be relative and must not contain empty, `.`, or `..` path segments. The server replies to the sender with one UTF-8 status datagram.
+Remote output paths must be relative and must not contain empty, `.`, or `..` path segments. The server replies to the sender with one UTF-8 status datagram. If a workflow needs artifacts in a specific directory, start `code-analytics` with that directory as its working directory and pass relative filenames to remote `CMD` commands.
 
 Use remote commands when the server is running unattended and the user wants to trigger coverage/hit/trace export without opening the Clojure shell. Do not add arbitrary remote evaluation; keep this surface to explicit runtime/export operations.
 
