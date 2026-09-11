@@ -26,6 +26,7 @@
                 <label><input type="checkbox" id="doubleClickMultiwordMode" title="Double-click highlights adjacent space-separated tokens"> Double-click phrase tokens</label>
                 <label><input type="checkbox" id="doubleClickPunctuationTokenMode" title="Double-click highlights tokens joined by punctuation separators"> Double-click punctuation tokens</label>
                 <label><input type="checkbox" id="doubleClickHyphenatedMode" title="Double-click highlights a full hyphenated token"> Double-click hyphenated tokens</label>
+                <label><input type="checkbox" id="svgPanMode" title="In SVG edit mode, drag inline SVGs to pan the editor instead of selecting SVG text"> SVG pan mode</label>
             </div>
         </details>
 
@@ -2149,6 +2150,14 @@ function selectText(containerid) {
         }
         #editor svg {
             max-width: none;
+        }
+        #editor.svg-pan-mode svg {
+            cursor: grab;
+        }
+        #editor.svg-pan-mode.svg-panning,
+        #editor.svg-pan-mode.svg-panning svg {
+            cursor: grabbing;
+            user-select: none;
         }
         .toolbar button, select, input[type="text"] {
             margin-right: 5px;
@@ -4591,13 +4600,154 @@ function saveEditorRange() {
         }
     }
 }
+
+const svgPanState = {
+    enabled: false,
+    active: false,
+    pointerId: null,
+    startX: 0,
+    startY: 0,
+    startScrollLeft: 0,
+    startScrollTop: 0,
+    moved: false,
+    button: 0,
+    suppressNextMouseUp: false,
+    suppressNextClick: false,
+    suppressNextContextMenu: false
+};
+
+function editorHasInlineSvg(editor) {
+    return !!(editor && editor.querySelector('svg'));
+}
+
+function setSvgPanMode(enabled, quiet = false) {
+    const editor = document.getElementById('editor');
+    svgPanState.enabled = !!enabled;
+    if (editor) {
+        editor.classList.toggle('svg-pan-mode', svgPanState.enabled);
+        if (!svgPanState.enabled) editor.classList.remove('svg-panning');
+    }
+    if (quiet) return;
+    if (svgPanState.enabled && !editorHasInlineSvg(editor)) {
+        setStatus('SVG pan mode on. Load or insert an SVG, then drag it to pan.');
+    } else {
+        setStatus(svgPanState.enabled ? 'SVG pan mode on: drag SVGs to pan.' : 'SVG pan mode off: drag SVG text to select.');
+    }
+}
+
+function handleSvgPanModeToggle(event) {
+    setSvgPanMode(event.target.checked);
+}
+
+function getPanSvgTarget(event, editor) {
+    if (!editor || (event.button !== 0 && event.button !== 2)) return null;
+    if (event.button === 0 && !svgPanState.enabled) return null;
+    if (event.target.closest && event.target.closest('button,input,select,textarea,a')) return null;
+    const svg = event.target.closest && event.target.closest('svg');
+    return svg && editor.contains(svg) ? svg : null;
+}
+
+function startSvgPan(event) {
+    const editor = document.getElementById('editor');
+    const svg = getPanSvgTarget(event, editor);
+    if (!svg) return;
+
+    svgPanState.active = true;
+    svgPanState.pointerId = event.pointerId;
+    svgPanState.startX = event.clientX;
+    svgPanState.startY = event.clientY;
+    svgPanState.startScrollLeft = editor.scrollLeft;
+    svgPanState.startScrollTop = editor.scrollTop;
+    svgPanState.moved = false;
+    svgPanState.button = event.button;
+    svgPanState.suppressNextMouseUp = false;
+    svgPanState.suppressNextClick = false;
+    svgPanState.suppressNextContextMenu = false;
+    editor.classList.add('svg-panning');
+
+    if (event.pointerId != null && editor.setPointerCapture) {
+        try { editor.setPointerCapture(event.pointerId); } catch (e) {}
+    }
+
+    const selection = window.getSelection();
+    if (selection) selection.removeAllRanges();
+    event.preventDefault();
+    event.stopPropagation();
+}
+
+function moveSvgPan(event) {
+    if (!svgPanState.active) return;
+    const editor = document.getElementById('editor');
+    if (!editor) return;
+
+    const dx = event.clientX - svgPanState.startX;
+    const dy = event.clientY - svgPanState.startY;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) svgPanState.moved = true;
+    editor.scrollLeft = svgPanState.startScrollLeft - dx;
+    editor.scrollTop = svgPanState.startScrollTop - dy;
+    event.preventDefault();
+    event.stopPropagation();
+}
+
+function endSvgPan(event) {
+    if (!svgPanState.active) return;
+    const editor = document.getElementById('editor');
+    svgPanState.active = false;
+    svgPanState.suppressNextMouseUp = svgPanState.moved;
+    svgPanState.suppressNextClick = svgPanState.moved;
+    svgPanState.suppressNextContextMenu = svgPanState.moved && svgPanState.button === 2;
+    if (editor) {
+        editor.classList.remove('svg-panning');
+        if (event && event.pointerId != null && editor.releasePointerCapture) {
+            try { editor.releasePointerCapture(event.pointerId); } catch (e) {}
+        }
+    }
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+}
+
+function suppressSvgPanClick(event) {
+    if (!svgPanState.suppressNextClick) return;
+    svgPanState.suppressNextClick = false;
+    event.preventDefault();
+    event.stopPropagation();
+}
+
+function suppressSvgPanContextMenu(event) {
+    if (!svgPanState.suppressNextContextMenu) return;
+    svgPanState.suppressNextContextMenu = false;
+    event.preventDefault();
+    event.stopPropagation();
+}
+
+function installSvgPanMode(editor) {
+    const toggle = document.getElementById('svgPanMode');
+    if (toggle) {
+        toggle.addEventListener('change', handleSvgPanModeToggle);
+        setSvgPanMode(toggle.checked, true);
+    }
+    editor.addEventListener('pointerdown', startSvgPan, true);
+    editor.addEventListener('pointermove', moveSvgPan, true);
+    editor.addEventListener('pointerup', endSvgPan, true);
+    editor.addEventListener('pointercancel', endSvgPan, true);
+    editor.addEventListener('click', suppressSvgPanClick, true);
+    editor.addEventListener('contextmenu', suppressSvgPanContextMenu, true);
+}
+
 const editor = document.getElementById('editor');
 document.addEventListener('click', handleDiffNotesPickClick, true);
 document.addEventListener('click', handleUuidPickClick, true);
+installSvgPanMode(editor);
 editor.addEventListener('keydown', saveEditorRange);
 editor.addEventListener('click', saveEditorRange);
 editor.addEventListener('click', insertCursorOnMouseDown);
 editor.addEventListener('mouseup', function() { 
+    if (svgPanState.suppressNextMouseUp) {
+        svgPanState.suppressNextMouseUp = false;
+        return;
+    }
     saveEditorRange();  
     if (currentFixedHighlighter != null) {
         applyHighlightAndFont(currentFixedHighlighter, true, null);
