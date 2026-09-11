@@ -180,6 +180,26 @@ public class ClojureShell {
             }
         });
 
+        addCommand(":trace-grep", ":trace-grep [TraceGrep options]",
+                "Search LOG messages in a HITTRC01 trace using substrings or regexes, with before/after log context.", args -> {
+            try {
+                String[] toks = TraceGrep.splitCommandLine(args);
+                if (!containsOption(toks, "--trace-file") && loadedTraceFile != null) {
+                    List<String> withTrace = new ArrayList<>();
+                    withTrace.add("--trace-file");
+                    withTrace.add(loadedTraceFile.getPath());
+                    withTrace.addAll(Arrays.asList(toks));
+                    toks = withTrace.toArray(new String[0]);
+                }
+                int status = TraceGrep.runCli(toks, System.out, System.err);
+                if (status == 2) {
+                    System.out.println("Usage: :trace-grep --trace-file <trace> [--index-file <index>] [--start-ts <ts>] [--end-ts <ts>] [--regex <pattern>] [--substring <text>] [-B n] [-A n]");
+                }
+            } catch (Exception e) {
+                System.out.println("ERROR: " + e.getMessage());
+            }
+        });
+
         addCommand(":trace-save-subset", ":trace-save-subset <target-trace-file> <pre-context-hits> <post-context-hits> <probe-id-range>...",
                 "Save a valid HITTRC01 subset from the current trace by explicit probe/location id ranges.", args -> {
             try {
@@ -474,6 +494,15 @@ public class ClojureShell {
         }
     }
 
+    private static boolean containsOption(String[] toks, String option) {
+        for (String tok : toks) {
+            if (option.equals(tok)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static final class TraceCommandArgs {
         File traceFile;
         long number;
@@ -505,7 +534,7 @@ public class ClojureShell {
         String topic = args.trim();
         if (topic.isEmpty()) {
             printHelpGroup("Runtime and Live Coverage", "runtime", ":help", ":status", ":concepts", ":hits", ":apply-context", ":withdraw-context", ":coverage-report", ":flush-trace", ":trace-persist", ":trace-rotate", ":exit");
-            printHelpGroup("Trace Files", "trace", ":trace-load", ":trace-current", ":trace-summary", ":trace-dump", ":trace-histogram", ":trace-save-subset");
+            printHelpGroup("Trace Files", "trace", ":trace-load", ":trace-current", ":trace-summary", ":trace-dump", ":trace-histogram", ":trace-grep", ":trace-save-subset");
             printHelpGroup("Metadata Filtering", "metadata", ":probe-metadata-load", ":probe-metadata-load-classes", ":probe-metadata-clear", ":probe-metadata-summary",
                     ":probe-metadata-find-class", ":probe-metadata-find-path", ":probe-metadata-find-method", ":probe-metadata-find-where", ":probe-metadata-find-filter", ":probe-metadata-show",
                     ":trace-save-subset-class", ":trace-save-subset-path", ":trace-save-subset-method", ":trace-save-subset-where", ":trace-save-subset-filter");
@@ -516,7 +545,7 @@ public class ClojureShell {
         }
 
         if ("trace".equalsIgnoreCase(topic)) {
-            printHelpGroup("Trace Files", "trace", ":trace-load", ":trace-current", ":trace-summary", ":trace-dump", ":trace-histogram", ":trace-save-subset");
+            printHelpGroup("Trace Files", "trace", ":trace-load", ":trace-current", ":trace-summary", ":trace-dump", ":trace-histogram", ":trace-grep", ":trace-save-subset");
             printTraceHelpNotes();
             return;
         }
@@ -582,6 +611,8 @@ public class ClojureShell {
         System.out.println("Trace subset context counts are inner HIT message counts before/after each matching probe hit.");
         System.out.println("Example:");
         System.out.println("  :trace-load code-analytics/plant-trace-....txt");
+        System.out.println("  :trace-grep --substring timeout -B 2 -A 2");
+        System.out.println("  :trace-grep --regex \"failed|error\" --start-ts 2025-11-09T21:37:10Z");
         System.out.println("  :trace-save-subset focused.trace 3 1 1001-1070 2081-3120");
     }
 
