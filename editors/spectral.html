@@ -4609,6 +4609,8 @@ const svgPanState = {
     startY: 0,
     startScrollLeft: 0,
     startScrollTop: 0,
+    startPageScrollLeft: 0,
+    startPageScrollTop: 0,
     moved: false,
     button: 0,
     suppressNextMouseUp: false,
@@ -4647,10 +4649,23 @@ function getPanSvgTarget(event, editor) {
     return svg && editor.contains(svg) ? svg : null;
 }
 
+function getDocumentScroller() {
+    return document.scrollingElement || document.documentElement || document.body;
+}
+
+function elementCanScrollX(element) {
+    return !!(element && element.scrollWidth > element.clientWidth);
+}
+
+function elementCanScrollY(element) {
+    return !!(element && element.scrollHeight > element.clientHeight);
+}
+
 function startSvgPan(event) {
     const editor = document.getElementById('editor');
     const svg = getPanSvgTarget(event, editor);
     if (!svg) return;
+    const pageScroller = getDocumentScroller();
 
     svgPanState.active = true;
     svgPanState.pointerId = event.pointerId;
@@ -4658,6 +4673,8 @@ function startSvgPan(event) {
     svgPanState.startY = event.clientY;
     svgPanState.startScrollLeft = editor.scrollLeft;
     svgPanState.startScrollTop = editor.scrollTop;
+    svgPanState.startPageScrollLeft = pageScroller ? pageScroller.scrollLeft : window.pageXOffset;
+    svgPanState.startPageScrollTop = pageScroller ? pageScroller.scrollTop : window.pageYOffset;
     svgPanState.moved = false;
     svgPanState.button = event.button;
     svgPanState.suppressNextMouseUp = false;
@@ -4679,12 +4696,24 @@ function moveSvgPan(event) {
     if (!svgPanState.active) return;
     const editor = document.getElementById('editor');
     if (!editor) return;
+    const pageScroller = getDocumentScroller();
 
     const dx = event.clientX - svgPanState.startX;
     const dy = event.clientY - svgPanState.startY;
     if (Math.abs(dx) > 2 || Math.abs(dy) > 2) svgPanState.moved = true;
-    editor.scrollLeft = svgPanState.startScrollLeft - dx;
-    editor.scrollTop = svgPanState.startScrollTop - dy;
+
+    if (elementCanScrollX(editor)) {
+        editor.scrollLeft = svgPanState.startScrollLeft - dx;
+    } else if (pageScroller) {
+        pageScroller.scrollLeft = svgPanState.startPageScrollLeft - dx;
+    }
+
+    if (elementCanScrollY(editor)) {
+        editor.scrollTop = svgPanState.startScrollTop - dy;
+    } else if (pageScroller) {
+        pageScroller.scrollTop = svgPanState.startPageScrollTop - dy;
+    }
+
     event.preventDefault();
     event.stopPropagation();
 }
