@@ -25,6 +25,60 @@ java -cp .\code-analytics\build\classes\java\main com.codeanalytics.TraceAnalyze
 java -cp .\code-analytics\build\classes\java\main com.codeanalytics.TraceAnalyzer subset .\code-analytics\plant-trace-....txt .\subset.trace 3 1 1001-1070 2081-3120
 ```
 
+Use [TraceIndexer.java](/c:/Git/jmtools/development_tools/CovForDistributedSystems/code-analytics/src/main/java/com/codeanalytics/TraceIndexer.java:1) to build a sparse seek index for huge traces without loading the full file:
+
+```powershell
+java -cp .\code-analytics\build\classes\java\main com.codeanalytics.TraceIndexer .\code-analytics\plant-trace-....txt
+java -cp .\code-analytics\build\classes\java\main com.codeanalytics.TraceIndexer .\code-analytics\plant-trace-....txt .\trace.idx.tsv --stride-mib 64
+java -cp .\code-analytics\build\classes\java\main com.codeanalytics.TraceIndexer .\code-analytics\plant-trace-....txt .\trace.idx.tsv --stride-bytes 67108864
+```
+
+The default output is `<trace-file>.idx.tsv`. The index is tab-separated text with comment metadata and compact rows:
+
+```text
+frame_seq	offset	t_ns
+```
+
+Rows are written for the first frame, then for the first frame at or beyond each byte-stride boundary, and finally for the last frame. A later navigator can binary-search these rows, seek to `offset`, read the 15-byte outer frame header from the trace itself, and scan forward from the nearest checkpoint.
+
+Use [TraceGrep.java](/c:/Git/jmtools/development_tools/CovForDistributedSystems/code-analytics/src/main/java/com/codeanalytics/TraceGrep.java:1) for grep-like LOG search over large traces. It uses the sparse index to seek near `--start-ts` when possible, then streams complete outer frames and materializes only one frame payload at a time:
+
+```powershell
+java -cp .\code-analytics\build\classes\java\main com.codeanalytics.TraceGrep `
+  --trace-file .\code-analytics\plant-trace-....txt `
+  --index-file .\code-analytics\plant-trace-....txt.idx.tsv `
+  --start-ts 2025-11-09T21:37:10Z `
+  --end-ts 2025-11-09T21:37:30Z `
+  --substring timeout `
+  --regex "failed|error" `
+  --logs-before 2 `
+  --logs-after 2
+```
+
+`--start-ts` and `--end-ts` accept raw trace monotonic nanoseconds or RFC3339 UTC timestamps. RFC3339 conversion uses the trace header plus the first index row's `t_ns`, so pass `--index-file` or keep the default `<trace-file>.idx.tsv` next to the trace.
+
+Matcher options may be repeated. Multiple `--regex` and `--substring` values are ORed. If no matcher is supplied, all LOG messages in the selected time range are printed. `-B` and `-A` are aliases for `--logs-before` and `--logs-after`.
+
+Defaults can be stored in a config file. `TraceGrep` first looks for `tracegrep.cfg` next to the trace file, then applies `--cfg <file>`, then command-line options. Config files use repeatable `key=value` lines:
+
+```text
+# tracegrep.cfg
+index-file=plant-trace-2025-11-09-21-37-07-259.txt.idx.tsv
+start-ts=2025-11-09T21:37:10Z
+logs-before=2
+logs-after=2
+ignore-case=true
+substring=timeout
+regex=failed|error
+```
+
+Inside `ClojureShell`, the same search is available as `:trace-grep`. If `:trace-load` has set a trace, `:trace-grep` can omit `--trace-file`:
+
+```text
+:trace-load .\code-analytics\plant-trace-....txt
+:trace-grep --substring timeout -B 2 -A 2
+```
+
 The interactive `ClojureShell` exposes the same analyzer through `:trace-load`, `:trace-current`, `:trace-summary`, `:trace-dump`, `:trace-histogram`, and `:trace-save-subset`. Use `:help`, `:help trace`, `:help metadata`, `:help <command>`, or `:concepts` inside the shell for command-specific usage and trace terminology.
 
 It can also load branch instrumenter probe metadata and `list_java_classes.tcl` class maps, then save trace subsets by class or source path:
