@@ -3974,12 +3974,15 @@ document.getElementById('fileLoader').addEventListener('change', function(event)
             }
 
             try {
-                const svg = parseSvgText(contents);
+                const fitToEditor = editorHasTextOutsideInlineSvg(editor);
+                const svg = parseSvgText(contents, { fitToEditor });
                 if (!insertNodeAtEditorRange(svg, range)) {
                     throw new Error('The saved insertion point is no longer inside the editor.');
                 }
                 hydrateEditorControls(editor);
-                setStatus(`Loaded inline SVG at the editor caret: ${file.name}`);
+                setStatus(fitToEditor
+                    ? `Loaded inline SVG at the editor caret: ${file.name}`
+                    : `Loaded inline SVG at its authored size: ${file.name}`);
             } catch (err) {
                 setStatus('Could not load SVG: ' + err.message);
             }
@@ -10376,7 +10379,14 @@ function getCurrentEditorRangeOrSaved() {
     return null;
 }
 
-function sanitizeImportedSvg(svg) {
+function editorHasTextOutsideInlineSvg(editor) {
+    if (!editor) return false;
+    const clone = editor.cloneNode(true);
+    clone.querySelectorAll('svg').forEach(svg => svg.remove());
+    return (clone.textContent || '').trim().length > 0;
+}
+
+function sanitizeImportedSvg(svg, options = {}) {
     if (!svg) return null;
 
     svg.querySelectorAll('script').forEach(node => node.remove());
@@ -10394,12 +10404,14 @@ function sanitizeImportedSvg(svg) {
         svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     }
     svg.setAttribute('data-spectral-inline-svg', '1');
-    svg.style.maxWidth = svg.style.maxWidth || '100%';
-    svg.style.height = svg.style.height || 'auto';
+    if (options.fitToEditor !== false) {
+        svg.style.maxWidth = svg.style.maxWidth || '100%';
+        svg.style.height = svg.style.height || 'auto';
+    }
     return svg;
 }
 
-function parseSvgText(svgText) {
+function parseSvgText(svgText, options = {}) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(svgText, 'image/svg+xml');
     const parseError = doc.querySelector('parsererror');
@@ -10412,7 +10424,7 @@ function parseSvgText(svgText) {
         throw new Error('Selected file does not contain an SVG root element.');
     }
 
-    return sanitizeImportedSvg(document.importNode(svg, true));
+    return sanitizeImportedSvg(document.importNode(svg, true), options);
 }
 
 function insertNodeAtEditorRange(node, range) {
@@ -10460,10 +10472,14 @@ function insertSvg() {
         const reader = new FileReader();
         reader.onload = function (e) {
             try {
-                const svg = parseSvgText(e.target.result || '');
+                const editor = document.getElementById('editor');
+                const fitToEditor = editorHasTextOutsideInlineSvg(editor);
+                const svg = parseSvgText(e.target.result || '', { fitToEditor });
                 insertNodeAtEditorRange(svg, range);
                 hydrateEditorControls();
-                setStatus(`Inserted inline SVG: ${file.name}`);
+                setStatus(fitToEditor
+                    ? `Inserted inline SVG: ${file.name}`
+                    : `Inserted inline SVG at its authored size: ${file.name}`);
             } catch (err) {
                 setStatus('Could not insert SVG: ' + err.message);
             }
