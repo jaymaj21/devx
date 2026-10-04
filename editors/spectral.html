@@ -863,6 +863,7 @@ function hydrateEditorControls(root = document.getElementById('editor')) {
     });
 
     root.querySelectorAll('button.note-button, .note-button').forEach(btn => {
+        btn.textContent = 'N';
         if (!btn.hasAttribute('data-message')) {
             btn.setAttribute('data-message', '');
         }
@@ -4572,7 +4573,7 @@ function createMessageButton(label, base64Message) {
 
     // Create the button with embedded message
     const btn = document.createElement('button');
-    btn.textContent = label;
+    btn.textContent = 'N';
     btn.setAttribute('data-message', base64Message);
     btn.setAttribute("onclick", 'noteButtonClickHandler(event)');
     btn.setAttribute("class", "note-button");
@@ -10850,7 +10851,7 @@ function createNote(indexStr, text, label = '') {
     range.collapse(true);
 
     const btn = document.createElement('button');
-    btn.textContent = label || '';
+    btn.textContent = 'N';
     btn.setAttribute('data-message', Base64.encode(String(text || '')));
     btn.setAttribute("onclick", 'noteButtonClickHandler(event)');
     btn.setAttribute("class", "note-button");
