@@ -1,5 +1,7 @@
 set all_commands "";
 set spectral_script [info script];
+# Command server is opt-in; its scripts execute in the main editor interpreter.
+source [file join [file dirname [file normalize [info script]]] spectral_cmd_server.tcl]
 catch {package require Tkhtml};
 
 if {[catch {package require Tk} tk_err]} {
@@ -19798,6 +19800,8 @@ proc cmdhelp_doc_map {} {
         hlt:save {UI And Session} {Save highlight/tag state.}
         hlt:restore {UI And Session} {Restore highlight/tag state.}
         spectral_script {UI And Session} {Run a Spectral script.}
+        startCmdServer {UI And Session} {Start a loopback Tcl command server: startCmdServer 32124.}
+        stopCmdServer {UI And Session} {Stop a Tcl command server and its connections: stopCmdServer 32124.}
         load_plugin {UI And Session} {Load a plugin.}
         set_spectral_subfolder {UI And Session} {Set the Spectral subfolder.}
         userproc {UI And Session} {Define or run a user proc.}
@@ -21141,6 +21145,8 @@ proc add_to_all_commands {cmd} {
     append all_commands " " $cmd;
 }
 
+add_spectral_alias startCmdServer;
+add_spectral_alias stopCmdServer;
 add_spectral_alias add_to_all_commands;
 foreach util {HtmlClipboard agrep ansi2knr basename bc bison bunzip2 bzip2 bzip2recover cat chgrp chmod chown cksum cmp comm compress cp csplit cut date dc df diff diff3 dircolors dirname du echo egrep env expand factor fgrep find flex fmt fold fsplit gawk gclip gplay grep gsar gunzip gzip head id indent install jwhois less lesskey ln logname ls m4 make makedepend makemsg man md5sum mkdir mkfifo mknod mv mvdir nl od paste patch pathchk pclip pr printenv printf ptx recode rm rman rmdir sdiff sed seq sha1sum shar sleep sort  stego su sum sync tac tail tar tee test touch tr tsort type uname unexpand uniq unrar unshar unzip uudecode uuencode wc wget which whoami xargs yes zcat zip} { 
         add_to_all_commands $util;
