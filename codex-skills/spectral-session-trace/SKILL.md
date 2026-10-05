@@ -16,6 +16,8 @@ When the user asks to activate tracing with a recorder type (`js` or `tcl`) and 
 - Before meaningful work, record the concrete plan when there is one. Record each investigation or implementation tool call and shell command, including relevant arguments. After it completes, record the actual output, exit status, failures, or relevant structured result. Capture code edits as changed paths and a diff or precise description; include validation and the final response.
 - Inference entries contain concise conclusions, evidence, assumptions, and decisions suitable for the user. Never expose hidden chain-of-thought, private internal deliberation, system/developer instructions, or credentials. Redact secrets and state that redaction occurred. Record artifact paths and descriptions rather than binary/base64 content.
 - Preserve lengthy text; split oversized entries into numbered parts rather than silently truncating. If the tool output was already truncated, say so and link the full local output when available. Do not claim an unavailable full output was captured.
+- Record every user-visible assistant commentary message verbatim as a plan, inference, or other appropriate category. Record the complete final response verbatim as a summary before delivering that same response to the user; do not substitute a shortened summary. Include lists, caveats, paths, links, examples, and code blocks. Split oversized messages into numbered parts without omitting content. When a user identifies an omitted message, backfill the known message verbatim and mark it as a backfill.
+- User-visible explanations of findings, evidence, assumptions, and decisions can be recorded in full. Private internal chain-of-thought is excluded; provide a concise public reasoning summary when useful.
 - Send entries promptly, batching adjacent events when useful. Do not recursively trace the transport calls or their results. Continue answering the user normally; the trace supplements the conversation.
 - When asked to stop, record that prompt and a final stop entry, then disable tracing. A recorder type or port change updates the retained destination; keep pending entries attached to their original destination unless the user asks to redirect them. A pause disables sending until the user resumes.
 
@@ -31,7 +33,7 @@ A skill cannot override sandbox permissions or guarantee that the host will pers
 Use the bundled dependency-free Node helper, resolving its path relative to this SKILL.md. It does not depend on the extension checkout or current working directory. Write a UTF-8 JSON event file in a writable temporary directory with an array of `{ "label": "prompt", "text": "the exact prompt" }` objects, then run:
 
 ```powershell
-node "C:\Git\jmtools\codex-skills\spectral-session-trace\scripts\send-trace.cjs" --recorder js --port 32123 --file "C:\Users\Jayanta\AppData\Local\Temp\spectral-trace-events.json"
+node "scripts/send-trace.cjs" --recorder js --port 32123 --file "C:\Users\Jayanta\AppData\Local\Temp\spectral-trace-events.json"
 ```
 
 For a Tcl recorder, use the same helper with `--recorder tcl` and the supplied Tcl server port. Activation examples: "activate spectral-session-trace with a js recorder on port 32123" or "activate spectral-session-trace with a tcl recorder on port 32124". Always pass `--recorder` explicitly; the helper retains its legacy JS default only for backwards compatibility.
