@@ -3,15 +3,50 @@
 const fs = require('node:fs');
 const net = require('node:net');
 
-function buildCommand(events) {
+function tclString(text) {
+    return '[encoding convertfrom utf-8 [binary decode base64 {' + Buffer.from(text, 'utf8').toString('base64') + '}]]';
+}
+
+function buildTclCommand(events) {
+    const entries = events.map(event => [
+        'insert_text end ' + tclString(event.label + ': '),
+        'create_note end ' + tclString(event.text),
+        'insert_text end ' + tclString('\n')
+    ].join('\n')).join('\n');
+    return `apply {{} {
+        foreach command {insert_text create_note .t} {
+            if {![llength [info commands $command]]} {error "Spectral Tcl API unavailable: $command"}
+        }
+        set savedInsert [.t index insert]
+        set savedSelection [.t tag ranges sel]
+        set savedY [.t yview]
+        set savedX [.t xview]
+        try {
+            if {[.t compare end-1c > 1.0] && [.t get end-2c end-1c] ne "\\n"} {
+                insert_text end "\\n"
+            }
+            ${entries}
+        } finally {
+            .t mark set insert $savedInsert
+            .t tag remove sel 1.0 end
+            foreach {first last} $savedSelection {.t tag add sel $first $last}
+            .t yview moveto [lindex $savedY 0]
+            .t xview moveto [lindex $savedX 0]
+        }
+        set acknowledgment {Trace appended: ${events.length}}
+    }}`;
+}
+
+function buildCommand(events, recorder = 'js') {
     if (!Array.isArray(events) || !events.length) throw new Error('Expected a nonempty array of events.');
     for (const event of events) {
         if (!event || typeof event.label !== 'string' || !event.label.trim() || typeof event.text !== 'string') {
             throw new Error('Each event requires a nonempty label and string text.');
         }
     }
+    if (!['js', 'tcl'].includes(recorder)) throw new Error('Recorder must be js or tcl.');
     const payload = JSON.stringify(events).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
-    const command = `(() => {
+    const command = recorder === 'tcl' ? buildTclCommand(events) : `(() => {
         if (!window.Spectral || !Spectral.editor) throw new Error('Spectral API unavailable');
         const events = ${payload};
         const selection = window.getSelection();
@@ -66,14 +101,28 @@ function sendCommand(port, command, timeoutMs = 10000) {
     });
 }
 
-async function main(args) {
-    if (args.length !== 4 || args[0] !== '--port' || args[2] !== '--file') {
-        throw new Error('Usage: node send-trace.cjs --port <port> --file <UTF-8 JSON events file>');
+function parseArgs(args) {
+    const options = { recorder: 'js' };
+    const seen = new Set();
+    for (let i = 0; i < args.length; i += 2) {
+        const flag = args[i];
+        if (!['--recorder', '--port', '--file'].includes(flag) || seen.has(flag) || !args[i + 1]) {
+            throw new Error('Usage: node send-trace.cjs --recorder <js|tcl> --port <port> --file <UTF-8 JSON events file>');
+        }
+        seen.add(flag);
+        options[flag.slice(2)] = args[i + 1];
     }
-    const port = Number(args[1]);
+    if (!['js', 'tcl'].includes(options.recorder)) throw new Error('Recorder must be js or tcl.');
+    const port = Number(options.port);
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Port must be an integer from 1 to 65535.');
-    const events = JSON.parse(fs.readFileSync(args[3], 'utf8').replace(/^\uFEFF/, ''));
-    process.stdout.write(await sendCommand(port, buildCommand(events)) + '\n');
+    if (!options.file) throw new Error('An events file is required.');
+    return { ...options, port };
+}
+
+async function main(args) {
+    const options = parseArgs(args);
+    const events = JSON.parse(fs.readFileSync(options.file, 'utf8').replace(/^\uFEFF/, ''));
+    process.stdout.write(await sendCommand(options.port, buildCommand(events, options.recorder)) + '\n');
 }
 
 if (require.main === module) {
@@ -83,4 +132,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { buildCommand, sendCommand };
+module.exports = { buildCommand, sendCommand, parseArgs };
