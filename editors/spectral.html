@@ -13462,6 +13462,123 @@ function mdrender() {
   // if (typeof sanitizeHtml === 'function') sanitizeHtml(); // optional
 }
 
+// For the text inserted by copying from the github diff view .
+// using the command copy(document.getElementById("diff-content-parent").outerHTML);
+
+function fixGitHubDiffLayout(containerId = "diff-content-parent") {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const colors = {
+        addition: "#D0F9CD",
+        deletion: "#FFCCCC"
+    };
+
+    // 1. Fix line-number columns
+    container.querySelectorAll("td.diff-line-number").forEach(td => {
+        Object.assign(td.style, {
+            whiteSpace: "nowrap",
+            minWidth: "55px",
+            width: "55px",
+            boxSizing: "border-box",
+            textAlign: "right",
+            paddingLeft: "8px",
+            paddingRight: "8px",
+            verticalAlign: "top"
+        });
+
+        const code = td.querySelector("code");
+        if (code) {
+            Object.assign(code.style, {
+                whiteSpace: "nowrap",
+                display: "inline-block"
+            });
+        }
+    });
+
+    // 2. Restore table layout
+    container.querySelectorAll("table").forEach(table => {
+        Object.assign(table.style, {
+            tableLayout: "auto",
+            borderCollapse: "collapse",
+            width: "100%"
+        });
+    });
+
+    // 3. Keep code and +/- markers aligned
+    container.querySelectorAll("td.diff-text-cell").forEach(td => {
+        Object.assign(td.style, {
+            whiteSpace: "pre",
+            verticalAlign: "top",
+            overflowWrap: "normal",
+            wordBreak: "normal"
+        });
+    });
+
+    container.querySelectorAll("code.diff-text").forEach(code => {
+        Object.assign(code.style, {
+            display: "block",
+            whiteSpace: "pre",
+            overflowWrap: "normal",
+            wordBreak: "normal"
+        });
+    });
+
+    container.querySelectorAll(".diff-text-inner").forEach(el => {
+        Object.assign(el.style, {
+            display: "inline",
+            whiteSpace: "pre",
+            overflowWrap: "normal",
+            wordBreak: "normal"
+        });
+    });
+
+    container.querySelectorAll(
+        ".diff-text-marker, .diff-line-marker, .diff-code-marker"
+    ).forEach(marker => {
+        Object.assign(marker.style, {
+            display: "inline",
+            whiteSpace: "pre",
+            verticalAlign: "baseline"
+        });
+    });
+
+    // 4. Colour additions and deletions
+    container.querySelectorAll("tr.diff-line-row").forEach(row => {
+
+        const code = row.querySelector(
+            "code.diff-text.addition, code.diff-text.deletion"
+        );
+
+        if (!code) return;
+
+        const type = code.classList.contains("addition")
+            ? "addition"
+            : "deletion";
+
+        const color = colors[type];
+
+        // Colour the entire row, including line-number cells.
+        row.querySelectorAll("td.diff-line-number, td.diff-text-cell")
+            .forEach(td => {
+                td.style.backgroundColor = color;
+            });
+
+        // Colour the marker and code content.
+        // Also override any unresolved GitHub CSS variables.
+        code.style.backgroundColor = color;
+
+        code.querySelectorAll(".diff-text-marker, .diff-text-inner")
+            .forEach(el => {
+                el.style.backgroundColor = color;
+            });
+    });
+
+    // 5. Allow horizontal scrolling for long source lines
+    container.style.overflowX = "auto";
+}
+
+
 /* ========= Markdown core (single source of truth) ========= */
 function mdToHtml(md) {
   // Shared store for *all* inline code spans in this render
