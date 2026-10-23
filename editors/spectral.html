@@ -18,7 +18,7 @@
 </div>
 <div class="toolbars" id="top_toolbars">
     <div class="toolbar">
-        <input type="file" id="fileLoader" title="Open file ...">
+        <input type="file" id="fileLoader" multiple title="Open one or more files ...">
         <details class="toolbar-menu">
             <summary title="Search options">Options</summary>
             <div class="toolbar-menu-panel">
@@ -3934,8 +3934,8 @@ function scopeCssTextToEditor(cssText) {
     return output;
 }
 
-function importEditorCssFromLoadedDocument(doc) {
-    removeImportedEditorCss();
+function importEditorCssFromLoadedDocument(doc, append = false) {
+    if (!append) removeImportedEditorCss();
 
     const cssTexts = Array.from(doc.querySelectorAll('style'))
         .map(style => style.textContent || '')
@@ -3943,88 +3943,124 @@ function importEditorCssFromLoadedDocument(doc) {
 
     if (cssTexts.length === 0) return 0;
 
-    const style = document.createElement('style');
-    style.id = IMPORTED_EDITOR_CSS_STYLE_ID;
-    style.textContent = cssTexts.map(scopeCssTextToEditor).join('\n');
-    document.head.appendChild(style);
+    let style = document.getElementById(IMPORTED_EDITOR_CSS_STYLE_ID);
+    if (!style) {
+        style = document.createElement('style');
+        style.id = IMPORTED_EDITOR_CSS_STYLE_ID;
+        document.head.appendChild(style);
+    }
+    style.textContent += '\n' + cssTexts.map(scopeCssTextToEditor).join('\n');
     return cssTexts.length;
 }
 
-document.getElementById('fileLoader').addEventListener('change', function(event) {
-    const file = event.target.files[0];
+function isSvgFile(file) {
+    return file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg');
+}
 
-    if (!file) {
-        alert("No file selected.");
-        return;
+let fileLoadInProgress = false;
+
+document.getElementById('fileLoader').addEventListener('change', async function(event) {
+    const input = event.target;
+    const files = Array.from(input.files || []);
+    if (!files.length || fileLoadInProgress) return;
+
+    const editor = document.getElementById('editor');
+    const svgOnly = files.every(isSvgFile);
+    // Capture the insertion point before asynchronous file reads can change focus.
+    let range = svgOnly ? getCurrentEditorRangeOrSaved() : null;
+    if (svgOnly && !range) {
+        range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
     }
+    const fitToEditor = svgOnly && editorHasTextOutsideInlineSvg(editor);
+    const loaded = [];
+    const failures = [];
+    fileLoadInProgress = true;
+    input.disabled = true;
+    setStatus(`Loading ${files.length} file(s)...`);
 
-    currentFileName = file.name;
-    const reader = new FileReader();
-
-    reader.onload = function(e) {
-        const contents = e.target.result;
-        const editor = document.getElementById('editor');
-
-        const lowerName = file.name.toLowerCase();
-        const isSvg = file.type === 'image/svg+xml' || lowerName.endsWith('.svg');
-        if (isSvg) {
-            const range = getCurrentEditorRangeOrSaved();
-            if (!range) {
-                setStatus('Click in the editor before loading an SVG so it has an insertion point.');
-                return;
-            }
-
+    try {
+        // Sequential reads preserve the order supplied by the file chooser.
+        for (const file of files) {
             try {
-                const fitToEditor = editorHasTextOutsideInlineSvg(editor);
-                const svg = parseSvgText(contents, { fitToEditor });
-                if (!insertNodeAtEditorRange(svg, range)) {
-                    throw new Error('The saved insertion point is no longer inside the editor.');
+                const contents = await file.text();
+                if (isSvgFile(file)) {
+                    loaded.push({ file, node: parseSvgText(contents, { fitToEditor }) });
+                    continue;
                 }
-                hydrateEditorControls(editor);
-                setStatus(fitToEditor
-                    ? `Loaded inline SVG at the editor caret: ${file.name}`
-                    : `Loaded inline SVG at its authored size: ${file.name}`);
+                let doc = null;
+                let source = null;
+                if (file.type === 'text/html' || file.name.toLowerCase().endsWith('.html')) {
+                    doc = new DOMParser().parseFromString(contents, 'text/html');
+                    source = doc.getElementById('editor');
+                }
+                const node = document.createDocumentFragment();
+                if (source) {
+                    node.append(...Array.from(source.childNodes, child => document.importNode(child, true)));
+                } else {
+                    const textContainer = document.createElement('div');
+                    textContainer.innerHTML = escapeTextWithLineBreaks(contents);
+                    node.appendChild(textContainer);
+                    doc = null;
+                }
+                loaded.push({ file, node, doc });
             } catch (err) {
-                setStatus('Could not load SVG: ' + err.message);
+                failures.push(`${file.name}: ${err.message}`);
             }
+        }
+
+        if (!loaded.length) {
+            setStatus('No files loaded. ' + failures.join('; '));
             return;
         }
 
-        if (file.type === 'text/html' || lowerName.endsWith('.html')) {
-            // Parse the HTML content
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(contents, 'text/html');
-
-            const loadedEditorDiv = doc.getElementById('editor');
-
-            if (loadedEditorDiv) {
-                // Found an editor div, load its innerHTML
-                const importedStyleCount = importEditorCssFromLoadedDocument(doc);
-                editor.innerHTML = loadedEditorDiv.innerHTML;
-                hydrateEditorControls(editor);
-                setStatus("Loaded editor content from HTML file" + (importedStyleCount ? ` with ${importedStyleCount} imported style block(s).` : "."));
-                return;
+        const fragment = document.createDocumentFragment();
+        for (const item of loaded) {
+            const svg = isSvgFile(item.file);
+            // Share one break between adjacent SVGs, including their outer edges.
+            if ((svg || fragment.childNodes.length) && fragment.lastChild?.nodeName !== 'BR') {
+                fragment.appendChild(document.createElement('br'));
             }
+            fragment.appendChild(item.node);
+            if (svg) fragment.appendChild(document.createElement('br'));
         }
-
-        // Fallback to plain text loading as before
-        const loadingElement = document.createElement('div');
-        loadingElement.innerHTML = escapeTextWithLineBreaks(contents);
-        
-        removeImportedEditorCss();
-        editor.innerHTML = "";
-        editor.appendChild(loadingElement);
-        setStatus("Loaded plain text file content.");
-    };
-
-    reader.onerror = function(e) {
-        alert("Error reading file!");
-    };
-
-    reader.readAsText(file); // Read as plain text
+        const lastNode = fragment.lastChild;
+        if (svgOnly) {
+            if (!editor.contains(range.commonAncestorContainer)) {
+                throw new Error('The insertion point is no longer inside the editor.');
+            }
+            range.deleteContents();
+            range.insertNode(fragment);
+        } else {
+            // Opening documents replaces the editor, combining this batch in order.
+            editor.replaceChildren(fragment);
+            removeImportedEditorCss();
+            for (const item of loaded) {
+                if (item.doc) importEditorCssFromLoadedDocument(item.doc, true);
+            }
+            cursors = [];
+        }
+        const after = document.createRange();
+        if (lastNode) after.setStartAfter(lastNode);
+        else after.selectNodeContents(editor);
+        after.collapse(lastNode ? true : false);
+        savedEditorRange = after.cloneRange();
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(after);
+        hydrateEditorControls(editor);
+        currentFileName = loaded[0].file.name;
+        setStatus(`Loaded ${loaded.length} file(s): ${loaded.map(item => item.file.name).join(', ')}` +
+            (failures.length ? `. Failed: ${failures.join('; ')}` : '.'));
+    } catch (err) {
+        setStatus('Could not load files: ' + err.message);
+    } finally {
+        fileLoadInProgress = false;
+        input.disabled = false;
+        input.value = '';
+    }
 });
-
-
 
     function secondHalfBoldWords(editableId) {
         const editor = document.getElementById(editableId);
