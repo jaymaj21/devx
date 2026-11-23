@@ -2910,7 +2910,7 @@ proc popup_search_next {txtwidget} {
     set ranges {};
     set cur 1.0;
     while 1 {
-        set pos [$txtwidget search -count matchlen -- $needle $cur end];
+        set pos [$txtwidget search [spectral_search_mode] -count matchlen -- $needle $cur end];
         if {$pos == ""} {
             break;
         }
@@ -5967,6 +5967,34 @@ proc get_external_hyperrefs {} {
     return [array get external_hyperrefs];
  }
     
+# User-entered patterns share the Options > Use regex setting.
+# Internal structural expressions deliberately bypass these helpers.
+proc spectral_search_pattern {pattern} {
+    global use_regex;
+    if {$use_regex} { return $pattern }
+    set escaped "";
+    foreach ch [split $pattern ""] {
+        if {[string first $ch {\.^$*+?()[]{}|}] >= 0} {
+            append escaped [format %c 92];
+        }
+        append escaped $ch;
+    }
+    return $escaped;
+}
+
+# Re-run cached button searches after the matching mode changes.
+proc spectral_search_mode_changed {args} {
+    global last_positions;
+    array unset last_positions;
+}
+trace add variable ::use_regex write spectral_search_mode_changed;
+
+proc spectral_search_mode {} {
+    global use_regex;
+    if {$use_regex} { return -regexp }
+    return -exact;
+}
+
 proc search_multiple  {id txt nlsep sortres seqmatsym} {
    set resultsWindow "";
    if {$nlsep} {
@@ -6221,7 +6249,7 @@ proc actually_search_in_notes {w args} {
                         if {$word == {}} {
                                 continue;
                         }
-                        if {[regexp $word $cont]} {
+                        if {[regexp -- [spectral_search_pattern $word] $cont]} {
                             set some_match 1;
                         } else {
                             set all_match 0;
@@ -7086,7 +7114,7 @@ proc searchFileForNotes {fname searchPattern} {
                  set fpn [open $notename r];
                  set note [read $fpn];
                  close $fpn;
-                 if {[regexp -nocase $searchPattern $note]} {
+                 if {[regexp -nocase -- [spectral_search_pattern $searchPattern] $note]} {
                       if {[string length $note] > 300} {
                          set truncated [string range $note 0 300];
                          puts "$fname\($curline\): ${truncated} **TRUNCATED**\n";
@@ -7103,7 +7131,7 @@ proc searchFileForNotes {fname searchPattern} {
                  set fpn [open $notename r];
                  set note [read $fpn];
                  close $fpn;
-                 if {[regexp -nocase $searchPattern $note]} {
+                 if {[regexp -nocase -- [spectral_search_pattern $searchPattern] $note]} {
                       if {[string length $note] > 300} {
                          set truncated [string range $note 0 300];
                          puts "$fname\($curline\): ${truncated} **TRUNCATED**\n";
@@ -12116,7 +12144,7 @@ proc filterResult {w} {
     set last_cur "";
     set cur 1.0;
     while 1 {
-        set cur [$w.results search -regexp -count length $string $cur end];
+        set cur [$w.results search [spectral_search_mode] -count length -- $string $cur end];
         if {$cur == "" || $cur == $last_cur} {
               break
            }
@@ -12321,15 +12349,15 @@ proc visit_re_quiet {regex visitor_fn args}  {
            while 1 {
                if {$use_regex} {
                    if {$case_sensitive} {
-                         set cur [.t search -regexp -count length $regex $cur $end]
+                         set cur [.t search -regexp -count length -- $regex $cur $end]
                     } else {
-                         set cur [.t search -regexp -nocase -count length $regex $cur $end]
+                         set cur [.t search -regexp -nocase -count length -- $regex $cur $end]
                     }
                    } else {
                    if {$case_sensitive} {
-                         set cur [.t search -exact -count length $regex $cur $end]
+                         set cur [.t search -exact -count length -- $regex $cur $end]
                     } else {
-                         set cur [.t search -exact -nocase -count length $regex $cur $end]
+                         set cur [.t search -exact -nocase -count length -- $regex $cur $end]
                     }
                }
            
@@ -12395,15 +12423,15 @@ proc visit_re {regex visitor_fn args}  {
            while 1 {
                if {$use_regex} {
                    if {$case_sensitive} {
-                         set cur [.t search -regexp -count length $regex $cur $end]
+                         set cur [.t search -regexp -count length -- $regex $cur $end]
                     } else {
-                         set cur [.t search -regexp -nocase -count length $regex $cur $end]
+                         set cur [.t search -regexp -nocase -count length -- $regex $cur $end]
                     }
                    } else {
                    if {$case_sensitive} {
-                         set cur [.t search -exact -count length $regex $cur $end]
+                         set cur [.t search -exact -count length -- $regex $cur $end]
                     } else {
-                         set cur [.t search -exact -nocase -count length $regex $cur $end]
+                         set cur [.t search -exact -nocase -count length -- $regex $cur $end]
                     }
                }
            
@@ -12538,15 +12566,15 @@ proc adhd {{frac 0.5} {font {{Courier New} 12 bold}}} {
            while 1 {
                if {$use_regex} {
                    if {$case_sensitive} {
-                         set cur [.t search -regexp -count length $string $cur $end]
+                         set cur [.t search -regexp -count length -- $string $cur $end]
                     } else {
-                         set cur [.t search -regexp -nocase -count length $string $cur $end]
+                         set cur [.t search -regexp -nocase -count length -- $string $cur $end]
                     }
                    } else {
                    if {$case_sensitive} {
-                         set cur [.t search -exact -count length $string $cur $end]
+                         set cur [.t search -exact -count length -- $string $cur $end]
                     } else {
-                         set cur [.t search -exact -nocase -count length $string $cur $end]
+                         set cur [.t search -exact -nocase -count length -- $string $cur $end]
                     }
                }
            
@@ -12697,15 +12725,15 @@ proc annot_search_aux {dir id color txt} {
        while 1 {
            if {$use_regex} {
                if {$case_sensitive} {
-                     set cur [.t search -regexp -count length $string $cur end]
+                     set cur [.t search -regexp -count length -- $string $cur end]
                 } else {
-                     set cur [.t search -regexp -nocase -count length $string $cur end]
+                     set cur [.t search -regexp -nocase -count length -- $string $cur end]
                 }
                } else {
                if {$case_sensitive} {
-                     set cur [.t search -exact -count length $string $cur end]
+                     set cur [.t search -exact -count length -- $string $cur end]
                 } else {
-                     set cur [.t search -exact -nocase -count length $string $cur end]
+                     set cur [.t search -exact -nocase -count length -- $string $cur end]
                 }
            }
            #puts "cur=$cur";
@@ -12973,15 +13001,15 @@ proc searchString {dir id color args} {
        while 1 {
            if {$use_regex} {
                if {$case_sensitive} {
-                     set cur [.t search -regexp -count length $string $cur end]
+                     set cur [.t search -regexp -count length -- $string $cur end]
                 } else {
-                     set cur [.t search -regexp -nocase -count length $string $cur end]
+                     set cur [.t search -regexp -nocase -count length -- $string $cur end]
                 }
                } else {
                if {$case_sensitive} {
-                     set cur [.t search -exact -count length $string $cur end]
+                     set cur [.t search -exact -count length -- $string $cur end]
                 } else {
-                     set cur [.t search -exact -nocase -count length $string $cur end]
+                     set cur [.t search -exact -nocase -count length -- $string $cur end]
                 }
            }
            #puts "cur=$cur";
@@ -13233,7 +13261,7 @@ proc satisfiesLeftContext {pos len negate lc} {
      set txt [.t get ${startline}.0  [.t index "$pos + $len char"] ];
      #puts stderr "<<<<$txt>>>>";
      set lc1 "(?s).*"
-     append lc1 $lc;
+     append lc1 [spectral_search_pattern $lc];
      append lc1 "\$";
      if {[regexp $lc1 $txt]} {
          if {$negate} {
@@ -13305,7 +13333,7 @@ proc satisfiesRightContext {pos len negate rc} {
   
    set start [.t index "$pos + $len  char"];
    #puts stderr "start $start"
-   set found [.t search -regexp -count length $rc $start end];
+   set found [.t search [spectral_search_mode] -count length -- $rc $start end];
    #puts stderr "found $found";
    if {$found ==  $start } {
         if {$negate} {
@@ -13916,11 +13944,12 @@ proc position_gt {p1 p2} {
 
 
 proc doSingleReplacement {cur end replace with init incr subst expr contexts slave do_sel_only} {
+   global use_regex;
    #jmtrace doSingleReplacement;
    #jmdebug "searching $cur -> $end"
    set num 0;
    set match_ending 0;
-   if { [string index $replace end] == {$} } {
+   if {$use_regex && [string index $replace end] == {$}} {
        set match_ending 1;
    }
    
@@ -13932,7 +13961,7 @@ proc doSingleReplacement {cur end replace with init incr subst expr contexts sla
        #jmtrace while_1;
        incr tmp;
        if {$tmp > 1000000} break;
-       set cur [.t search -regexp -count length $replace $cur $end];
+       set cur [.t search [spectral_search_mode] -count length -- $replace $cur $end];
        if {$cur == ""} {
            break;
        }
@@ -13973,10 +14002,10 @@ proc doSingleReplacement {cur end replace with init incr subst expr contexts sla
                    regsub -all $subst $with $val new_with
                  }
                }
-               if {$match == ""} {
+               if {!$use_regex || $match == ""} {
                    set match $new_with;
                } else {
-                   regsub -all $replace $match $new_with match;
+                   regsub -all -- $replace $match $new_with match;
                }
                set newoffset [string length $match];
                .t fastdelete $cur "$cur + $length char";
@@ -13991,7 +14020,7 @@ proc doSingleReplacement {cur end replace with init incr subst expr contexts sla
        }
        if {!$done_modification && $newoffset == 0} {set newoffset 1;};
        if {$match_ending} {incr newoffset}; 
-       if {$done_modification && ([string index $replace 0] == "^")}  {
+       if {$use_regex && $done_modification && ([string index $replace 0] == "^")}  {
            set thisline [lindex [split $cur "."] 0];
            set cur [.t index "$thisline.end"];
        }  else {
@@ -15137,7 +15166,7 @@ proc match_shortest {regex} {
     set last_cur "";
     catch {
        while 1 {
-           set cur [.t search -regexp -count length $regex $cur end]
+           set cur [.t search [spectral_search_mode] -count length -- $regex $cur end]
            if {$cur == "" || $cur == $last_cur } {
                break;
            }
@@ -15195,7 +15224,7 @@ proc match_longest {regex} {
     set last_cur "";
     catch {
        while 1 {
-           set cur [.t search -regexp -count length $regex $cur end]
+           set cur [.t search [spectral_search_mode] -count length -- $regex $cur end]
            if {$cur == "" || $cur == $last_cur } {
                break;
            }
@@ -18209,7 +18238,7 @@ proc d/ {re {times 1}} {
    }
    set cur [.t index insert];
    for {set i 0} {$i < $times} {incr i} {
-     set next [.t search -regexp -count length $re $cur end];
+     set next [.t search [spectral_search_mode] -count length -- $re $cur end];
      if {$next == ""} {
          break;
      } else {
@@ -18225,7 +18254,7 @@ proc dx/ {re {times 1}} {
    }
    set cur [.t index insert];
    for {set i 0} {$i < $times} {incr i} {
-     set next [.t search -regexp -count length $re $cur end];
+     set next [.t search [spectral_search_mode] -count length -- $re $cur end];
      if {$next == ""} {
          break;
      } else {
@@ -18245,7 +18274,7 @@ proc sel/ {re {times 1}} {
    }
    set cur [.t index insert];
    for {set i 0} {$i < $times} {incr i} {
-     set next [.t search -regexp -count length $re $cur end];
+     set next [.t search [spectral_search_mode] -count length -- $re $cur end];
      if {$next == ""} {
          break;
      } else {
@@ -18262,7 +18291,7 @@ proc selx/ {re {times 1}} {
    }
    set cur [.t index insert];
    for {set i 0} {$i < $times} {incr i} {
-     set next [.t search -regexp -count length $re $cur end];
+     set next [.t search [spectral_search_mode] -count length -- $re $cur end];
      if {$next == ""} {
          break;
      } else {
