@@ -9970,6 +9970,27 @@ proc setCTextProperties {widget} {
 
 
 
+proc copy_output_to_clipboard {txtwidget} {
+    set alltext [$txtwidget get 0.0 end];
+    set alltext [string map [list "\r\n" "\n"] $alltext];
+    clipboard clear;
+    clipboard append -- $alltext;
+}
+
+proc save_output_as {txtwidget} {
+    set fname [tk_getSaveFile -parent [winfo toplevel $txtwidget] -title "Save Output As"];
+    if {$fname eq ""} { return }
+
+    set alltext [string map [list "\r\n" "\n"] [$txtwidget get 0.0 end]];
+    set fp [open $fname w];
+    try {
+        fconfigure $fp -encoding utf-8 -translation lf;
+        puts -nonewline $fp $alltext;
+    } finally {
+        close $fp;
+    }
+}
+
 proc showOutputFile {file_name type name highlight_lines} {
     
     
@@ -9990,14 +10011,8 @@ proc showOutputFile {file_name type name highlight_lines} {
 
     
 
-    button .popup_${type}.copyAll -text "Copy To Clipboard" -command " 
-        # tk_messageBox -message \"Copied content of the window \\\"$type\\\" to clipboard\"; 
-        
-        set alltext \[.popup_${type}.t get 0.0 end\];
-        clipboard clear;
-        clipboard append \$alltext;
-    
-    "
+    button .popup_${type}.copyAll -text "Copy To Clipboard" -command [list copy_output_to_clipboard .popup_${type}.t]
+    button .popup_${type}.saveAs -text "Save As" -command [list save_output_as .popup_${type}.t]
 
     
    set txtwidget ".popup_${type}.t";
@@ -10022,6 +10037,7 @@ proc showOutputFile {file_name type name highlight_lines} {
        highlightCurrent $txtwidget  \$pos; break;
    "
                    
+    pack .popup_${type}.saveAs -side bottom -fill x
     pack .popup_${type}.copyAll -side bottom -fill x -expand yes
     wm geometry .popup_${type} "+20+20";
     
@@ -10067,14 +10083,8 @@ proc showOutput {txt type name highlight_lines} {
     pack .popup_${type}.textFrame -expand yes -fill both
     .popup_${type}.t insert end $txt;
     highlight_lines $highlight_lines  .popup_${type}.t
-    button .popup_${type}.copyAll -text "Copy To Clipboard" -command " 
-        # tk_messageBox -message \"Copied content of the window \\\"$type\\\" to clipboard\"; 
-        
-        set alltext \[.popup_${type}.t get 0.0 end\];
-        clipboard clear;
-        clipboard append \$alltext;
-    
-    "
+    button .popup_${type}.copyAll -text "Copy To Clipboard" -command [list copy_output_to_clipboard .popup_${type}.t]
+    button .popup_${type}.saveAs -text "Save As" -command [list save_output_as .popup_${type}.t]
     catch {
         
         foreach highline $highlight_lines {
@@ -10104,6 +10114,7 @@ proc showOutput {txt type name highlight_lines} {
    "
                
     
+    pack .popup_${type}.saveAs -side bottom -fill x
     pack .popup_${type}.copyAll -side bottom -fill x -expand yes
     wm geometry .popup_${type} "+20+20";
     
