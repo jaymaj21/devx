@@ -1721,6 +1721,38 @@ proc getmenu {} {
    return $menu;
 }
 
+# Use native text-widget history in secondary editable panes. The main editor
+# retains its specialized undo handling for highlights and multiple selections.
+proc enable_text_undo {txtwidget} {
+    $txtwidget configure -undo 1 -autoseparators 1 -maxundo -1;
+    $txtwidget edit reset;
+    bind $txtwidget <Control-z> {catch {%W edit undo}; break};
+    bind $txtwidget <Control-y> {catch {%W edit redo}; break};
+    bind $txtwidget <Control-Z> {catch {%W edit redo}; break};
+}
+
+proc prepare_results_undo {txtwidget} {
+    enable_text_undo $txtwidget;
+    set tag "spectral_undo_baseline_$txtwidget";
+    bindtags $txtwidget [linsert [bindtags $txtwidget] 0 $tag];
+    foreach event {<KeyPress> <ButtonPress> <<Paste>> <<Cut>> <<Undo>> <<Redo>>} {
+        bind $tag $event [list begin_results_undo $txtwidget $tag];
+    }
+    bind $tag <Destroy> [list remove_results_undo_tag $tag];
+}
+
+proc remove_results_undo_tag {tag} {
+    foreach event [bind $tag] { bind $tag $event {} }
+}
+
+proc begin_results_undo {txtwidget tag} {
+    $txtwidget edit reset;
+    set tags [bindtags $txtwidget];
+    set pos [lsearch -exact $tags $tag];
+    if {$pos >= 0} { bindtags $txtwidget [lreplace $tags $pos $pos] }
+    remove_results_undo_tag $tag;
+}
+
 proc show_diag_window {title text} {
     set w .diag_[randString]
     toplevel $w
@@ -2958,6 +2990,7 @@ proc show_text_input {base data title inputfn width height other_checkboxes clie
 
     [$w.input component label] configure -font $default_font;
     set txtwidget [$w.input component text];
+    enable_text_undo $txtwidget;
     add_popup_text_search_controls $w $txtwidget;
 
     button $w.ok -text OK -command "if \{\[$inputfn $w $clientdata\] != 0\} \{destroy $w;\}" -font $default_font
@@ -9387,6 +9420,7 @@ pack .status_s -in .statusFrame -side right -fill y
 text .status -wrap word -width 100 -height 3 \
     -font {Courier 10} -setgrid 1 -highlightthickness 0 \
     -padx 4 -pady 2 -takefocus 0 -bg #ababc8 -fg #101010 -insertbackground blue
+enable_text_undo .status;
 pack .status -in .statusFrame -expand y -fill both -padx 1
 pack .statusFrame -side bottom -fill x;
 
@@ -10049,6 +10083,7 @@ proc showOutputFile {file_name type name highlight_lines} {
     }
     
     highlight_lines $highlight_lines  $txtwidget
+    enable_text_undo ${txtwidget}.t;
     
     catch {
         foreach highline $highlight_lines {
@@ -10083,6 +10118,7 @@ proc showOutput {txt type name highlight_lines} {
     pack .popup_${type}.textFrame -expand yes -fill both
     .popup_${type}.t insert end $txt;
     highlight_lines $highlight_lines  .popup_${type}.t
+    enable_text_undo .popup_${type}.t.t;
     button .popup_${type}.copyAll -text "Copy To Clipboard" -command [list copy_output_to_clipboard .popup_${type}.t]
     button .popup_${type}.saveAs -text "Save As" -command [list save_output_as .popup_${type}.t]
     catch {
@@ -11432,6 +11468,7 @@ proc listOfImages {} {
   
   wm title $resultsWindow "List of Images";
   iwidgets::scrolledtext $resultsWindow.results -width 400 -height 400;
+  prepare_results_undo [$resultsWindow.results component text];
   pack $resultsWindow.results -side top -fill both -expand yes
   $resultsWindow.results tag configure resultHyperlink  -foreground blue
   $resultsWindow.results tag configure visited  -foreground purple
@@ -11498,6 +11535,7 @@ proc listOfMultimedia {} {
     
     wm title $resultsWindow "Multimedia Files";
     iwidgets::scrolledtext $resultsWindow.results -width 400 -height 400;
+  prepare_results_undo [$resultsWindow.results component text];
     pack $resultsWindow.results -side top -fill both -expand yes
     $resultsWindow.results tag configure resultHyperlink  -foreground blue
     $resultsWindow.results tag configure visited  -foreground purple
@@ -12184,7 +12222,7 @@ proc createResultsWindow {title} {
    wm title $resultsWindow $title;
    iwidgets::scrolledtext $resultsWindow.results -width 400 -height 400;
    set txtwidget [$resultsWindow.results component text];
-   $txtwidget configure -undo 0
+   prepare_results_undo $txtwidget;
    add_popup_text_search_controls $resultsWindow $txtwidget;
    pack $resultsWindow.results -side top -fill both -expand yes
    entry $resultsWindow.filter;
@@ -20591,6 +20629,7 @@ proc processTextInput {title prompt callback} {
     # Create a multiline text widget with a vertical scrollbar
     frame .dialog${suffix}.textframe
     text .dialog${suffix}.textframe.text -wrap word -undo true
+    enable_text_undo .dialog${suffix}.textframe.text;
     scrollbar .dialog${suffix}.textframe.yscroll -orient vertical -command ".dialog${suffix}.textframe.text yview"
     .dialog${suffix}.textframe.text configure -yscrollcommand ".dialog${suffix}.textframe.yscroll set"
     pack .dialog${suffix}.textframe.yscroll -side right -fill y
