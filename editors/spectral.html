@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -3374,9 +3374,36 @@ function getEditorHTML() {
                 word = (event.target.textContent || '').trim();
             }
             if (word.length > 0) {
-                highlightRegexRobust( word ,0, false);
+                highlightRegexRobust(escapeRegex(word), 0, false);
                 
             }
+        });
+
+        let doubleClickWordBridge = null;
+        const doubleClickTokenOptionIds = [
+            'doubleClickMultiwordMode', 'doubleClickPunctuationTokenMode', 'doubleClickHyphenatedMode'
+        ];
+
+        function wordbridge(characters = '') {
+            if (typeof characters !== 'string') {
+                throw new TypeError('wordbridge expects a string of connector characters.');
+            }
+            doubleClickWordBridge = characters;
+            doubleClickTokenOptionIds.forEach(id => {
+                const option = document.getElementById(id);
+                if (option) option.checked = false;
+            });
+            const message = characters.length
+                ? 'Double-click word connectors: ' + JSON.stringify(characters)
+                : 'Double-click words: alphanumeric and underscore only.';
+            setStatus(message);
+            return message;
+        }
+
+        doubleClickTokenOptionIds.forEach(id => {
+            document.getElementById(id)?.addEventListener('change', () => {
+                doubleClickWordBridge = null;
+            });
         });
 
         function getDoubleClickHighlightText(event) {
@@ -3385,7 +3412,7 @@ function getEditorHTML() {
             const multiwordMode = document.getElementById('doubleClickMultiwordMode')?.checked;
             const punctuationTokenMode = document.getElementById('doubleClickPunctuationTokenMode')?.checked;
             const hyphenatedMode = document.getElementById('doubleClickHyphenatedMode')?.checked;
-            if (!multiwordMode && !punctuationTokenMode && !hyphenatedMode) {
+            if (doubleClickWordBridge === null && !multiwordMode && !punctuationTokenMode && !hyphenatedMode) {
                 return selected;
             }
 
@@ -3397,7 +3424,9 @@ function getEditorHTML() {
 
             const offset = getDoubleClickTextOffset(textNode, range);
             let expanded = '';
-            if (multiwordMode) {
+            if (doubleClickWordBridge !== null) {
+                expanded = getTokenSequenceAtTextOffset(textNode.nodeValue || '', offset, 'custom');
+            } else if (multiwordMode) {
                 expanded = getTokenSequenceAtTextOffset(textNode.nodeValue || '', offset, 'phrase');
             } else if (punctuationTokenMode) {
                 expanded = getTokenSequenceAtTextOffset(textNode.nodeValue || '', offset, 'punctuation');
@@ -3437,11 +3466,15 @@ function getEditorHTML() {
             const source = String(text || '');
             if (!source) return '';
             const safeOffset = Math.max(0, Math.min(offset, Math.max(0, source.length - 1)));
-            const tokenPattern = mode === 'phrase'
-                ? /[A-Za-z0-9_]+(?:[ -]+[A-Za-z0-9_]+)*/g
-                : mode === 'punctuation'
-                    ? /[A-Za-z0-9_]+(?:[-.,/:+*&]+[A-Za-z0-9_]+)*/g
-                    : /[A-Za-z0-9_]+(?:-+[A-Za-z0-9_]+)*/g;
+            const connectors = mode === 'custom' ? doubleClickWordBridge
+                : mode === 'phrase' ? ' -'
+                : mode === 'punctuation' ? '-.,/:+*&' : '-';
+            // Hex escapes keep supplied characters literal inside the character class.
+            const connectorClass = Array.from(new Set((connectors || '').split('')))
+                .map(character => String.fromCharCode(92) + 'u' + character.charCodeAt(0).toString(16).padStart(4, '0'))
+                .join('');
+            const tokenPattern = new RegExp('[A-Za-z0-9_]+' +
+                (connectorClass ? '(?:[' + connectorClass + ']+[A-Za-z0-9_]+)*' : ''), 'g');
             let match;
             while ((match = tokenPattern.exec(source)) !== null) {
                 const start = match.index;
@@ -7164,6 +7197,8 @@ function commandHelpSections() {
         {
             title: 'Selection Text',
             commands: [
+                ['wordbridge(" -.")', 'Set literal double-click connectors: space, hyphen, and dot. Replaces checkbox modes.'],
+                ['wordbridge("")', 'Reset to alphanumeric and underscore words. Selecting a checkbox restores its preset.'],
                 ['wc()', 'Count words in the current saved selection and write the result to the status pane.'],
                 ['reflow(72)', 'Rewrap the selected text to roughly the given column width.'],
                 ['uc()', 'Upper-case the selected text.'],
